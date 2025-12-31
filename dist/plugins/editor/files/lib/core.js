@@ -1,9 +1,9 @@
 /*\
-title: $:/plugins/BurningTreeC/tiddlywiki-codemirror-6/lib/core.js
+title: $:/plugins/BurningTreeC/tiddlywiki-codemirror/lib/core.js
 type: application/javascript
 module-type: library
 
-CM6 core adapter for the BTC CM6 engine.
+CM6 core adapter for the BurningTreeC CM6 engine.
 
 Exports a stable object with namespaces:
 - state
@@ -28,23 +28,23 @@ function safeRequire(title) {
 	}
 }
 
-var state = safeRequire("$:/plugins/BTC/tiddlywiki-codemirror-6/lib/codemirror-state.js");
-var view = safeRequire("$:/plugins/BTC/tiddlywiki-codemirror-6/lib/codemirror-view.js");
-var commands = safeRequire("$:/plugins/BTC/tiddlywiki-codemirror-6/lib/codemirror-commands.js");
-var language = safeRequire("$:/plugins/BTC/tiddlywiki-codemirror-6/lib/codemirror-language.js");
-var autocomplete = safeRequire("$:/plugins/BTC/tiddlywiki-codemirror-6/lib/codemirror-autocomplete.js");
+var state = safeRequire("$:/plugins/BurningTreeC/tiddlywiki-codemirror/lib/codemirror-state.js");
+var view = safeRequire("$:/plugins/BurningTreeC/tiddlywiki-codemirror/lib/codemirror-view.js");
+var commands = safeRequire("$:/plugins/BurningTreeC/tiddlywiki-codemirror/lib/codemirror-commands.js");
+var language = safeRequire("$:/plugins/BurningTreeC/tiddlywiki-codemirror/lib/codemirror-language.js");
+var autocomplete = safeRequire("$:/plugins/BurningTreeC/tiddlywiki-codemirror/lib/codemirror-autocomplete.js");
 
-var langHtml = safeRequire("$:/plugins/BTC/tiddlywiki-codemirror-6/lib/codemirror-lang-html.js");
+var langHtml = safeRequire("$:/plugins/BurningTreeC/tiddlywiki-codemirror/lib/codemirror-lang-html.js");
 
 // Lezer
-var lezerCommon = safeRequire("$:/plugins/BTC/tiddlywiki-codemirror-6/lib/lezer-common.js");
-var lezerHighlight = safeRequire("$:/plugins/BTC/tiddlywiki-codemirror-6/lib/lezer-highlight.js");
+var lezerCommon = safeRequire("$:/plugins/BurningTreeC/tiddlywiki-codemirror/lib/lezer-common.js");
+var lezerHighlight = safeRequire("$:/plugins/BurningTreeC/tiddlywiki-codemirror/lib/lezer-highlight.js");
 
 // Basic validation: engine expects state + view at minimum
 if (!state || !view) {
 	throw new Error(
 		"library-core.js: Missing CM6 core modules. " +
-		"Expected at least codemirror-state.js and codemirror-view.js under $:/plugins/BTC/tiddlywiki-codemirror-6/lib/."
+		"Expected at least codemirror-state.js and codemirror-view.js under $:/plugins/BurningTreeC/tiddlywiki-codemirror/lib/."
 	);
 }
 

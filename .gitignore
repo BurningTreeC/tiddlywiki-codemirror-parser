@@ -6,3 +6,8 @@ node_modules/
 # Claude
 .claude/
 CLAUDE.md
+
+# Reference repos
+markdown/
+lang-markdown/
+TiddlyWiki5/
