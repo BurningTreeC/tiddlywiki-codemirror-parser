@@ -10,6 +10,7 @@ The engine provides a minimal core and allows plugins to:
 - Register compartments for dynamic reconfiguration
 - Provide CodeMirror 6 extensions
 - Register event handlers
+- Switch language modes dynamically based on tiddler type
 
 Plugin module-type: codemirror6-plugin
 
@@ -113,21 +114,22 @@ function getCM6Core() {
  *   description?: string,            // Plugin description
  *   priority?: number,               // Load order (higher = first, default 0)
  *   
- *   condition?: (context) => boolean,  // Should plugin load?
+ *   // Condition for activation (if present, plugin can be dynamically toggled)
+ *   condition?: (context) => boolean,
  *   
  *   // Called once when plugin is discovered
  *   init?: (cm6Core) => void,
  *   
- *   // Register compartments (called before extensions)
+ *   // Register compartments (ALWAYS called, even if condition is false)
  *   registerCompartments?: () => { [name: string]: Compartment },
  *   
- *   // Get CM6 extensions
+ *   // Get CM6 extensions (only called when condition is true or no condition)
  *   getExtensions?: (context) => Extension[],
  *   
- *   // Extend engine API (called after view creation)
+ *   // Extend engine API (called after view creation, only if active)
  *   extendAPI?: (engine, context) => { [methodName: string]: Function },
  *   
- *   // Register event handlers
+ *   // Register event handlers (only if active)
  *   registerEvents?: (engine, context) => { [eventName: string]: Function },
  *   
  *   // Cleanup when engine is destroyed
@@ -141,20 +143,19 @@ function discoverPlugins() {
 	var plugins = [];
 	var core = getCM6Core();
 
-	if ($tw && $tw.modules && $tw.modules.types[PLUGIN_MODULE_TYPE]) {
-		var pluginModules = $tw.modules.types[PLUGIN_MODULE_TYPE];
-		
-		$tw.utils.each(pluginModules, function(moduleInfo, moduleName) {
+	// Use TiddlyWiki's official module iteration API
+	if ($tw && $tw.modules && isFunction($tw.modules.forEachModuleOfType)) {
+		$tw.modules.forEachModuleOfType(PLUGIN_MODULE_TYPE, function(title, pluginModule) {
 			try {
-				var pluginModule = require(moduleName);
 				var pluginDef = pluginModule.default || pluginModule.plugin || pluginModule;
 				
 				if (pluginDef && (isFunction(pluginDef.getExtensions) || 
 				                  isFunction(pluginDef.extendAPI) ||
-				                  isFunction(pluginDef.registerCompartments))) {
-					pluginDef.name = pluginDef.name || moduleName;
+				                  isFunction(pluginDef.registerCompartments) ||
+				                  isFunction(pluginDef.registerEvents))) {
+					pluginDef.name = pluginDef.name || title;
 					pluginDef.priority = isNumber(pluginDef.priority) ? pluginDef.priority : 0;
-					pluginDef._moduleName = moduleName;
+					pluginDef._moduleName = title;
 					
 					// Call init if present
 					if (isFunction(pluginDef.init)) {
@@ -166,11 +167,14 @@ function discoverPlugins() {
 					}
 					
 					plugins.push(pluginDef);
+					console.log("CM6: Loaded plugin '" + pluginDef.name + "' (priority: " + pluginDef.priority + ")");
 				}
 			} catch (e) {
-				console.error("Failed to load CM6 plugin '" + moduleName + "':", e);
+				console.error("Failed to load CM6 plugin '" + title + "':", e);
 			}
 		});
+	} else {
+		console.warn("CM6: $tw.modules.forEachModuleOfType not available");
 	}
 
 	// Sort by priority (higher first)
@@ -178,6 +182,7 @@ function discoverPlugins() {
 		return (b.priority || 0) - (a.priority || 0);
 	});
 
+	console.log("CM6: Discovered " + plugins.length + " plugins");
 	_pluginCache = plugins;
 	return plugins;
 }
@@ -186,7 +191,7 @@ function clearPluginCache() {
 	_pluginCache = null;
 }
 
-function buildPluginContext(options, engine) {
+function buildPluginContext(options, engine, overrideType) {
 	var context = {
 		tiddlerTitle: null,
 		tiddlerType: null,
@@ -219,39 +224,28 @@ function buildPluginContext(options, engine) {
 		}
 	}
 
+	// Explicit overrides
 	if (options.tiddlerType !== undefined) {
 		context.tiddlerType = options.tiddlerType;
 	}
 	if (options.tiddlerTitle !== undefined) {
 		context.tiddlerTitle = options.tiddlerTitle;
 	}
+	
+	// Runtime type override (for setType calls)
+	if (overrideType !== undefined) {
+		context.tiddlerType = overrideType;
+	}
 
 	return context;
 }
 
 // ============================================================================
-// CodeMirror Engine - Minimal Core
+// CodeMirror Engine
 // ============================================================================
 
 /**
  * CodeMirror 6 Engine for TiddlyWiki5
- * 
- * Core options:
- * @param {Object} options.widget - TiddlyWiki widget reference
- * @param {HTMLElement} options.parentNode - DOM parent for editor
- * @param {Node} options.nextSibling - Insert before this sibling
- * @param {string} options.value - Initial text content
- * @param {boolean} options.readOnly - Read-only mode
- * @param {boolean} options.autofocus - Focus on mount
- * @param {Function} options.onChange - Change callback
- * @param {Function} options.onBlurSave - Blur save callback
- * @param {number} options.changeDebounceMs - Change debounce (default 150)
- * @param {string} options.tiddlerType - Explicit content type
- * @param {string} options.tiddlerTitle - Explicit tiddler title
- * @param {boolean} options.loadPlugins - Load plugins (default true)
- * @param {Array} options.extensions - Additional CM6 extensions
- * 
- * Additional options are passed to plugins via context.options
  */
 function CodeMirrorEngine(options) {
 	options = options || {};
@@ -282,11 +276,12 @@ function CodeMirrorEngine(options) {
 	
 	this._destroyed = false;
 	this._pendingChange = false;
-	// Default debounce: 50ms for snappy feel while still coalescing rapid changes
-	// TW's standard engine saves immediately, but some debounce helps performance
 	this._debounceMs = isNumber(options.changeDebounceMs) ? clamp(options.changeDebounceMs, 0, 2000) : 50;
 	this._debounceHandle = null;
 	this._lastEmittedText = isString(options.value) ? options.value : "";
+	
+	// Current content type (for language switching)
+	this._currentType = null;
 
 	// Callbacks
 	this._onChange = isFunction(options.onChange) ? options.onChange : null;
@@ -295,8 +290,14 @@ function CodeMirrorEngine(options) {
 	// Event handlers from plugins
 	this._eventHandlers = {};
 	
-	// Active plugins for this instance
+	// All discovered plugins
+	this._allPlugins = [];
+	
+	// Currently active plugins (condition met)
 	this._activePlugins = [];
+	
+	// Conditional plugins (have a condition function) - for dynamic switching
+	this._conditionalPlugins = [];
 
 	// ========================================================================
 	// Load CM6 Core
@@ -310,62 +311,78 @@ function CodeMirrorEngine(options) {
 	var Compartment = core.state.Compartment;
 	var cmKeymap = core.view.keymap;
 
-	// Store for later use
 	this._EditorState = EditorState;
 	this._EditorView = EditorView;
 	this._Compartment = Compartment;
 
 	// ========================================================================
-	// Compartments (core + plugin-registered)
+	// Compartments
 	// ========================================================================
 	
 	this._compartments = {
-		// Core compartment for read-only state
 		readOnly: new Compartment()
 	};
 
 	// ========================================================================
-	// Build Plugin Context
+	// Build Initial Context
 	// ========================================================================
 	
 	var context = buildPluginContext(options, this);
 	this._pluginContext = context;
+	this._currentType = context.tiddlerType;
+
+	console.log("CM6: Initial context:", {
+		tiddlerTitle: context.tiddlerTitle,
+		tiddlerType: context.tiddlerType,
+		readOnly: context.readOnly
+	});
 
 	// ========================================================================
-	// Collect Plugin Compartments
+	// Process Plugins
 	// ========================================================================
 	
 	var plugins = options.loadPlugins !== false ? discoverPlugins() : [];
+	this._allPlugins = plugins;
 	
 	for (var i = 0; i < plugins.length; i++) {
 		var plugin = plugins[i];
+		var hasCondition = isFunction(plugin.condition);
 		
 		try {
-			// Check condition
-			var shouldLoad = true;
-			if (isFunction(plugin.condition)) {
-				shouldLoad = plugin.condition(context);
-			}
-			
-			if (!shouldLoad) continue;
-			
-			// Register compartments
+			// ALWAYS register compartments (so we can reconfigure later)
 			if (isFunction(plugin.registerCompartments)) {
 				var pluginCompartments = plugin.registerCompartments();
 				if (isObject(pluginCompartments)) {
 					for (var compName in pluginCompartments) {
 						if (pluginCompartments.hasOwnProperty(compName) && !this._compartments[compName]) {
 							this._compartments[compName] = pluginCompartments[compName];
+							console.log("CM6: Registered compartment '" + compName + "' from plugin '" + plugin.name + "'");
 						}
 					}
 				}
 			}
 			
-			this._activePlugins.push(plugin);
+			// Track conditional plugins separately
+			if (hasCondition) {
+				this._conditionalPlugins.push(plugin);
+			}
+			
+			// Check if plugin should be active
+			var shouldActivate = true;
+			if (hasCondition) {
+				shouldActivate = plugin.condition(context);
+				console.log("CM6: Plugin '" + plugin.name + "' condition: " + shouldActivate + " (type: '" + (context.tiddlerType || "") + "')");
+			}
+			
+			if (shouldActivate) {
+				this._activePlugins.push(plugin);
+			}
 		} catch (e) {
 			console.error("Error processing plugin '" + plugin.name + "':", e);
 		}
 	}
+	
+	console.log("CM6: Active plugins: " + this._activePlugins.map(function(p) { return p.name; }).join(", "));
 
 	// ========================================================================
 	// Build Extensions
@@ -380,7 +397,7 @@ function CodeMirrorEngine(options) {
 		)
 	);
 
-	// Core: Basic keymap if available
+	// Core: Basic keymap
 	var defaultKeymap = (core.commands || {}).defaultKeymap || [];
 	var indentWithTab = (core.commands || {}).indentWithTab;
 	
@@ -393,18 +410,63 @@ function CodeMirrorEngine(options) {
 	}
 
 	// Collect extensions from plugins
-	for (var j = 0; j < this._activePlugins.length; j++) {
-		var activePlugin = this._activePlugins[j];
+	// 
+	// IMPORTANT: Plugins with compartments are responsible for their own compartment.of() calls.
+	// The engine does NOT wrap their extensions again (that would cause "Duplicate compartment" error).
+	// 
+	// For inactive conditional plugins: we add an empty compartment so it can be filled later.
+	// For active plugins: we add their extensions directly (they manage their own compartment).
+	
+	for (var j = 0; j < this._allPlugins.length; j++) {
+		var pluginJ = this._allPlugins[j];
+		var isActive = this._activePlugins.indexOf(pluginJ) >= 0;
+		var hasConditionJ = isFunction(pluginJ.condition);
+		var hasCompartment = isFunction(pluginJ.registerCompartments);
 		
 		try {
-			if (isFunction(activePlugin.getExtensions)) {
-				var pluginExtensions = activePlugin.getExtensions(context);
-				if (isArray(pluginExtensions)) {
-					extensions = extensions.concat(pluginExtensions);
+			if (isFunction(pluginJ.getExtensions)) {
+				if (hasConditionJ && hasCompartment) {
+					// Conditional plugin WITH compartment
+					var compartmentName = this._findPluginCompartment(pluginJ);
+					
+					if (isActive) {
+						// Plugin is active - add its extensions directly
+						// The plugin is responsible for using compartment.of() internally
+						var pluginExts = pluginJ.getExtensions(context);
+						if (isArray(pluginExts)) {
+							extensions = extensions.concat(pluginExts);
+							console.log("CM6: Plugin '" + pluginJ.name + "' active, added " + pluginExts.length + " extensions");
+						}
+					} else {
+						// Plugin is NOT active - add empty compartment placeholder
+						// This allows reconfiguration later when type changes
+						if (compartmentName && this._compartments[compartmentName]) {
+							extensions.push(this._compartments[compartmentName].of([]));
+							console.log("CM6: Plugin '" + pluginJ.name + "' inactive, added empty compartment '" + compartmentName + "'");
+						}
+					}
+				} else if (hasConditionJ && !hasCompartment) {
+					// Conditional plugin WITHOUT compartment - can only be added if active (no switching)
+					if (isActive) {
+						var condExts = pluginJ.getExtensions(context);
+						if (isArray(condExts)) {
+							extensions = extensions.concat(condExts);
+							console.log("CM6: Plugin '" + pluginJ.name + "' active (no compartment), added " + condExts.length + " extensions");
+						}
+					} else {
+						console.log("CM6: Plugin '" + pluginJ.name + "' inactive, no compartment - cannot switch later");
+					}
+				} else if (isActive) {
+					// Unconditional plugin - always add
+					var unconditionalExts = pluginJ.getExtensions(context);
+					if (isArray(unconditionalExts)) {
+						extensions = extensions.concat(unconditionalExts);
+						console.log("CM6: Plugin '" + pluginJ.name + "' provided " + unconditionalExts.length + " extensions");
+					}
 				}
 			}
 		} catch (e) {
-			console.error("Error getting extensions from plugin '" + activePlugin.name + "':", e);
+			console.error("Error getting extensions from plugin '" + pluginJ.name + "':", e);
 		}
 	}
 
@@ -443,26 +505,18 @@ function CodeMirrorEngine(options) {
 	);
 
 	// ========================================================================
-	// TiddlyWiki Keyboard Shortcut Integration
+	// TiddlyWiki Event Integration
 	// ========================================================================
 	
 	extensions.push(
 		EditorView.domEventHandlers({
 			keydown: function(event, view) {
 				if (self._destroyed) return false;
-				
-				// Let TiddlyWiki widget handle keyboard shortcuts (toolbar, etc.)
 				if (self.widget && typeof self.widget.handleKeydownEvent === "function") {
-					var handled = self.widget.handleKeydownEvent(event);
-					if (handled) {
-						return true; // Prevent CM6 from handling
-					}
+					return self.widget.handleKeydownEvent(event);
 				}
-				
-				return false; // Let CM6 handle normally
+				return false;
 			},
-			
-			// File drop handling (for TW dropzone integration)
 			drop: function(event, view) {
 				if (self._destroyed) return false;
 				if (self.widget && typeof self.widget.handleDropEvent === "function") {
@@ -470,40 +524,6 @@ function CodeMirrorEngine(options) {
 				}
 				return false;
 			},
-			
-			dragenter: function(event, view) {
-				if (self._destroyed) return false;
-				if (self.widget && typeof self.widget.handleDragEnterEvent === "function") {
-					return self.widget.handleDragEnterEvent(event);
-				}
-				return false;
-			},
-			
-			dragover: function(event, view) {
-				if (self._destroyed) return false;
-				if (self.widget && typeof self.widget.handleDragOverEvent === "function") {
-					return self.widget.handleDragOverEvent(event);
-				}
-				return false;
-			},
-			
-			dragleave: function(event, view) {
-				if (self._destroyed) return false;
-				if (self.widget && typeof self.widget.handleDragLeaveEvent === "function") {
-					return self.widget.handleDragLeaveEvent(event);
-				}
-				return false;
-			},
-			
-			dragend: function(event, view) {
-				if (self._destroyed) return false;
-				if (self.widget && typeof self.widget.handleDragEndEvent === "function") {
-					return self.widget.handleDragEndEvent(event);
-				}
-				return false;
-			},
-			
-			// Paste handling (for file paste)
 			paste: function(event, view) {
 				if (self._destroyed) return false;
 				if (self.widget && typeof self.widget.handlePasteEvent === "function") {
@@ -511,8 +531,6 @@ function CodeMirrorEngine(options) {
 				}
 				return false;
 			},
-			
-			// Click handling (for some TW features)
 			click: function(event, view) {
 				if (self._destroyed) return false;
 				if (self.widget && typeof self.widget.handleClickEvent === "function") {
@@ -547,26 +565,24 @@ function CodeMirrorEngine(options) {
 		this.parentNode.appendChild(this.domNode);
 	}
 
-	// Register domNode with widget for proper cleanup on refresh
+	// Register with widget
 	if (this.widget && this.widget.domNodes) {
 		this.widget.domNodes.push(this.domNode);
 	}
 
 	// ========================================================================
-	// Extend API from Plugins
+	// Extend API from Active Plugins
 	// ========================================================================
 	
 	for (var k = 0; k < this._activePlugins.length; k++) {
 		var apiPlugin = this._activePlugins[k];
 		
 		try {
-			// Extend API
 			if (isFunction(apiPlugin.extendAPI)) {
 				var apiMethods = apiPlugin.extendAPI(this, context);
 				if (isObject(apiMethods)) {
 					for (var methodName in apiMethods) {
 						if (apiMethods.hasOwnProperty(methodName) && isFunction(apiMethods[methodName])) {
-							// Don't override existing methods
 							if (!this[methodName]) {
 								this[methodName] = apiMethods[methodName].bind(this);
 							}
@@ -575,7 +591,6 @@ function CodeMirrorEngine(options) {
 				}
 			}
 			
-			// Register events
 			if (isFunction(apiPlugin.registerEvents)) {
 				var eventHandlers = apiPlugin.registerEvents(this, context);
 				if (isObject(eventHandlers)) {
@@ -599,6 +614,23 @@ function CodeMirrorEngine(options) {
 		this.focus();
 	}
 }
+
+// ============================================================================
+// Internal: Find Plugin's Compartment
+// ============================================================================
+
+CodeMirrorEngine.prototype._findPluginCompartment = function(plugin) {
+	// Convention: plugin registers compartment with predictable name
+	// e.g., "tiddlywikiLanguage", "markdownLanguage", etc.
+	if (isFunction(plugin.registerCompartments)) {
+		var comps = plugin.registerCompartments();
+		if (isObject(comps)) {
+			var names = Object.keys(comps);
+			if (names.length > 0) return names[0];
+		}
+	}
+	return null;
+};
 
 // ============================================================================
 // Internal Methods
@@ -630,7 +662,6 @@ CodeMirrorEngine.prototype._emitNow = function() {
 	this._lastEmittedText = text;
 	this._pendingChange = false;
 
-	// Call onChange callback if provided (standalone usage)
 	if (this._onChange) {
 		try {
 			this._onChange(text);
@@ -639,8 +670,6 @@ CodeMirrorEngine.prototype._emitNow = function() {
 		}
 	}
 
-	// TiddlyWiki integration: save changes through widget
-	// The factory.js doesn't pass onChange - it expects the engine to call widget.saveChanges()
 	if (this.widget && typeof this.widget.saveChanges === "function") {
 		try {
 			this.widget.saveChanges(text);
@@ -681,11 +710,6 @@ CodeMirrorEngine.prototype._triggerEvent = function(eventName, data) {
 // Event System
 // ============================================================================
 
-/**
- * Register event handler
- * @param {string} eventName
- * @param {Function} handler
- */
 CodeMirrorEngine.prototype.on = function(eventName, handler) {
 	if (!isFunction(handler)) return;
 	if (!this._eventHandlers[eventName]) {
@@ -694,11 +718,6 @@ CodeMirrorEngine.prototype.on = function(eventName, handler) {
 	this._eventHandlers[eventName].push(handler);
 };
 
-/**
- * Remove event handler
- * @param {string} eventName
- * @param {Function} handler
- */
 CodeMirrorEngine.prototype.off = function(eventName, handler) {
 	var handlers = this._eventHandlers[eventName];
 	if (!handlers) return;
@@ -710,54 +729,38 @@ CodeMirrorEngine.prototype.off = function(eventName, handler) {
 };
 
 // ============================================================================
-// Core Document API (minimal)
+// Core Document API
 // ============================================================================
 
-/**
- * Get document text
- * @returns {string}
- */
 CodeMirrorEngine.prototype.getText = function() {
 	if (this._destroyed) return "";
 	return this.view.state.doc.toString();
 };
 
 /**
- * Set document text
- * @param {string} text
- * @param {string=} type - optional content type (passed by TW factory)
+ * Set document text and optionally change content type
+ * @param {string} text - New document text
+ * @param {string=} type - Content type (triggers language switch if changed)
  */
 CodeMirrorEngine.prototype.setText = function(text, type) {
 	if (this._destroyed) return;
 	if (!isString(text)) text = String(text);
 
-	// Store type if provided (TW factory passes it)
-	if (type !== undefined) {
-		this._currentType = type;
-		if (this._pluginContext) this._pluginContext.tiddlerType = type;
+	// Check if type changed - trigger language switch
+	if (type !== undefined && type !== this._currentType) {
+		console.log("CM6: Type changed from '" + this._currentType + "' to '" + type + "'");
+		this.setType(type);
 	}
 
 	var current = this.view.state.doc.toString();
 	
-	// Don't change anything if text is the same
 	if (text === current) return;
 
-	// CRITICAL: Prevent race condition when user is typing
-	// 
-	// The problem:
-	// 1. User types "a" -> scheduleEmit (150ms debounce)
-	// 2. User types "b" -> text is "ab", new timer
-	// 3. Debounce fires -> saveChanges("ab")
-	// 4. User types "c" -> text is "abc"
-	// 5. TW refresh -> setText("ab") - would overwrite "abc"!
-	//
-	// Solution: If we have pending changes AND the incoming text matches
-	// what we last saved, it's just TW echoing back our save. Ignore it.
+	// Race condition prevention
 	if (this._pendingChange && text === this._lastEmittedText) {
-		return; // Ignore TW echo, keep user's current typing
+		return;
 	}
 
-	// This is a genuine external change - accept it
 	var sel = this.view.state.selection.main;
 	var newLen = text.length;
 
@@ -769,37 +772,130 @@ CodeMirrorEngine.prototype.setText = function(text, type) {
 		}
 	});
 
-	// Update tracking to prevent echo loops
 	this._lastEmittedText = text;
 	this._pendingChange = false;
 };
 
 /**
- * Focus editor
+ * Change content type and reconfigure language plugins
+ * @param {string} newType - New content type
  */
+CodeMirrorEngine.prototype.setType = function(newType) {
+	if (this._destroyed) return;
+	
+	var oldType = this._currentType;
+	if (newType === oldType) return;
+	
+	this._currentType = newType;
+	if (this._pluginContext) {
+		this._pluginContext.tiddlerType = newType;
+	}
+	
+	console.log("CM6: Switching type from '" + oldType + "' to '" + newType + "'");
+	
+	// Build new context with updated type
+	var context = buildPluginContext(this.options, this, newType);
+	this._pluginContext = context;
+	
+	// Re-evaluate all conditional plugins
+	var effects = [];
+	
+	for (var i = 0; i < this._conditionalPlugins.length; i++) {
+		var plugin = this._conditionalPlugins[i];
+		var wasActive = this._activePlugins.indexOf(plugin) >= 0;
+		var shouldBeActive = false;
+		
+		try {
+			shouldBeActive = plugin.condition(context);
+		} catch (e) {
+			console.error("Error evaluating condition for plugin '" + plugin.name + "':", e);
+		}
+		
+		console.log("CM6: Plugin '" + plugin.name + "' was=" + wasActive + " should=" + shouldBeActive);
+		
+		if (wasActive !== shouldBeActive) {
+			// Find the compartment for this plugin
+			var compartmentName = this._findPluginCompartment(plugin);
+			
+			if (compartmentName && this._compartments[compartmentName]) {
+				var newContent = [];
+				
+				if (shouldBeActive) {
+					// Plugin becoming active - get content for compartment
+					// 
+					// Convention: If plugin has getCompartmentContent(), use it (returns raw content)
+					// Otherwise, we can't properly reconfigure (plugin uses compartment.of internally)
+					//
+					if (isFunction(plugin.getCompartmentContent)) {
+						try {
+							newContent = plugin.getCompartmentContent(context) || [];
+							if (!isArray(newContent)) newContent = [newContent];
+						} catch (e) {
+							console.error("Error getting compartment content from plugin '" + plugin.name + "':", e);
+						}
+					} else {
+						// Fallback: try to use getExtensions, but warn about potential issues
+						// This works if the plugin doesn't use compartment.of() in getExtensions()
+						console.warn("CM6: Plugin '" + plugin.name + "' has no getCompartmentContent() - reconfiguration may not work correctly");
+						try {
+							newContent = plugin.getExtensions(context) || [];
+							if (!isArray(newContent)) newContent = [newContent];
+						} catch (e) {
+							console.error("Error getting extensions from plugin '" + plugin.name + "':", e);
+						}
+					}
+				}
+				// else: plugin becoming inactive - newContent stays []
+				
+				effects.push(
+					this._compartments[compartmentName].reconfigure(newContent)
+				);
+				
+				console.log("CM6: Reconfigured '" + compartmentName + "' with " + newContent.length + " items (active: " + shouldBeActive + ")");
+			} else {
+				console.warn("CM6: Plugin '" + plugin.name + "' has no compartment - cannot switch dynamically");
+			}
+			
+			// Update active plugins list
+			if (shouldBeActive && !wasActive) {
+				this._activePlugins.push(plugin);
+			} else if (!shouldBeActive && wasActive) {
+				var idx = this._activePlugins.indexOf(plugin);
+				if (idx >= 0) this._activePlugins.splice(idx, 1);
+			}
+		}
+	}
+	
+	// Apply all reconfiguration effects
+	if (effects.length > 0) {
+		this.view.dispatch({ effects: effects });
+	}
+	
+	this._triggerEvent("typeChanged", { oldType: oldType, newType: newType });
+};
+
+/**
+ * Get current content type
+ * @returns {string|null}
+ */
+CodeMirrorEngine.prototype.getType = function() {
+	return this._currentType;
+};
+
 CodeMirrorEngine.prototype.focus = function() {
 	if (this._destroyed) return;
 	this.view.focus();
 };
 
-/**
- * Check if editor has focus
- * @returns {boolean}
- */
 CodeMirrorEngine.prototype.hasFocus = function() {
 	if (this._destroyed) return false;
 	return this.view.hasFocus;
 };
 
 // ============================================================================
-// Core Compartment API
+// Compartment API
 // ============================================================================
 
-/**
- * Reconfigure a compartment
- * @param {string} compartmentName
- * @param {Extension|Extension[]} extension
- */
 CodeMirrorEngine.prototype.reconfigure = function(compartmentName, extension) {
 	if (this._destroyed) return;
 	
@@ -814,39 +910,32 @@ CodeMirrorEngine.prototype.reconfigure = function(compartmentName, extension) {
 	});
 };
 
-/**
- * Set read-only state
- * @param {boolean} readOnly
- */
 CodeMirrorEngine.prototype.setReadOnly = function(readOnly) {
 	this.reconfigure("readOnly", this._EditorState.readOnly.of(!!readOnly));
 };
 
-/**
- * Get available compartment names
- * @returns {string[]}
- */
 CodeMirrorEngine.prototype.getCompartments = function() {
 	return Object.keys(this._compartments);
+};
+
+CodeMirrorEngine.prototype.getActivePlugins = function() {
+	return this._activePlugins.map(function(p) {
+		return {
+			name: p.name,
+			description: p.description || "",
+			priority: p.priority || 0
+		};
+	});
 };
 
 // ============================================================================
 // TiddlyWiki Compatibility API
 // ============================================================================
 
-/**
- * Update DOM node text (TW compatibility)
- * @param {string} text
- */
 CodeMirrorEngine.prototype.updateDomNodeText = function(text) {
 	this.setText(text);
 };
 
-/**
- * Create text operation (TW compatibility)
- * @param {string} type
- * @returns {Object}
- */
 CodeMirrorEngine.prototype.createTextOperation = function(type) {
 	if (this._destroyed) return null;
 
@@ -864,15 +953,6 @@ CodeMirrorEngine.prototype.createTextOperation = function(type) {
 	};
 };
 
-/**
- * Execute text operation (TW compatibility)
- * TW editor operations modify the operation object:
- * - operation.replacement: text to insert at selection
- * - operation.text: full new document text (for replace-all)
- * - operation.newSelStart/newSelEnd: new selection position
- * @param {Object} operation
- * @returns {string} the new document text
- */
 CodeMirrorEngine.prototype.executeTextOperation = function(operation) {
 	if (this._destroyed || !operation) return this.getText();
 
@@ -887,7 +967,6 @@ CodeMirrorEngine.prototype.executeTextOperation = function(operation) {
 
 		case "insert-text":
 		case "replace-selection":
-			// Standard operation: replace selection with operation.replacement
 			if (operation.replacement !== null && operation.replacement !== undefined) {
 				var insert = String(operation.replacement);
 				this.view.dispatch({
@@ -898,7 +977,6 @@ CodeMirrorEngine.prototype.executeTextOperation = function(operation) {
 			break;
 
 		case "replace-all":
-			// Replace entire document
 			if (operation.text !== null && operation.text !== undefined) {
 				this.view.dispatch({
 					changes: { from: 0, to: this.view.state.doc.length, insert: String(operation.text) }
@@ -918,7 +996,6 @@ CodeMirrorEngine.prototype.executeTextOperation = function(operation) {
 			break;
 
 		case "save":
-			// Force emit pending changes
 			this._emitNow();
 			break;
 
@@ -931,7 +1008,6 @@ CodeMirrorEngine.prototype.executeTextOperation = function(operation) {
 			break;
 
 		default:
-			// Standard TW behavior: if replacement is set, insert it
 			if (operation.replacement !== null && operation.replacement !== undefined) {
 				var insertText = String(operation.replacement);
 				this.view.dispatch({
@@ -939,35 +1015,23 @@ CodeMirrorEngine.prototype.executeTextOperation = function(operation) {
 					selection: { anchor: from + insertText.length }
 				});
 			}
-			// Let plugins handle additional operations
 			this._triggerEvent("textOperation", operation);
 	}
 
-	// Set new selection if specified
 	if (isNumber(operation.newSelStart)) {
 		var newAnchor = operation.newSelStart;
 		var newHead = isNumber(operation.newSelEnd) ? operation.newSelEnd : newAnchor;
-		// Clamp to document length
 		var docLen = this.view.state.doc.length;
-		newAnchor = clamp(newAnchor, 0, docLen);
-		newHead = clamp(newHead, 0, docLen);
 		this.view.dispatch({
-			selection: { anchor: newAnchor, head: newHead }
+			selection: { anchor: clamp(newAnchor, 0, docLen), head: clamp(newHead, 0, docLen) }
 		});
 	}
 
-	// Return current text (required by factory.js)
 	return this.getText();
 };
 
-/**
- * Fix height (TW compatibility - no-op)
- */
 CodeMirrorEngine.prototype.fixHeight = function() {};
 
-/**
- * Refresh editor
- */
 CodeMirrorEngine.prototype.refresh = function() {
 	if (this._destroyed) return;
 	this.view.requestMeasure();
@@ -977,14 +1041,10 @@ CodeMirrorEngine.prototype.refresh = function() {
 // Lifecycle
 // ============================================================================
 
-/**
- * Destroy editor and clean up
- */
 CodeMirrorEngine.prototype.destroy = function() {
 	if (this._destroyed) return;
 	this._destroyed = true;
 
-	// Notify plugins
 	for (var i = 0; i < this._activePlugins.length; i++) {
 		var plugin = this._activePlugins[i];
 		if (isFunction(plugin.destroy)) {
@@ -1019,12 +1079,10 @@ CodeMirrorEngine.prototype.destroy = function() {
 	this._compartments = null;
 	this._eventHandlers = null;
 	this._activePlugins = null;
+	this._conditionalPlugins = null;
+	this._allPlugins = null;
 };
 
-/**
- * Check if destroyed
- * @returns {boolean}
- */
 CodeMirrorEngine.prototype.isDestroyed = function() {
 	return this._destroyed;
 };
