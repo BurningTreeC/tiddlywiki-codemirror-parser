@@ -391,7 +391,7 @@ export const TiddlyWikiExtensions = [
 // Individual Exports
 // ============================================================================
 
-export {
+/*export {
   MathExtension,
   CommentExtension,
   RawExtension,
@@ -400,4 +400,4 @@ export {
   FootnoteExtension,
   ExtendedImageExtension,
   ConditionalExtension
-}
+}*/
