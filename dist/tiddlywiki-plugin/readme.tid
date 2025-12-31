@@ -1,149 +1,121 @@
-title: $:/plugins/prtw/codemirror-tiddlywiki/readme
+title: $:/plugins/BTC/tiddlywiki-codemirror-6/readme
 type: text/vnd.tiddlywiki
 
-! CodeMirror 6 TiddlyWiki Mode
+! CodeMirror 6 TiddlyWiki Editor
 
-This plugin provides TiddlyWiki5 syntax support for CodeMirror 6.
+A modern, modular CodeMirror 6 editor for TiddlyWiki5 with extensive plugin support.
 
-!! Modular Plugin Architecture
+!! Features
 
-The CM6 engine uses a modular plugin system. Each feature is a separate plugin with `module-type: codemirror6-plugin`.
+* Full TiddlyWiki5 wikitext syntax highlighting
+* Modular plugin architecture
+* Autocomplete for tiddlers, macros, widgets, and fields
+* Link preview on hover
+* Ctrl+Click navigation to tiddlers
+* Code snippets with Tab expansion
+* Wikitext linting and validation
+* TiddlyWiki toolbar integration
+* Code folding
+* Search and replace
+* Bracket matching
 
-!!! Plugin Capabilities
+!! Plugin Architecture
 
-Plugins can:
+The editor uses `module-type: codemirror6-plugin` for all extensions. Each plugin can:
 
-* ''Add API methods'' to the engine instance via `extendAPI()`
-* ''Register compartments'' for dynamic reconfiguration via `registerCompartments()`
-* ''Provide CM6 extensions'' via `getExtensions()`
-* ''Register event handlers'' via `registerEvents()`
-* ''Conditionally load'' based on tiddler type or options via `condition()`
+* Add API methods to the engine
+* Register compartments for dynamic configuration
+* Provide CodeMirror extensions
+* Handle events
 
-!!! Built-in Plugins
+!! Built-in Plugins
 
-|!Plugin |!Priority |!Features |
-|core-features |1000 |History, selection, cursor, document, scroll, line numbers |
-|syntax |900 |Bracket matching, syntax highlighting, indentation |
-|search |800 |Search panel, find/replace |
-|fold |700 |Code folding, fold gutter |
-|autocomplete |600 |Completion popup, close brackets |
-|tiddlywiki-syntax |100 |TiddlyWiki wikitext parsing and highlighting |
+!!! Core Plugins
 
-!! Creating Your Own Plugin
+|!Plugin |!Priority |!Description |
+|`core-features` |1000 |History, selection, cursor, document manipulation, scrolling |
+|`syntax` |900 |Bracket matching, indentation, syntax tree access |
+|`search` |800 |Search/replace panel, find next/previous |
+|`fold` |700 |Code folding, fold gutter |
+|`autocomplete` |600 |Completion framework, close brackets |
 
-```javascript
-/*\
-title: $:/plugins/yourname/yourplugin/plugin.js
-type: application/javascript
-module-type: codemirror6-plugin
-\*/
-(function(){
-"use strict";
+!!! TiddlyWiki Plugins
 
-exports.plugin = {
-    name: "your-plugin-name",
-    description: "Plugin description",
-    priority: 50,
-    
-    // Optional: Initialize with CM6 core reference
-    init: function(cm6Core) {
-        this._core = cm6Core;
-    },
-    
-    // Optional: Return true if plugin should load
-    condition: function(context) {
-        return context.tiddlerType === "text/plain";
-    },
-    
-    // Optional: Register compartments for dynamic reconfiguration
-    registerCompartments: function() {
-        var Compartment = this._core.state.Compartment;
-        return {
-            myFeature: new Compartment()
-        };
-    },
-    
-    // Optional: Return CM6 extensions
-    getExtensions: function(context) {
-        return [];
-    },
-    
-    // Optional: Add methods to engine instance
-    extendAPI: function(engine, context) {
-        return {
-            myMethod: function() {
-                // 'this' is bound to engine
-                return this.getText().length;
-            }
-        };
-    },
-    
-    // Optional: Register event handlers
-    registerEvents: function(engine, context) {
-        return {
-            docChanged: function(update) {
-                console.log("Document changed!");
-            }
-        };
-    },
-    
-    // Optional: Cleanup when engine is destroyed
-    destroy: function(engine) {
-        // Cleanup code
-    }
-};
+|!Plugin |!Priority |!Description |
+|`tw-autocomplete` |550 |Tiddler names, macros, widgets, fields, tags, filter operators |
+|`tw-snippets` |540 |Code templates with Tab expansion |
+|`tw-click-navigate` |450 |Ctrl+Click to open tiddlers |
+|`tw-link-preview` |400 |Hover preview for links and transclusions |
+|`tw-lint` |300 |Wikitext validation and error checking |
+|`tw-toolbar` |200 |TiddlyWiki editor toolbar integration |
+|`tiddlywiki-syntax` |100 |Wikitext parsing and syntax highlighting |
 
-})();
-```
+!! TiddlyWiki Autocomplete
 
-!! Context Object
+The `tw-autocomplete` plugin provides intelligent completions:
 
-|!Property |!Description |
-|`tiddlerTitle` |Title of the tiddler being edited |
-|`tiddlerType` |Content type (empty string for wikitext) |
-|`tiddlerFields` |All tiddler fields |
-|`readOnly` |Whether editor is read-only |
-|`cm6Core` |Reference to CM6 core library |
-|`engine` |The engine instance |
-|`options` |All options passed to engine |
+|!Trigger |!Completions |
+|`[[` |Tiddler titles |
+|`{{` |Tiddler titles (transclusion) |
+|`<<` |Macro names |
+|`<$` |Widget names |
+|`[tag[` |Tag names |
+|`!!` after `{{tiddler` |Field names |
+|`[` in filter |Filter operators |
 
-!! Engine Events
+!! Snippets
 
-|!Event |!Description |
-|`docChanged` |Document content changed |
-|`selectionChanged` |Selection changed |
-|`focus` |Editor gained focus |
-|`blur` |Editor lost focus |
-|`textOperation` |Unknown text operation (for plugin handling) |
+Type abbreviation + Tab to expand. Examples:
 
-!! TiddlyWiki Syntax Support
+|!Trigger |!Expands To |
+|`\def` |`\define macroname(params)...\end` |
+|`\proc` |`\procedure name(params)...\end` |
+|`$list` |`<$list filter="...">...</$list>` |
+|`$button` |`<$button message="...">...</$button>` |
+|`$reveal` |`<$reveal type="..." state="...">...</$reveal>` |
+|`<<<` |Block quote |
+|<code>```</code> |Code block |
+|`|table` |Table template |
+|`btn-toggle` |Toggle button pattern |
+|`popup` |Popup button pattern |
 
-The `tiddlywiki-syntax` plugin automatically loads for:
+!! Ctrl+Click Navigation
 
-* Empty type (no type field)
-* `text/vnd.tiddlywiki`
-* `text/x-tiddlywiki`
+Hold Ctrl (Cmd on Mac) and click on:
 
-!!! Supported Syntax
+* `[[WikiLinks]]` - Opens the tiddler
+* `{{Transclusions}}` - Opens the tiddler
+* `<<macros>>` - Opens the defining tiddler
+* `<$widgets>` - Opens widget documentation
+* CamelCaseLinks - Opens if tiddler exists
 
-!!!! Block-Level
-* Headings (`!` through `!!!!!!`)
-* Lists (bullets `*`, numbered `#`, definitions `;` and `:`)
-* Tables (`|`)
-* Code blocks (triple backticks or indentation)
-* Block quotes (`<<<`)
-* Typed blocks (`$$$`)
-* Horizontal rules (`---`)
+Shift+Ctrl+Click opens in a new window.
 
-!!!! Pragmas
-* `\define`, `\procedure`, `\function`, `\widget`
-* `\rules`, `\import`, `\parameters`, `\whitespace`
+!! Link Preview
 
-!!!! Inline
-* Bold (`''`), Italic (`//`), Underline (`__`), Strikethrough (`~~`)
-* Superscript (`^^`), Subscript (`,,`)
-* WikiLinks, External links, Images
-* Transclusions, Macros, Widgets, Variables
+Hover over links to see a preview containing:
+
+* Tiddler title
+* Tags
+* Content type
+* Text preview or image
+* Modified date
+
+Disable with `linkPreview: false` in engine options.
+
+!! Linting
+
+The linter checks for:
+
+* Unmatched brackets (`[[`, `{{`, `<<`, etc.)
+* Unclosed widgets
+* Invalid widget names
+* Broken internal links
+* Unclosed formatting
+* Filter syntax errors
+* Pragma placement
+
+Enable lint gutter with `lintGutter: true`.
 
 !! Keyboard Shortcuts
 
@@ -151,6 +123,122 @@ The `tiddlywiki-syntax` plugin automatically loads for:
 |Mod-b |Toggle bold |
 |Mod-i |Toggle italic |
 |Mod-u |Toggle underline |
+|Mod-` |Toggle inline code |
 |Mod-k |Insert wiki link |
+|Mod-Shift-k |Insert transclusion |
 |Mod-1 to Mod-6 |Set heading level |
 |Mod-0 |Remove heading |
+|Mod-Shift-8 |Toggle bullet list |
+|Mod-Shift-7 |Toggle numbered list |
+|Mod-Shift-c |Insert code block |
+|Tab |Expand snippet (if at trigger) |
+|Mod-f |Open search |
+|Mod-z |Undo |
+|Mod-Shift-z |Redo |
+
+!! Engine Options
+
+```javascript
+new CodeMirrorEngine({
+    // DOM
+    parentNode: element,
+    widget: editWidget,
+    
+    // Content
+    value: "initial text",
+    tiddlerTitle: "MyTiddler",
+    tiddlerType: "text/vnd.tiddlywiki",
+    
+    // Features
+    readOnly: false,
+    lineNumbers: true,
+    lineWrapping: true,
+    foldGutter: true,
+    highlightActiveLine: true,
+    bracketMatching: true,
+    closeBrackets: true,
+    autocompletion: true,
+    search: true,
+    
+    // TiddlyWiki features
+    linkPreview: true,
+    clickNavigate: true,
+    snippets: true,
+    lint: true,
+    lintGutter: true,
+    lintLinks: true,
+    toolbar: true,
+    
+    // Callbacks
+    onChange: function(text) { },
+    onBlurSave: function() { }
+});
+```
+
+!! API Reference
+
+!!! Document Methods
+
+* `getText()` - Get document text
+* `setText(text)` - Set document text
+* `getLine(n)` - Get line n (1-based)
+* `getLineCount()` - Number of lines
+* `getRange(from, to)` - Get text range
+* `replaceRange(from, to, text)` - Replace range
+* `insert(text, pos)` - Insert at position
+
+!!! Selection Methods
+
+* `getSelection()` - Get selection info
+* `setSelection(anchor, head)` - Set selection
+* `getCursor()` - Get cursor position
+* `setCursor(pos)` - Set cursor position
+* `selectAll()` - Select all
+* `replaceSelection(text)` - Replace selection
+
+!!! History Methods
+
+* `undo()` / `redo()` - History navigation
+* `canUndo()` / `canRedo()` - Check history state
+
+!!! TiddlyWiki Methods
+
+* `toggleBold()`, `toggleItalic()`, etc. - Formatting
+* `insertWikiLink()`, `insertTransclusion()` - Links
+* `setHeading(level)`, `removeHeading()` - Headings
+* `navigateToTiddler(title)` - Navigation
+* `insertSnippet(template)` - Snippets
+* `lint()` - Force lint check
+
+!! Creating Custom Plugins
+
+```javascript
+/*\
+title: $:/plugins/me/myplugin.js
+module-type: codemirror6-plugin
+\*/
+exports.plugin = {
+    name: "my-plugin",
+    priority: 500,
+    
+    condition: function(context) {
+        return context.tiddlerType === "text/vnd.tiddlywiki";
+    },
+    
+    getExtensions: function(context) {
+        return [/* CM6 extensions */];
+    },
+    
+    extendAPI: function(engine, context) {
+        return {
+            myMethod: function() {
+                return this.getText();
+            }
+        };
+    }
+};
+```
+
+!! License
+
+MIT License
