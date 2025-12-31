@@ -37,7 +37,13 @@ import {
 } from "./commands"
 
 // Re-export for external use
+// tiddlywiki() returns LanguageSupport (use for reconfigureLanguage)
+// tiddlywikiLanguage is the Language instance
 export {tiddlywikiLanguage, tiddlywikiBaseLanguage, tiddlywiki}
+
+// Alias for backwards compatibility with existing engines
+export const TiddlyWikiLanguage = tiddlywikiLanguage
+
 export * from "./commands"
 
 /**
@@ -267,11 +273,49 @@ export const plugin = {
       
       // ==== Language Configuration ====
       
-      setTiddlyWikiLanguage(this: any, enabled: boolean) {
-        if (this._destroyed) return
+      /**
+       * Enable/disable TiddlyWiki language support
+       * @param enabled - true to enable, false to disable
+       * @param options - optional config for tiddlywiki() function
+       */
+      setTiddlyWikiLanguage(this: any, enabled: boolean, options?: Parameters<typeof tiddlywiki>[0]) {
+        if (this._destroyed || !this.view) return
         const compartments = this._compartments as Record<string, Compartment> | undefined
         if (compartments?.tiddlywikiLanguage) {
-          this.reconfigure("tiddlywikiLanguage", enabled ? tiddlywikiLanguage : [])
+          const langSupport = enabled ? tiddlywiki(options || {}) : []
+          const transaction = {
+            effects: compartments.tiddlywikiLanguage.reconfigure(langSupport)
+          }
+          // Use safeDispatch if available, otherwise direct dispatch
+          if (typeof this.safeDispatch === 'function') {
+            this.safeDispatch(transaction)
+          } else {
+            this.view.dispatch(transaction)
+          }
+        }
+      },
+      
+      /**
+       * Reconfigure language - compatible with old CodeMirrorEngine API
+       * Usage: engine.reconfigureLanguage(tiddlywiki, TiddlyWikiLanguage, options)
+       * @param langFn - Language function (e.g., tiddlywiki)
+       * @param _language - Language instance (for compatibility, not used)
+       * @param options - Options to pass to langFn
+       */
+      reconfigureLanguage(this: any, langFn: (opts?: any) => LanguageSupport, _language: any, options?: any) {
+        if (this._destroyed || !this.view) return
+        const compartments = this._compartments as Record<string, Compartment> | undefined
+        if (compartments?.tiddlywikiLanguage) {
+          const langSupport = options ? langFn(options) : langFn()
+          const transaction = {
+            effects: compartments.tiddlywikiLanguage.reconfigure(langSupport)
+          }
+          // Use safeDispatch if available, otherwise direct dispatch
+          if (typeof this.safeDispatch === 'function') {
+            this.safeDispatch(transaction)
+          } else {
+            this.view.dispatch(transaction)
+          }
         }
       }
     }
