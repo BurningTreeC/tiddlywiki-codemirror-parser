@@ -6,6 +6,14 @@ This package provides an incremental parser for TiddlyWiki5 Wikitext, analogous 
 
 ## Features
 
+### Plugin System
+
+The engine uses a modular plugin architecture via `module-type: codemirror6-plugin`. Plugins are:
+
+- **Auto-discovered** by the engine at startup
+- **Conditionally loaded** based on tiddler content type
+- **Priority-ordered** for proper extension stacking
+
 ### Block-Level Syntax
 
 - **Headings**: `!` through `!!!!!!` (6 levels)
@@ -69,28 +77,6 @@ This is ''bold'' and //italic// text.
 })
 ```
 
-### With Configuration
-
-```javascript
-import {tiddlywiki} from "@prtw/lang-tiddlywiki"
-import {javascript} from "@codemirror/lang-javascript"
-
-const view = new EditorView({
-  extensions: [
-    tiddlywiki({
-      // Default language for code blocks without info string
-      defaultCodeLanguage: javascript(),
-      
-      // Enable/disable features
-      addKeymap: true,
-      completeHTMLTags: true,
-      completeWidgets: true,
-      completeMacros: true
-    })
-  ]
-})
-```
-
 ### Parser Only (without CodeMirror)
 
 ```javascript
@@ -99,6 +85,63 @@ import {parser} from "@prtw/lang-tiddlywiki/parser"
 const tree = parser.parse(`! Heading\n\nParagraph text`)
 // Use the syntax tree for analysis
 ```
+
+## TiddlyWiki5 Plugin System
+
+The engine (`engine.js`) discovers and loads plugins with `module-type: codemirror6-plugin`.
+
+### Creating a Plugin
+
+```javascript
+/*\
+title: $:/plugins/yourname/yourplugin/plugin.js
+type: application/javascript
+module-type: codemirror6-plugin
+\*/
+(function(){
+"use strict";
+
+exports.plugin = {
+    name: "your-plugin-name",
+    description: "Description of your plugin",
+    priority: 50, // Higher = loaded first (default: 0)
+    
+    // Optional: Only load for specific content types
+    condition: function(context) {
+        // context.tiddlerType is the content type
+        // Return true to load, false to skip
+        return context.tiddlerType === "text/plain";
+    },
+    
+    // Required: Return array of CM6 extensions
+    getExtensions: function(context) {
+        return [
+            // Your CodeMirror 6 extensions here
+        ];
+    }
+};
+
+})();
+```
+
+### Plugin Context Object
+
+The `condition` and `getExtensions` functions receive a context object:
+
+| Property | Description |
+|----------|-------------|
+| `tiddlerTitle` | Title of the tiddler being edited |
+| `tiddlerType` | Content type (empty string = wikitext) |
+| `tiddlerFields` | All tiddler fields |
+| `readOnly` | Whether editor is read-only |
+| `cm6Core` | Reference to CM6 core library |
+
+### Built-in TiddlyWiki Plugin
+
+The TiddlyWiki syntax plugin automatically loads for:
+- Empty type (no type field)
+- `text/vnd.tiddlywiki`
+- `text/x-tiddlywiki`
 
 ## Keyboard Shortcuts
 
@@ -118,48 +161,6 @@ const tree = parser.parse(`! Heading\n\nParagraph text`)
 | `Enter` | Continue list/quote markup |
 | `Backspace` | Delete markup level |
 
-## API Reference
-
-### `tiddlywiki(config?)`
-
-Creates a `LanguageSupport` instance for TiddlyWiki.
-
-**Options:**
-- `defaultCodeLanguage`: Default language for code blocks
-- `codeLanguages`: Language descriptions for code block highlighting
-- `addKeymap`: Whether to add the TiddlyWiki keymap (default: `true`)
-- `extensions`: Parser extensions
-- `base`: Base language (default: `tiddlywikiBaseLanguage`)
-- `completeHTMLTags`: Enable HTML tag completion (default: `true`)
-- `completeWidgets`: Enable widget completion (default: `true`)
-- `completeMacros`: Enable macro completion (default: `true`)
-- `htmlTagLanguage`: Language support for embedded HTML
-
-### Languages
-
-- `tiddlywikiLanguage`: Full TiddlyWiki language with all extensions
-- `tiddlywikiBaseLanguage`: Base CommonMark-like TiddlyWiki parser
-
-### Commands
-
-Formatting toggles:
-- `toggleBold`, `toggleItalic`, `toggleUnderline`
-- `toggleStrikethrough`, `toggleSuperscript`, `toggleSubscript`
-- `toggleInlineCode`
-
-Insertions:
-- `insertWikiLink`, `insertTransclusion`, `insertMacroCall`
-- `insertCodeBlock`, `insertHorizontalRule`
-
-Headings:
-- `setHeading1` through `setHeading6`, `removeHeading`
-
-Lists:
-- `toggleBulletList`, `toggleNumberedList`
-
-Navigation:
-- `insertNewlineContinueMarkup`, `deleteMarkupBackward`
-
 ## Building
 
 ```bash
@@ -175,42 +176,36 @@ npm run build:parser
 # Build CodeMirror integration only
 npm run build:codemirror
 
-# Build TiddlyWiki plugin bundle
+# Build TiddlyWiki plugin (CommonJS for require())
 npm run build:tiddlywiki
 
 # Clean build output
 npm run clean
 ```
 
-## TiddlyWiki Plugin
-
-The package can be built as a TiddlyWiki5 plugin:
-
-```bash
-npm run build:tiddlywiki
-```
-
-This creates a bundle in `dist/tiddlywiki-plugin/` that can be installed in TiddlyWiki5.
-
 ## Project Structure
 
 ```
 src/
-├── tiddlywiki.ts          # Core Lezer-style parser
-├── extension.ts           # Parser extensions (math, comments, etc.)
-├── index.ts               # Parser exports
-├── codemirror-tiddlywiki.ts  # CodeMirror language integration
-├── commands.ts            # Editor commands
-└── codemirror-index.ts    # Main entry point
+├── tiddlywiki.ts              # Core Lezer-style parser
+├── extension.ts               # Parser extensions (math, comments, etc.)
+├── index.ts                   # Parser exports
+├── codemirror-tiddlywiki.ts   # CodeMirror language integration
+├── commands.ts                # Editor commands
+├── codemirror-index.ts        # Main entry point
+└── tiddlywiki-plugin-entry.ts # TW5 plugin entry point
+
+dist/tiddlywiki-plugin/
+├── engine.js                  # Enhanced CM6 engine with plugin system
+├── lang-tiddlywiki.js         # TW5 syntax plugin (CommonJS)
+├── plugin.info                # TW5 plugin metadata
+├── readme.tid                 # Plugin documentation
+├── license.tid                # License
+├── startup.js                 # Initialization module
+├── styles.tid                 # Syntax highlighting CSS
+└── examples/                  # Example plugins for other content types
 ```
 
 ## License
 
 MIT
-
-## Related Projects
-
-- [CodeMirror 6](https://codemirror.net/)
-- [Lezer](https://lezer.codemirror.net/)
-- [@lezer/markdown](https://github.com/lezer-parser/markdown)
-- [TiddlyWiki5](https://tiddlywiki.com/)
