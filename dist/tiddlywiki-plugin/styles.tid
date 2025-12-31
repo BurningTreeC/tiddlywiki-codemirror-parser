@@ -1,15 +1,73 @@
-title: $:/plugins/prtw/codemirror-tiddlywiki/styles
+title: $:/plugins/BTC/tiddlywiki-codemirror-6/styles
 tags: $:/tags/Stylesheet
 
-/* TiddlyWiki Syntax Highlighting for CodeMirror 6 */
+/* CodeMirror 6 TiddlyWiki Editor - Comprehensive Styles */
+
+/* ============================================================================
+   Base Editor
+   ============================================================================ */
+
+.tc-editor-codemirror6 {
+    border: 1px solid <<colour tiddler-editor-border>>;
+    border-radius: 3px;
+    background: <<colour tiddler-editor-background>>;
+}
+
+.tc-editor-codemirror6 .cm-editor {
+    height: 100%;
+    font-family: {{$:/themes/tiddlywiki/vanilla/settings/editorfontfamily}};
+    font-size: {{$:/themes/tiddlywiki/vanilla/metrics/bodyfontsize}};
+}
+
+.tc-editor-codemirror6 .cm-content {
+    padding: 8px;
+    caret-color: <<colour foreground>>;
+}
+
+.tc-editor-codemirror6 .cm-focused {
+    outline: none;
+}
+
+.tc-editor-codemirror6 .cm-scroller {
+    overflow: auto;
+}
+
+/* Line numbers */
+.tc-editor-codemirror6 .cm-gutters {
+    background: <<colour page-background>>;
+    border-right: 1px solid <<colour tiddler-editor-border>>;
+    color: <<colour muted-foreground>>;
+}
+
+/* Active line */
+.tc-editor-codemirror6 .cm-activeLine {
+    background: rgba(128, 128, 128, 0.08);
+}
+
+.tc-editor-codemirror6 .cm-activeLineGutter {
+    background: rgba(128, 128, 128, 0.12);
+}
+
+/* Selection */
+.tc-editor-codemirror6 .cm-selectionBackground {
+    background: <<colour selection-background>> !important;
+}
+
+.tc-editor-codemirror6 .cm-focused .cm-selectionBackground {
+    background: <<colour selection-background>> !important;
+}
+
+/* ============================================================================
+   TiddlyWiki Syntax Highlighting
+   ============================================================================ */
 
 /* Headings */
-.cm-tw-heading1 { font-size: 1.5em; font-weight: bold; color: #1a1a1a; }
-.cm-tw-heading2 { font-size: 1.35em; font-weight: bold; color: #2a2a2a; }
-.cm-tw-heading3 { font-size: 1.2em; font-weight: bold; color: #3a3a3a; }
-.cm-tw-heading4 { font-size: 1.1em; font-weight: bold; color: #4a4a4a; }
-.cm-tw-heading5 { font-size: 1.05em; font-weight: bold; color: #5a5a5a; }
-.cm-tw-heading6 { font-size: 1em; font-weight: bold; color: #6a6a6a; }
+.cm-tw-heading1 { font-size: 1.5em; font-weight: bold; color: <<colour tiddler-title-foreground>>; }
+.cm-tw-heading2 { font-size: 1.35em; font-weight: bold; color: <<colour tiddler-title-foreground>>; }
+.cm-tw-heading3 { font-size: 1.2em; font-weight: bold; color: <<colour tiddler-title-foreground>>; }
+.cm-tw-heading4 { font-size: 1.1em; font-weight: bold; color: <<colour tiddler-title-foreground>>; }
+.cm-tw-heading5 { font-size: 1.05em; font-weight: bold; color: <<colour tiddler-title-foreground>>; }
+.cm-tw-heading6 { font-size: 1em; font-weight: bold; color: <<colour tiddler-title-foreground>>; }
 
 /* Text formatting */
 .cm-tw-bold { font-weight: bold; }
@@ -22,12 +80,16 @@ tags: $:/tags/Stylesheet
 /* Links */
 .cm-tw-wikilink { color: <<colour tiddler-link-foreground>>; }
 .cm-tw-extlink { color: <<colour external-link-foreground>>; }
-.cm-tw-url { color: #0066cc; text-decoration: underline; }
+.cm-tw-url { color: <<colour external-link-foreground>>; text-decoration: underline; }
+.cm-tw-linktext { color: <<colour tiddler-link-foreground>>; }
+.cm-tw-linktarget { color: <<colour muted-foreground>>; }
 
 /* Transclusions and macros */
-.cm-tw-transclusion { color: #6a0dad; background: rgba(106, 13, 173, 0.05); }
+.cm-tw-transclusion { color: #6a0dad; background: rgba(106, 13, 173, 0.05); border-radius: 2px; }
 .cm-tw-macrocall { color: #228b22; }
+.cm-tw-macroname { color: #228b22; font-weight: 500; }
 .cm-tw-variable { color: #b8860b; }
+.cm-tw-filteredtransclusion { color: #9932cc; background: rgba(153, 50, 204, 0.05); }
 
 /* Widgets */
 .cm-tw-widget { color: #0077aa; }
@@ -37,56 +99,63 @@ tags: $:/tags/Stylesheet
 
 /* Code */
 .cm-tw-code { 
-    font-family: "Fira Code", "Source Code Pro", Consolas, monospace;
-    background: rgba(0, 0, 0, 0.04);
+    font-family: {{$:/themes/tiddlywiki/vanilla/settings/codefontfamily}};
+    background: <<colour code-background>>;
     border-radius: 3px;
     padding: 1px 4px;
 }
 .cm-tw-codeblock {
-    font-family: "Fira Code", "Source Code Pro", Consolas, monospace;
-    background: rgba(0, 0, 0, 0.04);
+    font-family: {{$:/themes/tiddlywiki/vanilla/settings/codefontfamily}};
+    background: <<colour code-background>>;
 }
-.cm-tw-codeinfo { color: #666; font-style: italic; }
+.cm-tw-codeinfo { color: <<colour muted-foreground>>; font-style: italic; }
+.cm-tw-codemark { color: <<colour muted-foreground>>; }
 
 /* Pragmas */
 .cm-tw-pragma { color: #7f007f; font-weight: 500; }
 .cm-tw-pragma-name { color: #9f009f; }
 .cm-tw-pragma-keyword { color: #7f007f; font-weight: bold; }
+.cm-tw-define { color: #7f007f; }
+.cm-tw-procedure { color: #7f007f; }
+.cm-tw-function { color: #7f007f; }
 
 /* Lists */
-.cm-tw-listmark { color: #666; font-weight: bold; }
+.cm-tw-listmark { color: #c18401; font-weight: bold; }
 .cm-tw-list { }
 
 /* Tables */
 .cm-tw-table { }
-.cm-tw-tabledelim { color: #888; }
+.cm-tw-tabledelim { color: <<colour muted-foreground>>; }
 .cm-tw-tableheader { font-weight: bold; background: rgba(0, 0, 0, 0.03); }
+.cm-tw-tablecell { }
 
 /* Block quotes */
 .cm-tw-blockquote { 
-    color: #555; 
-    border-left: 3px solid #ccc;
+    color: <<colour blockquote-bar>>; 
+    border-left: 3px solid <<colour blockquote-bar>>;
     padding-left: 0.5em;
     font-style: italic;
 }
-.cm-tw-quotemark { color: #999; }
+.cm-tw-quotemark { color: <<colour muted-foreground>>; }
 
 /* Horizontal rule */
-.cm-tw-hr { color: #aaa; }
+.cm-tw-hr { color: <<colour muted-foreground>>; }
 
 /* Comments */
-.cm-tw-comment { color: #999; font-style: italic; }
+.cm-tw-comment { color: <<colour muted-foreground>>; font-style: italic; }
 
 /* Escape and special chars */
 .cm-tw-escape { color: #aa5500; }
 .cm-tw-entity { color: #aa5500; }
 
 /* Processing instructions / marks */
-.cm-tw-processinginstruction { color: #888; }
+.cm-tw-processinginstruction { color: <<colour muted-foreground>>; }
+.cm-tw-mark { color: <<colour muted-foreground>>; }
 
 /* Filter syntax */
 .cm-tw-filter { color: #9932cc; }
 .cm-tw-filterop { color: #8b008b; }
+.cm-tw-filterbracket { color: #9932cc; }
 
 /* Images */
 .cm-tw-image { color: #008080; }
@@ -95,30 +164,368 @@ tags: $:/tags/Stylesheet
 .cm-tw-typedblock { background: rgba(0, 100, 100, 0.05); }
 .cm-tw-typedblock-type { color: #008080; font-style: italic; }
 
-/* Dark mode overrides */
+/* ============================================================================
+   Autocomplete Popup
+   ============================================================================ */
+
+.cm-tooltip-autocomplete {
+    background: <<colour dropdown-background>> !important;
+    border: 1px solid <<colour dropdown-border>> !important;
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    z-index: 10000;
+}
+
+.cm-tooltip-autocomplete ul {
+    font-family: {{$:/themes/tiddlywiki/vanilla/settings/fontfamily}};
+    font-size: 13px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.cm-tooltip-autocomplete li {
+    padding: 4px 8px;
+    display: flex;
+    align-items: center;
+}
+
+.cm-tooltip-autocomplete li[aria-selected] {
+    background: <<colour primary>> !important;
+    color: <<colour background>> !important;
+}
+
+.cm-tooltip-autocomplete .cm-completionLabel {
+    flex: 1;
+}
+
+.cm-tooltip-autocomplete .cm-completionDetail {
+    font-size: 0.85em;
+    color: <<colour muted-foreground>>;
+    margin-left: 8px;
+}
+
+/* Completion icons */
+.cm-tooltip-autocomplete .cm-completionIcon {
+    width: 1.5em;
+    text-align: center;
+    padding-right: 4px;
+}
+
+.cm-tooltip-autocomplete .cm-completionIcon-variable::after { content: "T"; color: #4078f2; font-weight: bold; }
+.cm-tooltip-autocomplete .cm-completionIcon-function::after { content: "M"; color: #a626a4; font-weight: bold; }
+.cm-tooltip-autocomplete .cm-completionIcon-keyword::after { content: "W"; color: #c18401; font-weight: bold; }
+.cm-tooltip-autocomplete .cm-completionIcon-property::after { content: "F"; color: #50a14f; font-weight: bold; }
+.cm-tooltip-autocomplete .cm-completionIcon-constant::after { content: "#"; color: #986801; font-weight: bold; }
+.cm-tooltip-autocomplete .cm-completionIcon-method::after { content: "⧫"; color: #e45649; }
+.cm-tooltip-autocomplete .cm-completionIcon-snippet::after { content: "⌘"; color: #9e9e9e; }
+.cm-tooltip-autocomplete .cm-completionIcon-text::after { content: ""; }
+
+/* ============================================================================
+   Link Preview Tooltip
+   ============================================================================ */
+
+.cm6-tw-link-preview {
+    font-family: {{$:/themes/tiddlywiki/vanilla/settings/fontfamily}};
+    background: <<colour dropdown-background>>;
+    color: <<colour foreground>>;
+}
+
+.cm6-preview-title {
+    font-size: 1.1em;
+    margin-bottom: 4px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid <<colour tiddler-editor-border>>;
+}
+
+.cm6-preview-tags {
+    margin-bottom: 6px;
+}
+
+.cm6-preview-tag {
+    display: inline-block;
+    padding: 1px 6px;
+    margin-right: 4px;
+    background: <<colour tag-background>>;
+    color: <<colour tag-foreground>>;
+    border-radius: 10px;
+    font-size: 0.85em;
+}
+
+.cm6-preview-type {
+    font-size: 0.8em;
+    color: <<colour muted-foreground>>;
+    margin-bottom: 6px;
+}
+
+.cm6-preview-text {
+    max-height: 150px;
+    overflow: hidden;
+    font-size: 0.9em;
+    line-height: 1.4;
+}
+
+.cm6-preview-meta {
+    margin-top: 6px;
+    padding-top: 4px;
+    border-top: 1px solid <<colour tiddler-editor-border>>;
+    font-size: 0.8em;
+    color: <<colour muted-foreground>>;
+}
+
+.cm6-preview-missing {
+    color: <<colour alert-highlight>>;
+    font-style: italic;
+}
+
+.cm6-preview-image img {
+    display: block;
+    margin: 8px auto;
+    border-radius: 4px;
+    max-width: 100%;
+}
+
+/* ============================================================================
+   Ctrl+Click Navigation
+   ============================================================================ */
+
+.tc-editor-codemirror6.cm6-ctrl-held .cm-tw-wikilink,
+.tc-editor-codemirror6.cm6-ctrl-held .cm-tw-extlink,
+.tc-editor-codemirror6.cm6-ctrl-held .cm-tw-transclusion,
+.tc-editor-codemirror6.cm6-ctrl-held .cm-tw-macrocall {
+    text-decoration: underline;
+    text-decoration-style: dashed;
+    cursor: pointer;
+}
+
+/* ============================================================================
+   Lint Markers
+   ============================================================================ */
+
+.cm-lint-marker {
+    width: 0.8em;
+    height: 0.8em;
+    border-radius: 50%;
+}
+
+.cm-lint-marker-error {
+    background: <<colour alert-highlight>>;
+}
+
+.cm-lint-marker-warning {
+    background: #f0ad4e;
+}
+
+.cm-lint-marker-info {
+    background: <<colour primary>>;
+}
+
+/* Lint underlines */
+.cm-lintRange-error {
+    background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='6' height='3'><path d='m0 3 l2 -2 l1 0 l2 2 l1 0' stroke='%23d11' fill='none' stroke-width='.7'/></svg>");
+}
+
+.cm-lintRange-warning {
+    background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='6' height='3'><path d='m0 3 l2 -2 l1 0 l2 2 l1 0' stroke='%23fa0' fill='none' stroke-width='.7'/></svg>");
+}
+
+.cm-lintRange-info {
+    background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='6' height='3'><path d='m0 3 l2 -2 l1 0 l2 2 l1 0' stroke='%2366d' fill='none' stroke-width='.7'/></svg>");
+}
+
+/* Lint tooltip */
+.cm-tooltip-lint {
+    background: <<colour dropdown-background>> !important;
+    border: 1px solid <<colour dropdown-border>> !important;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 13px;
+}
+
+/* Lint panel */
+.cm-panel.cm-lint-panel {
+    background: <<colour page-background>>;
+    border-top: 1px solid <<colour tiddler-editor-border>>;
+    padding: 4px;
+    font-size: 0.9em;
+}
+
+.cm-panel.cm-lint-panel ul {
+    max-height: 150px;
+    overflow-y: auto;
+}
+
+.cm-panel.cm-lint-panel li {
+    padding: 2px 4px;
+    cursor: pointer;
+}
+
+.cm-panel.cm-lint-panel li:hover {
+    background: rgba(128, 128, 128, 0.1);
+}
+
+/* ============================================================================
+   Search Panel
+   ============================================================================ */
+
+.cm-search {
+    padding: 8px;
+    background: <<colour page-background>>;
+    border-bottom: 1px solid <<colour tiddler-editor-border>>;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+}
+
+.cm-search input,
+.cm-search select {
+    padding: 4px 8px;
+    border: 1px solid <<colour tiddler-editor-border>>;
+    border-radius: 3px;
+    font-size: 13px;
+    background: <<colour background>>;
+    color: <<colour foreground>>;
+}
+
+.cm-search input:focus {
+    outline: none;
+    border-color: <<colour primary>>;
+}
+
+.cm-search button {
+    padding: 4px 12px;
+    background: <<colour button-background>>;
+    border: 1px solid <<colour button-border>>;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 13px;
+}
+
+.cm-search button:hover {
+    background: <<colour button-background>>-hover;
+}
+
+.cm-search button[name="close"] {
+    background: transparent;
+    border: none;
+    font-size: 16px;
+    cursor: pointer;
+    padding: 2px 6px;
+}
+
+.cm-search label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 13px;
+}
+
+/* Search matches highlight */
+.cm-searchMatch {
+    background: rgba(255, 200, 0, 0.4);
+}
+
+.cm-searchMatch-selected {
+    background: rgba(255, 150, 0, 0.6);
+}
+
+/* ============================================================================
+   Fold Gutter
+   ============================================================================ */
+
+.cm-foldGutter {
+    width: 1.2em;
+}
+
+.cm-foldGutter span {
+    cursor: pointer;
+    color: <<colour muted-foreground>>;
+    font-size: 0.9em;
+}
+
+.cm-foldGutter span:hover {
+    color: <<colour foreground>>;
+}
+
+.cm-foldPlaceholder {
+    background: <<colour code-background>>;
+    border: 1px solid <<colour tiddler-editor-border>>;
+    border-radius: 3px;
+    padding: 0 4px;
+    cursor: pointer;
+    font-size: 0.8em;
+    color: <<colour muted-foreground>>;
+}
+
+.cm-foldPlaceholder:hover {
+    background: <<colour tab-background>>;
+}
+
+/* ============================================================================
+   Bracket Matching
+   ============================================================================ */
+
+.cm-matchingBracket {
+    background: rgba(100, 200, 100, 0.3);
+    outline: 1px solid rgba(100, 200, 100, 0.5);
+}
+
+.cm-nonmatchingBracket {
+    background: rgba(200, 100, 100, 0.3);
+    outline: 1px solid rgba(200, 100, 100, 0.5);
+}
+
+/* ============================================================================
+   Dark Mode
+   ============================================================================ */
+
 @media (prefers-color-scheme: dark) {
-    .cm-tw-heading1 { color: #e0e0e0; }
-    .cm-tw-heading2 { color: #d0d0d0; }
-    .cm-tw-heading3 { color: #c0c0c0; }
-    .cm-tw-heading4 { color: #b0b0b0; }
-    .cm-tw-heading5 { color: #a0a0a0; }
-    .cm-tw-heading6 { color: #909090; }
+    /* Headings */
+    .cm-tw-heading1,
+    .cm-tw-heading2,
+    .cm-tw-heading3,
+    .cm-tw-heading4,
+    .cm-tw-heading5,
+    .cm-tw-heading6 { color: #61afef; }
     
-    .cm-tw-wikilink { color: #6cb4ee; }
+    /* Links */
+    .cm-tw-wikilink { color: #98c379; }
     .cm-tw-extlink { color: #88aaff; }
     
+    /* Code */
     .cm-tw-code { background: rgba(255, 255, 255, 0.08); }
     .cm-tw-codeblock { background: rgba(255, 255, 255, 0.08); }
     
+    /* Macros/Widgets */
+    .cm-tw-macrocall { color: #98c379; }
+    .cm-tw-widget { color: #61afef; }
+    .cm-tw-transclusion { color: #c678dd; background: rgba(198, 120, 221, 0.1); }
+    
+    /* Pragmas */
+    .cm-tw-pragma { color: #c678dd; }
+    
+    /* Tables */
     .cm-tw-tableheader { background: rgba(255, 255, 255, 0.05); }
     
+    /* Block quotes */
     .cm-tw-blockquote { 
-        color: #aaa; 
-        border-left-color: #666;
+        color: #abb2bf; 
+        border-left-color: #5c6370;
     }
+    
+    /* Completion icons */
+    .cm-tooltip-autocomplete .cm-completionIcon-variable::after { color: #61afef; }
+    .cm-tooltip-autocomplete .cm-completionIcon-function::after { color: #c678dd; }
+    .cm-tooltip-autocomplete .cm-completionIcon-keyword::after { color: #e5c07b; }
+    .cm-tooltip-autocomplete .cm-completionIcon-property::after { color: #98c379; }
+    .cm-tooltip-autocomplete .cm-completionIcon-constant::after { color: #d19a66; }
+    .cm-tooltip-autocomplete .cm-completionIcon-method::after { color: #e06c75; }
 }
 
-/* TiddlyWiki palette integration */
+/* ============================================================================
+   TiddlyWiki Palette Integration
+   ============================================================================ */
+
 .tc-tiddler-edit-frame .cm-tw-wikilink {
     color: <<colour tiddler-link-foreground>>;
 }
