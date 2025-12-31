@@ -1,0 +1,459 @@
+/**
+ * TiddlyWiki Language Support - Main Entry Point
+ *
+ * Provides the tiddlywiki() function that creates a complete LanguageSupport
+ * for CodeMirror 6, similar to markdown() in @codemirror/lang-markdown.
+ */
+
+import { Prec, EditorState } from "@codemirror/state"
+import { KeyBinding, keymap } from "@codemirror/view"
+import { Language, LanguageSupport, LanguageDescription, syntaxTree } from "@codemirror/language"
+import { Completion, CompletionContext, CompletionResult } from "@codemirror/autocomplete"
+import { syntaxHighlighting, HighlightStyle } from "@codemirror/language"
+import { tags as t } from "@lezer/highlight"
+import { html, htmlCompletionSource } from "@codemirror/lang-html"
+
+import { TiddlyWikiParser } from "./parser"
+import { TiddlyWikiConfig } from "./core"
+import { tiddlywikiLanguage, mkLang, getCodeParser, headerIndent } from "./language"
+
+// Re-export core language
+export { tiddlywikiLanguage, headerIndent }
+
+/**
+ * TiddlyWiki-specific highlight style mapping semantic tags to CSS classes
+ */
+export const tiddlywikiHighlightStyle = HighlightStyle.define([
+  // Headings
+  { tag: t.heading1, class: "cm-tw-heading1" },
+  { tag: t.heading2, class: "cm-tw-heading2" },
+  { tag: t.heading3, class: "cm-tw-heading3" },
+  { tag: t.heading4, class: "cm-tw-heading4" },
+  { tag: t.heading5, class: "cm-tw-heading5" },
+  { tag: t.heading6, class: "cm-tw-heading6" },
+  { tag: t.heading, class: "cm-tw-tableheader" },
+
+  // Text formatting
+  { tag: t.strong, class: "cm-tw-bold" },
+  { tag: t.emphasis, class: "cm-tw-italic" },
+  { tag: t.strikethrough, class: "cm-tw-strikethrough" },
+
+  // Links
+  { tag: t.link, class: "cm-tw-wikilink" },
+  { tag: t.url, class: "cm-tw-url" },
+  { tag: t.string, class: "cm-tw-linktext" },
+
+  // Transclusions and macros
+  { tag: t.special(t.link), class: "cm-tw-transclusion" },
+  { tag: t.macroName, class: "cm-tw-macrocall" },
+  { tag: t.variableName, class: "cm-tw-variable" },
+
+  // Widgets
+  { tag: t.tagName, class: "cm-tw-widget" },
+
+  // Code
+  { tag: t.monospace, class: "cm-tw-code" },
+  { tag: t.labelName, class: "cm-tw-codeinfo" },
+
+  // Pragmas and definitions
+  { tag: t.definitionKeyword, class: "cm-tw-pragma" },
+  { tag: t.keyword, class: "cm-tw-pragma-keyword" },
+
+  // Lists
+  { tag: t.list, class: "cm-tw-list" },
+
+  // Block elements
+  { tag: t.quote, class: "cm-tw-blockquote" },
+  { tag: t.contentSeparator, class: "cm-tw-hr" },
+
+  // Special characters
+  { tag: t.comment, class: "cm-tw-comment" },
+  { tag: t.escape, class: "cm-tw-escape" },
+  { tag: t.character, class: "cm-tw-entity" },
+
+  // Processing marks
+  { tag: t.processingInstruction, class: "cm-tw-mark" },
+
+  // Filters
+  { tag: t.special(t.string), class: "cm-tw-filter" },
+
+  // Attributes
+  { tag: t.attributeValue, class: "cm-tw-attribute-value" },
+  { tag: t.attributeName, class: "cm-tw-attribute" },
+
+  // Special emphasis (underline)
+  { tag: t.special(t.emphasis), class: "cm-tw-underline" },
+
+  // Special content (superscript, subscript, highlight)
+  { tag: t.special(t.content), class: "cm-tw-superscript" },
+])
+
+/**
+ * Keymap with TiddlyWiki-specific bindings
+ */
+export const tiddlywikiKeymap: readonly KeyBinding[] = [
+  // TODO: Add TiddlyWiki-specific keybindings
+  // e.g., Enter to continue lists, Backspace to delete list markers
+]
+
+/**
+ * HTML language support without tag matching (for embedded HTML)
+ */
+const htmlNoMatch = html({ matchClosingTags: false })
+
+/**
+ * Configuration options for TiddlyWiki language support
+ */
+export interface TiddlyWikiLanguageConfig {
+  /**
+   * Default language for code blocks without a language specifier
+   */
+  defaultCodeLanguage?: Language | LanguageSupport
+
+  /**
+   * Languages available for syntax highlighting in fenced code blocks.
+   * Can be an array of LanguageDescriptions or a function that returns
+   * a Language for a given info string.
+   */
+  codeLanguages?: readonly LanguageDescription[] | ((info: string) => Language | LanguageDescription | null)
+
+  /**
+   * Whether to add the TiddlyWiki keymap (default: true)
+   */
+  addKeymap?: boolean
+
+  /**
+   * Parser extensions to add
+   */
+  extensions?: TiddlyWikiConfig
+
+  /**
+   * Base language to use (default: tiddlywikiLanguage)
+   */
+  base?: Language
+
+  /**
+   * Whether to enable HTML tag completion (default: true)
+   */
+  completeHTMLTags?: boolean
+
+  /**
+   * Whether to enable widget completion (default: true)
+   */
+  completeWidgets?: boolean
+
+  /**
+   * Whether to enable macro completion (default: true)
+   */
+  completeMacros?: boolean
+
+  /**
+   * Whether to enable tiddler title completion in links (default: true)
+   */
+  completeTiddlers?: boolean
+
+  /**
+   * Function to get tiddler titles for completion
+   */
+  getTiddlerTitles?: () => string[]
+
+  /**
+   * Function to get macro names for completion
+   */
+  getMacroNames?: () => string[]
+
+  /**
+   * Function to get widget names for completion
+   */
+  getWidgetNames?: () => string[]
+
+  /**
+   * Language support for HTML tags (default: html without tag matching)
+   */
+  htmlTagLanguage?: LanguageSupport
+}
+
+/**
+ * Create TiddlyWiki language support for CodeMirror 6
+ *
+ * @example
+ * ```ts
+ * import { tiddlywiki } from "@anthropic/lang-tiddlywiki"
+ * import { javascript } from "@codemirror/lang-javascript"
+ *
+ * const extensions = [
+ *   tiddlywiki({
+ *     codeLanguages: [javascript()],
+ *     completeWidgets: true,
+ *     completeMacros: true,
+ *   })
+ * ]
+ * ```
+ */
+export function tiddlywiki(config: TiddlyWikiLanguageConfig = {}): LanguageSupport {
+  const {
+    codeLanguages,
+    defaultCodeLanguage,
+    addKeymap = true,
+    base: { parser } = tiddlywikiLanguage,
+    completeHTMLTags = true,
+    completeWidgets = true,
+    completeMacros = true,
+    completeTiddlers = true,
+    getTiddlerTitles,
+    getMacroNames,
+    getWidgetNames,
+    htmlTagLanguage = htmlNoMatch,
+  } = config
+
+  // Validate parser
+  if (!(parser instanceof TiddlyWikiParser)) {
+    throw new RangeError("Base parser provided to `tiddlywiki` should be a TiddlyWiki parser")
+  }
+
+  // Build extensions for the parser
+  const parserExtensions: TiddlyWikiConfig[] = config.extensions ? [config.extensions] : []
+
+  // Build support extensions
+  const support: any[] = [
+    htmlTagLanguage.support,
+    headerIndent,
+    syntaxHighlighting(tiddlywikiHighlightStyle),
+  ]
+
+  // Handle default code language
+  let defaultCode: Language | undefined
+  if (defaultCodeLanguage instanceof LanguageSupport) {
+    support.push(defaultCodeLanguage.support)
+    defaultCode = defaultCodeLanguage.language
+  } else if (defaultCodeLanguage) {
+    defaultCode = defaultCodeLanguage
+  }
+
+  // Add keymap if requested
+  if (addKeymap && tiddlywikiKeymap.length > 0) {
+    support.push(Prec.high(keymap.of(tiddlywikiKeymap)))
+  }
+
+  // Configure the parser with extensions
+  let configuredParser = parser
+  if (parserExtensions.length > 0) {
+    for (const ext of parserExtensions) {
+      configuredParser = configuredParser.configure(ext)
+    }
+  }
+
+  // Create the language
+  const lang = mkLang(configuredParser)
+
+  // Add completions
+  if (completeWidgets) {
+    support.push(lang.data.of({
+      autocomplete: widgetCompletion(getWidgetNames)
+    }))
+  }
+
+  if (completeMacros) {
+    support.push(lang.data.of({
+      autocomplete: macroCompletion(getMacroNames)
+    }))
+  }
+
+  if (completeTiddlers) {
+    support.push(lang.data.of({
+      autocomplete: tiddlerCompletion(getTiddlerTitles)
+    }))
+  }
+
+  if (completeHTMLTags) {
+    support.push(lang.data.of({
+      autocomplete: htmlTagCompletion
+    }))
+  }
+
+  return new LanguageSupport(lang, support)
+}
+
+// TiddlyWiki Core Widgets (with $ prefix as stored)
+const coreWidgets = [
+  "$action-confirm", "$action-createtiddler", "$action-deletefield", "$action-deletetiddler",
+  "$action-listops", "$action-log", "$action-navigate", "$action-popup", "$action-sendmessage",
+  "$action-setfield", "$action-setmultiplefields", "$browse", "$button", "$checkbox",
+  "$codeblock", "$count", "$draggable", "$droppable", "$dropzone", "$edit", "$edit-bitmap",
+  "$edit-text", "$element", "$encrypt", "$eventcatcher", "$fieldmangler", "$fill",
+  "$genesis", "$image", "$importvariables", "$keyboard", "$let", "$link", "$linkcatcher",
+  "$list", "$log", "$macrocall", "$messagecatcher", "$navigator", "$password", "$qualify",
+  "$radio", "$range", "$raw", "$reveal", "$scrollable", "$select", "$set", "$setvariable",
+  "$slot", "$text", "$tiddler", "$transclude", "$type", "$vars", "$view", "$wikify"
+]
+
+/**
+ * Widget completion source (<$widget)
+ */
+function widgetCompletion(getWidgetNames?: () => string[]) {
+  return (context: CompletionContext): CompletionResult | null => {
+    const { state, pos } = context
+    const m = /<\$[\w\-]*$/.exec(state.sliceDoc(pos - 30, pos))
+    if (!m) return null
+
+    // Don't complete inside code blocks or comments
+    const tree = syntaxTree(state).resolveInner(pos, -1)
+    let node = tree
+    while (node && !node.type.isTop) {
+      if (node.name === "FencedCode" || node.name === "CodeBlock" ||
+          node.name === "TypedBlock" || node.name === "CommentBlock") {
+        return null
+      }
+      node = node.parent!
+    }
+
+    const widgets = getWidgetNames ? getWidgetNames() : coreWidgets
+    const options: Completion[] = widgets.map(w => ({
+      label: "<" + w,
+      type: "keyword",
+      detail: "widget",
+      apply: "<" + w + ">"
+    }))
+
+    return {
+      from: pos - m[0].length,
+      to: pos,
+      options,
+      validFor: /^<\$[\w\-]*$/
+    }
+  }
+}
+
+// Common TiddlyWiki Macros
+const commonMacros = [
+  "now", "tag", "tabs", "timeline", "toc", "toc-hierarchical", "toc-selective-expandable",
+  "list-links", "list-links-draggable", "list-tagged-draggable", "copy-to-clipboard",
+  "colour-picker", "image-picker", "keyboard-shortcut", "dumpvariables", "qualify",
+  "csvtiddlers", "jsontiddlers", "datauri", "makedatauri", "translink"
+]
+
+/**
+ * Macro completion source (<<macro)
+ */
+function macroCompletion(getMacroNames?: () => string[]) {
+  return (context: CompletionContext): CompletionResult | null => {
+    const { state, pos } = context
+    const m = /<<[\w\-]*$/.exec(state.sliceDoc(pos - 30, pos))
+    if (!m) return null
+
+    // Don't complete inside code blocks or comments
+    const tree = syntaxTree(state).resolveInner(pos, -1)
+    let node = tree
+    while (node && !node.type.isTop) {
+      if (node.name === "FencedCode" || node.name === "CodeBlock" ||
+          node.name === "TypedBlock" || node.name === "CommentBlock") {
+        return null
+      }
+      node = node.parent!
+    }
+
+    const macros = getMacroNames ? getMacroNames() : commonMacros
+    const options: Completion[] = macros.map(m => ({
+      label: "<<" + m,
+      type: "function",
+      detail: "macro",
+      apply: "<<" + m + ">>"
+    }))
+
+    return {
+      from: pos - m[0].length,
+      to: pos,
+      options,
+      validFor: /^<<[\w\-]*$/
+    }
+  }
+}
+
+/**
+ * Tiddler title completion source ([[link or {{transclusion)
+ */
+function tiddlerCompletion(getTiddlerTitles?: () => string[]) {
+  return (context: CompletionContext): CompletionResult | null => {
+    const { state, pos } = context
+
+    // Match [[ for links
+    const linkMatch = /\[\[[^\]|]*$/.exec(state.sliceDoc(pos - 100, pos))
+    // Match {{ for transclusions
+    const transcludeMatch = /\{\{[^{}|]*$/.exec(state.sliceDoc(pos - 100, pos))
+
+    const match = linkMatch || transcludeMatch
+    if (!match) return null
+
+    // Don't complete inside code blocks or comments
+    const tree = syntaxTree(state).resolveInner(pos, -1)
+    let node = tree
+    while (node && !node.type.isTop) {
+      if (node.name === "FencedCode" || node.name === "CodeBlock" ||
+          node.name === "TypedBlock" || node.name === "CommentBlock") {
+        return null
+      }
+      node = node.parent!
+    }
+
+    const titles = getTiddlerTitles ? getTiddlerTitles() : []
+    if (titles.length === 0) return null
+
+    const prefix = linkMatch ? "[[" : "{{"
+    const suffix = linkMatch ? "]]" : "}}"
+
+    const options: Completion[] = titles.map(title => ({
+      label: prefix + title,
+      type: "variable",
+      detail: "tiddler",
+      apply: prefix + title + suffix
+    }))
+
+    return {
+      from: pos - match[0].length,
+      to: pos,
+      options,
+      validFor: linkMatch ? /^\[\[[^\]|]*$/ : /^\{\{[^{}|]*$/
+    }
+  }
+}
+
+// Cached HTML tag completions
+let _tagCompletions: readonly Completion[] | null = null
+function htmlTagCompletions(): readonly Completion[] {
+  if (_tagCompletions) return _tagCompletions
+  const result = htmlCompletionSource(
+    new CompletionContext(EditorState.create({ extensions: htmlNoMatch }), 0, true)
+  )
+  return _tagCompletions = result ? result.options : []
+}
+
+/**
+ * HTML tag completion source
+ */
+function htmlTagCompletion(context: CompletionContext): CompletionResult | null {
+  const { state, pos } = context
+  const m = /<[:\-\.\w\u00b7-\uffff]*$/.exec(state.sliceDoc(pos - 25, pos))
+  if (!m) return null
+
+  // Don't complete if it looks like a widget
+  if (m[0].startsWith("<$")) return null
+
+  // Check we're not in a code block, widget, or other non-completable context
+  const tree = syntaxTree(state).resolveInner(pos, -1)
+  let node = tree
+  while (node && !node.type.isTop) {
+    if (node.name === "FencedCode" || node.name === "CodeBlock" ||
+        node.name === "TypedBlock" || node.name === "CommentBlock" ||
+        node.name === "Widget") {
+      return null
+    }
+    node = node.parent!
+  }
+
+  return {
+    from: pos - m[0].length,
+    to: pos,
+    options: htmlTagCompletions(),
+    validFor: /^<[:\-\.\w\u00b7-\uffff]*$/
+  }
+}

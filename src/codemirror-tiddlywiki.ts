@@ -1,16 +1,18 @@
 /**
  * @codemirror/lang-tiddlywiki - Backwards Compatibility Re-exports
- * 
- * This file re-exports from language.ts for backwards compatibility.
- * New code should import directly from "./language" to avoid circular deps.
- * 
- * @deprecated Import from "./language" instead
+ *
+ * This file re-exports from tiddlywiki-parser for backwards compatibility.
+ *
+ * @deprecated Import from "./tiddlywiki-parser" instead
  */
 
 export {
   tiddlywikiLanguage,
-  tiddlywikiBaseLanguage,
   mkLang,
   getCodeParser,
   headerIndent
-} from "./language"
+} from "./tiddlywiki-parser"
+
+// Backwards compatibility alias
+import { tiddlywikiLanguage } from "./tiddlywiki-parser"
+export const tiddlywikiBaseLanguage = tiddlywikiLanguage

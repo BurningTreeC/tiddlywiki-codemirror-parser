@@ -9,8 +9,7 @@
 
 import {Extension, Compartment} from "@codemirror/state"
 import {keymap, EditorView} from "@codemirror/view"
-import {tiddlywikiLanguage, tiddlywikiBaseLanguage, headerIndent} from "./language"
-import {tiddlywiki} from "./codemirror-index"
+import {tiddlywikiLanguage, headerIndent, tiddlywiki} from "./tiddlywiki-parser"
 import {
   insertNewlineContinueMarkup,
   deleteMarkupBackward,
@@ -41,7 +40,10 @@ import {
 
 // tiddlywiki() returns LanguageSupport (use for reconfigureLanguage)
 // tiddlywikiLanguage is the Language instance
-export {tiddlywikiLanguage, tiddlywikiBaseLanguage, tiddlywiki}
+export {tiddlywikiLanguage, tiddlywiki}
+
+// Backwards compatibility alias
+export const tiddlywikiBaseLanguage = tiddlywikiLanguage
 
 // Alias for backwards compatibility with existing engines
 export const TiddlyWikiLanguage = tiddlywikiLanguage
