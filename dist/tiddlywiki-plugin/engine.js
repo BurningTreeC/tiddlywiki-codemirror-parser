@@ -282,7 +282,9 @@ function CodeMirrorEngine(options) {
 	
 	this._destroyed = false;
 	this._pendingChange = false;
-	this._debounceMs = isNumber(options.changeDebounceMs) ? clamp(options.changeDebounceMs, 0, 2000) : 150;
+	// Default debounce: 50ms for snappy feel while still coalescing rapid changes
+	// TW's standard engine saves immediately, but some debounce helps performance
+	this._debounceMs = isNumber(options.changeDebounceMs) ? clamp(options.changeDebounceMs, 0, 2000) : 50;
 	this._debounceHandle = null;
 	this._lastEmittedText = isString(options.value) ? options.value : "";
 
@@ -441,6 +443,87 @@ function CodeMirrorEngine(options) {
 	);
 
 	// ========================================================================
+	// TiddlyWiki Keyboard Shortcut Integration
+	// ========================================================================
+	
+	extensions.push(
+		EditorView.domEventHandlers({
+			keydown: function(event, view) {
+				if (self._destroyed) return false;
+				
+				// Let TiddlyWiki widget handle keyboard shortcuts (toolbar, etc.)
+				if (self.widget && typeof self.widget.handleKeydownEvent === "function") {
+					var handled = self.widget.handleKeydownEvent(event);
+					if (handled) {
+						return true; // Prevent CM6 from handling
+					}
+				}
+				
+				return false; // Let CM6 handle normally
+			},
+			
+			// File drop handling (for TW dropzone integration)
+			drop: function(event, view) {
+				if (self._destroyed) return false;
+				if (self.widget && typeof self.widget.handleDropEvent === "function") {
+					return self.widget.handleDropEvent(event);
+				}
+				return false;
+			},
+			
+			dragenter: function(event, view) {
+				if (self._destroyed) return false;
+				if (self.widget && typeof self.widget.handleDragEnterEvent === "function") {
+					return self.widget.handleDragEnterEvent(event);
+				}
+				return false;
+			},
+			
+			dragover: function(event, view) {
+				if (self._destroyed) return false;
+				if (self.widget && typeof self.widget.handleDragOverEvent === "function") {
+					return self.widget.handleDragOverEvent(event);
+				}
+				return false;
+			},
+			
+			dragleave: function(event, view) {
+				if (self._destroyed) return false;
+				if (self.widget && typeof self.widget.handleDragLeaveEvent === "function") {
+					return self.widget.handleDragLeaveEvent(event);
+				}
+				return false;
+			},
+			
+			dragend: function(event, view) {
+				if (self._destroyed) return false;
+				if (self.widget && typeof self.widget.handleDragEndEvent === "function") {
+					return self.widget.handleDragEndEvent(event);
+				}
+				return false;
+			},
+			
+			// Paste handling (for file paste)
+			paste: function(event, view) {
+				if (self._destroyed) return false;
+				if (self.widget && typeof self.widget.handlePasteEvent === "function") {
+					return self.widget.handlePasteEvent(event);
+				}
+				return false;
+			},
+			
+			// Click handling (for some TW features)
+			click: function(event, view) {
+				if (self._destroyed) return false;
+				if (self.widget && typeof self.widget.handleClickEvent === "function") {
+					return self.widget.handleClickEvent(event);
+				}
+				return false;
+			}
+		})
+	);
+
+	// ========================================================================
 	// Create Editor
 	// ========================================================================
 	
@@ -462,6 +545,11 @@ function CodeMirrorEngine(options) {
 		this.parentNode.insertBefore(this.domNode, this.nextSibling);
 	} else {
 		this.parentNode.appendChild(this.domNode);
+	}
+
+	// Register domNode with widget for proper cleanup on refresh
+	if (this.widget && this.widget.domNodes) {
+		this.widget.domNodes.push(this.domNode);
 	}
 
 	// ========================================================================
@@ -542,11 +630,22 @@ CodeMirrorEngine.prototype._emitNow = function() {
 	this._lastEmittedText = text;
 	this._pendingChange = false;
 
+	// Call onChange callback if provided (standalone usage)
 	if (this._onChange) {
 		try {
 			this._onChange(text);
 		} catch (e) {
 			console.error("onChange failed:", e);
+		}
+	}
+
+	// TiddlyWiki integration: save changes through widget
+	// The factory.js doesn't pass onChange - it expects the engine to call widget.saveChanges()
+	if (this.widget && typeof this.widget.saveChanges === "function") {
+		try {
+			this.widget.saveChanges(text);
+		} catch (e) {
+			console.error("widget.saveChanges failed:", e);
 		}
 	}
 };
@@ -626,14 +725,39 @@ CodeMirrorEngine.prototype.getText = function() {
 /**
  * Set document text
  * @param {string} text
+ * @param {string=} type - optional content type (passed by TW factory)
  */
-CodeMirrorEngine.prototype.setText = function(text) {
+CodeMirrorEngine.prototype.setText = function(text, type) {
 	if (this._destroyed) return;
 	if (!isString(text)) text = String(text);
 
+	// Store type if provided (TW factory passes it)
+	if (type !== undefined) {
+		this._currentType = type;
+		if (this._pluginContext) this._pluginContext.tiddlerType = type;
+	}
+
 	var current = this.view.state.doc.toString();
+	
+	// Don't change anything if text is the same
 	if (text === current) return;
 
+	// CRITICAL: Prevent race condition when user is typing
+	// 
+	// The problem:
+	// 1. User types "a" -> scheduleEmit (150ms debounce)
+	// 2. User types "b" -> text is "ab", new timer
+	// 3. Debounce fires -> saveChanges("ab")
+	// 4. User types "c" -> text is "abc"
+	// 5. TW refresh -> setText("ab") - would overwrite "abc"!
+	//
+	// Solution: If we have pending changes AND the incoming text matches
+	// what we last saved, it's just TW echoing back our save. Ignore it.
+	if (this._pendingChange && text === this._lastEmittedText) {
+		return; // Ignore TW echo, keep user's current typing
+	}
+
+	// This is a genuine external change - accept it
 	var sel = this.view.state.selection.main;
 	var newLen = text.length;
 
@@ -644,6 +768,10 @@ CodeMirrorEngine.prototype.setText = function(text) {
 			head: clamp(sel.head, 0, newLen)
 		}
 	});
+
+	// Update tracking to prevent echo loops
+	this._lastEmittedText = text;
+	this._pendingChange = false;
 };
 
 /**
@@ -738,10 +866,15 @@ CodeMirrorEngine.prototype.createTextOperation = function(type) {
 
 /**
  * Execute text operation (TW compatibility)
+ * TW editor operations modify the operation object:
+ * - operation.replacement: text to insert at selection
+ * - operation.text: full new document text (for replace-all)
+ * - operation.newSelStart/newSelEnd: new selection position
  * @param {Object} operation
+ * @returns {string} the new document text
  */
 CodeMirrorEngine.prototype.executeTextOperation = function(operation) {
-	if (this._destroyed || !operation) return;
+	if (this._destroyed || !operation) return this.getText();
 
 	var type = operation.type;
 	var from = isNumber(operation.selStart) ? operation.selStart : this.view.state.selection.main.from;
@@ -751,14 +884,28 @@ CodeMirrorEngine.prototype.executeTextOperation = function(operation) {
 		case "focus-editor":
 			this.focus();
 			break;
+
 		case "insert-text":
 		case "replace-selection":
-			var insert = isString(operation.replacement) ? operation.replacement : "";
-			this.view.dispatch({
-				changes: { from: from, to: to, insert: insert },
-				selection: { anchor: from + insert.length }
-			});
+			// Standard operation: replace selection with operation.replacement
+			if (operation.replacement !== null && operation.replacement !== undefined) {
+				var insert = String(operation.replacement);
+				this.view.dispatch({
+					changes: { from: from, to: to, insert: insert },
+					selection: { anchor: from + insert.length }
+				});
+			}
 			break;
+
+		case "replace-all":
+			// Replace entire document
+			if (operation.text !== null && operation.text !== undefined) {
+				this.view.dispatch({
+					changes: { from: 0, to: this.view.state.doc.length, insert: String(operation.text) }
+				});
+			}
+			break;
+
 		case "set-selection":
 			if (isNumber(operation.newSelStart)) {
 				this.view.dispatch({
@@ -769,10 +916,48 @@ CodeMirrorEngine.prototype.executeTextOperation = function(operation) {
 				});
 			}
 			break;
+
+		case "save":
+			// Force emit pending changes
+			this._emitNow();
+			break;
+
+		case "undo":
+			if (this.undo) this.undo();
+			break;
+
+		case "redo":
+			if (this.redo) this.redo();
+			break;
+
 		default:
-			// Let plugins handle unknown operations
+			// Standard TW behavior: if replacement is set, insert it
+			if (operation.replacement !== null && operation.replacement !== undefined) {
+				var insertText = String(operation.replacement);
+				this.view.dispatch({
+					changes: { from: from, to: to, insert: insertText },
+					selection: { anchor: from + insertText.length }
+				});
+			}
+			// Let plugins handle additional operations
 			this._triggerEvent("textOperation", operation);
 	}
+
+	// Set new selection if specified
+	if (isNumber(operation.newSelStart)) {
+		var newAnchor = operation.newSelStart;
+		var newHead = isNumber(operation.newSelEnd) ? operation.newSelEnd : newAnchor;
+		// Clamp to document length
+		var docLen = this.view.state.doc.length;
+		newAnchor = clamp(newAnchor, 0, docLen);
+		newHead = clamp(newHead, 0, docLen);
+		this.view.dispatch({
+			selection: { anchor: newAnchor, head: newHead }
+		});
+	}
+
+	// Return current text (required by factory.js)
+	return this.getText();
 };
 
 /**
