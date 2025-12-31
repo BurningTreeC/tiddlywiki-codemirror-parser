@@ -1,50 +1,45 @@
 /**
  * Rollup config for TiddlyWiki5 Plugin Bundle
  * 
- * This creates a standalone bundle that includes all CodeMirror dependencies
- * for use in TiddlyWiki5 as a plugin module.
+ * This creates a CommonJS bundle that can be required from TiddlyWiki's
+ * module system via the codemirror6-plugin module-type.
  */
 import resolve from '@rollup/plugin-node-resolve';
 import typescript from '@rollup/plugin-typescript';
 
 // Banner for TiddlyWiki module
 const banner = `/*\\
-title: $:/plugins/prtw/codemirror-tiddlywiki/lib/lang-tiddlywiki.js
+title: $:/plugins/prtw/codemirror-tiddlywiki/lang-tiddlywiki.js
 type: application/javascript
-module-type: library
+module-type: codemirror6-plugin
 
 TiddlyWiki5 language support for CodeMirror 6
 Built with Rollup - DO NOT EDIT DIRECTLY
 
 @license MIT
 \\*/
-(function(){
+/*jslint node: true, browser: true */
+/*global $tw: false */
 "use strict";
 `;
 
-const footer = `
-})();
-`;
-
 export default {
-  input: 'src/codemirror-index.ts',
+  input: 'src/tiddlywiki-plugin-entry.ts',
   output: {
     file: 'dist/tiddlywiki-plugin/lang-tiddlywiki.js',
-    format: 'iife',
-    name: 'LangTiddlyWiki',
+    format: 'cjs',
+    exports: 'named',
     sourcemap: false,
     banner,
-    footer,
-    globals: {
-      // These will be provided by TiddlyWiki's CM6 core bundle
-      '@codemirror/state': 'CM6.state',
-      '@codemirror/view': 'CM6.view',
-      '@codemirror/language': 'CM6.language',
-      '@codemirror/commands': 'CM6.commands',
-      '@codemirror/autocomplete': 'CM6.autocomplete',
-      '@codemirror/lang-html': 'CM6.langHtml',
-      '@lezer/common': 'CM6.lezer.common',
-      '@lezer/highlight': 'CM6.lezer.highlight'
+    // Rewrite requires to use TiddlyWiki's module system
+    paths: {
+      '@codemirror/state': '$:/plugins/BTC/tiddlywiki-codemirror-6/lib/codemirror-state.js',
+      '@codemirror/view': '$:/plugins/BTC/tiddlywiki-codemirror-6/lib/codemirror-view.js',
+      '@codemirror/language': '$:/plugins/BTC/tiddlywiki-codemirror-6/lib/codemirror-language.js',
+      '@codemirror/commands': '$:/plugins/BTC/tiddlywiki-codemirror-6/lib/codemirror-commands.js',
+      '@codemirror/autocomplete': '$:/plugins/BTC/tiddlywiki-codemirror-6/lib/codemirror-autocomplete.js',
+      '@lezer/common': '$:/plugins/BTC/tiddlywiki-codemirror-6/lib/lezer-common.js',
+      '@lezer/highlight': '$:/plugins/BTC/tiddlywiki-codemirror-6/lib/lezer-highlight.js'
     }
   },
   external: [
@@ -53,7 +48,6 @@ export default {
     '@codemirror/language',
     '@codemirror/commands',
     '@codemirror/autocomplete',
-    '@codemirror/lang-html',
     '@lezer/common',
     '@lezer/highlight'
   ],
