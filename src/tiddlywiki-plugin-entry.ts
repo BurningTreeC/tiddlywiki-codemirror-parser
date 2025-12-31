@@ -154,93 +154,94 @@ export const plugin = {
   /**
    * Extend engine API with TiddlyWiki-specific methods
    */
-  extendAPI(engine: any, context: CM6PluginContext): Record<string, Function> {
+  extendAPI(_engine: any, _context: CM6PluginContext): Record<string, any> {
     return {
       // ==== Formatting Commands ====
       
-      toggleBold() {
-        if (this._destroyed) return false
-        return toggleBold(this.view)
+      toggleBold(this: any) {
+        if (this._destroyed || !this.view) return false
+        return toggleBold({state: this.view.state, dispatch: this.view.dispatch.bind(this.view)})
       },
       
-      toggleItalic() {
-        if (this._destroyed) return false
-        return toggleItalic(this.view)
+      toggleItalic(this: any) {
+        if (this._destroyed || !this.view) return false
+        return toggleItalic({state: this.view.state, dispatch: this.view.dispatch.bind(this.view)})
       },
       
-      toggleUnderline() {
-        if (this._destroyed) return false
-        return toggleUnderline(this.view)
+      toggleUnderline(this: any) {
+        if (this._destroyed || !this.view) return false
+        return toggleUnderline({state: this.view.state, dispatch: this.view.dispatch.bind(this.view)})
       },
       
-      toggleStrikethrough() {
-        if (this._destroyed) return false
-        return toggleStrikethrough(this.view)
+      toggleStrikethrough(this: any) {
+        if (this._destroyed || !this.view) return false
+        return toggleStrikethrough({state: this.view.state, dispatch: this.view.dispatch.bind(this.view)})
       },
       
-      toggleSuperscript() {
-        if (this._destroyed) return false
-        return toggleSuperscript(this.view)
+      toggleSuperscript(this: any) {
+        if (this._destroyed || !this.view) return false
+        return toggleSuperscript({state: this.view.state, dispatch: this.view.dispatch.bind(this.view)})
       },
       
-      toggleSubscript() {
-        if (this._destroyed) return false
-        return toggleSubscript(this.view)
+      toggleSubscript(this: any) {
+        if (this._destroyed || !this.view) return false
+        return toggleSubscript({state: this.view.state, dispatch: this.view.dispatch.bind(this.view)})
       },
       
-      toggleInlineCode() {
-        if (this._destroyed) return false
-        return toggleInlineCode(this.view)
+      toggleInlineCode(this: any) {
+        if (this._destroyed || !this.view) return false
+        return toggleInlineCode({state: this.view.state, dispatch: this.view.dispatch.bind(this.view)})
       },
       
       // ==== Link/Transclusion Commands ====
       
-      insertWikiLink() {
-        if (this._destroyed) return false
-        return insertWikiLink(this.view)
+      insertWikiLink(this: any) {
+        if (this._destroyed || !this.view) return false
+        return insertWikiLink({state: this.view.state, dispatch: this.view.dispatch.bind(this.view)})
       },
       
-      insertTransclusion() {
-        if (this._destroyed) return false
-        return insertTransclusion(this.view)
+      insertTransclusion(this: any) {
+        if (this._destroyed || !this.view) return false
+        return insertTransclusion({state: this.view.state, dispatch: this.view.dispatch.bind(this.view)})
       },
       
       // ==== Heading Commands ====
       
-      setHeading(level: number) {
-        if (this._destroyed) return false
+      setHeading(this: any, level: number) {
+        if (this._destroyed || !this.view) return false
         const commands = [null, setHeading1, setHeading2, setHeading3, setHeading4, setHeading5, setHeading6]
         const cmd = commands[level]
-        return cmd ? cmd(this.view) : false
+        if (!cmd) return false
+        return cmd({state: this.view.state, dispatch: this.view.dispatch.bind(this.view)})
       },
       
-      removeHeading() {
-        if (this._destroyed) return false
-        return removeHeading(this.view)
+      removeHeading(this: any) {
+        if (this._destroyed || !this.view) return false
+        return removeHeading({state: this.view.state, dispatch: this.view.dispatch.bind(this.view)})
       },
       
       // ==== List Commands ====
       
-      toggleBulletList() {
-        if (this._destroyed) return false
-        return toggleBulletList(this.view)
+      toggleBulletList(this: any) {
+        if (this._destroyed || !this.view) return false
+        return toggleBulletList({state: this.view.state, dispatch: this.view.dispatch.bind(this.view)})
       },
       
-      toggleNumberedList() {
-        if (this._destroyed) return false
-        return toggleNumberedList(this.view)
+      toggleNumberedList(this: any) {
+        if (this._destroyed || !this.view) return false
+        return toggleNumberedList({state: this.view.state, dispatch: this.view.dispatch.bind(this.view)})
       },
       
       // ==== Block Commands ====
       
-      insertCodeBlock() {
-        if (this._destroyed) return false
-        return insertCodeBlock(this.view)
+      insertCodeBlock(this: any) {
+        if (this._destroyed || !this.view) return false
+        return insertCodeBlock({state: this.view.state, dispatch: this.view.dispatch.bind(this.view)})
       },
       
       // ==== Language Configuration ====
       
-      setTiddlyWikiLanguage(enabled: boolean) {
+      setTiddlyWikiLanguage(this: any, enabled: boolean) {
         if (this._destroyed) return
         const compartments = this._compartments
         if (compartments?.tiddlywikiLanguage) {
@@ -253,10 +254,10 @@ export const plugin = {
   /**
    * Register event handlers
    */
-  registerEvents(engine: any, context: CM6PluginContext): Record<string, Function> {
+  registerEvents(_engine: any, _context: CM6PluginContext): Record<string, any> {
     return {
       // Handle TiddlyWiki-specific text operations
-      textOperation(operation: any) {
+      textOperation(this: any, operation: any) {
         if (!operation) return
         
         switch (operation.type) {
