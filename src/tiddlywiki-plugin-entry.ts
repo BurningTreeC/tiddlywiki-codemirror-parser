@@ -7,7 +7,7 @@
  * module-type: codemirror6-plugin
  */
 
-import {Extension} from "@codemirror/state"
+import {Extension, Compartment} from "@codemirror/state"
 import {keymap} from "@codemirror/view"
 import {tiddlywikiLanguage, tiddlywikiBaseLanguage, headerIndent} from "./codemirror-tiddlywiki"
 import {
@@ -39,53 +39,31 @@ export {tiddlywikiLanguage, tiddlywikiBaseLanguage}
 export * from "./commands"
 
 /**
- * Plugin configuration interface
- * This is the contract that CM6 plugins must follow
+ * Plugin context interface
  */
 export interface CM6PluginContext {
-  /** The tiddler being edited */
   tiddlerTitle?: string
-  /** The tiddler's content type */
   tiddlerType?: string
-  /** The tiddler fields */
   tiddlerFields?: Record<string, any>
-  /** Whether the editor is read-only */
   readOnly?: boolean
-  /** The CM6 core library reference */
   cm6Core?: any
-  /** Additional options passed from the widget */
-  [key: string]: any
+  engine?: any
+  options?: Record<string, any>
 }
 
 /**
- * Plugin condition types
+ * CM6 Core reference (set in init)
  */
-export type PluginCondition = (context: CM6PluginContext) => boolean
+let _core: any = null
 
 /**
- * Plugin definition interface
+ * TiddlyWiki content types
  */
-export interface CM6PluginDefinition {
-  /** Unique plugin name */
-  name: string
-  /** Plugin description */
-  description?: string
-  /** Priority for extension ordering (higher = loaded first, default 0) */
-  priority?: number
-  /** 
-   * Condition function - returns true if plugin should be active
-   * If not provided, plugin is always active
-   */
-  condition?: PluginCondition
-  /**
-   * Returns CodeMirror 6 extensions for this plugin
-   */
-  getExtensions: (context: CM6PluginContext) => Extension[]
-}
-
-// ============================================================================
-// TiddlyWiki Language Plugin Definition
-// ============================================================================
+const TW_TYPES = [
+  "",  // Empty = default wikitext
+  "text/vnd.tiddlywiki",
+  "text/x-tiddlywiki"
+]
 
 /**
  * Standard TiddlyWiki keymap
@@ -112,57 +90,196 @@ const tiddlywikiKeymap = keymap.of([
 ])
 
 /**
- * Condition: Only activate for TiddlyWiki content types
+ * The plugin definition
  */
-function isTiddlyWikiType(context: CM6PluginContext): boolean {
-  const type = context.tiddlerType
-  
-  // No type = default TiddlyWiki wikitext
-  if (!type || type === "") {
-    return true
-  }
-  
-  // Explicit TiddlyWiki types
-  const twTypes = [
-    "text/vnd.tiddlywiki",
-    "text/x-tiddlywiki",
-    // Also handle these as they often contain wikitext
-    "text/vnd.tiddlywiki-multiple"
-  ]
-  
-  return twTypes.includes(type)
-}
-
-/**
- * Get extensions based on context
- */
-function getExtensions(context: CM6PluginContext): Extension[] {
-  const extensions: Extension[] = []
-  
-  // Always add language support
-  extensions.push(tiddlywikiLanguage)
-  
-  // Add header folding support
-  extensions.push(headerIndent)
-  
-  // Add keymap unless read-only
-  if (!context.readOnly) {
-    extensions.push(tiddlywikiKeymap)
-  }
-  
-  return extensions
-}
-
-/**
- * The plugin definition exported for the engine
- */
-export const plugin: CM6PluginDefinition = {
+export const plugin = {
   name: "tiddlywiki-syntax",
   description: "TiddlyWiki5 Wikitext syntax highlighting and editing support",
-  priority: 100, // High priority - language support should load early
-  condition: isTiddlyWikiType,
-  getExtensions: getExtensions
+  priority: 100,
+  
+  /**
+   * Initialize with CM6 core reference
+   */
+  init(cm6Core: any) {
+    _core = cm6Core
+  },
+  
+  /**
+   * Only activate for TiddlyWiki content types
+   */
+  condition(context: CM6PluginContext): boolean {
+    const type = context.tiddlerType
+    return TW_TYPES.includes(type || "")
+  },
+  
+  /**
+   * Register language compartment
+   */
+  registerCompartments(): Record<string, Compartment> {
+    if (!_core) return {}
+    const Compartment = _core.state.Compartment
+    return {
+      tiddlywikiLanguage: new Compartment()
+    }
+  },
+  
+  /**
+   * Get CodeMirror extensions
+   */
+  getExtensions(context: CM6PluginContext): Extension[] {
+    const extensions: Extension[] = []
+    const engine = context.engine
+    const compartments = engine?._compartments
+    
+    // Language support via compartment if available
+    if (compartments?.tiddlywikiLanguage) {
+      extensions.push(
+        compartments.tiddlywikiLanguage.of(tiddlywikiLanguage)
+      )
+    } else {
+      extensions.push(tiddlywikiLanguage)
+    }
+    
+    // Header folding support
+    extensions.push(headerIndent)
+    
+    // Keymap (unless read-only)
+    if (!context.readOnly) {
+      extensions.push(tiddlywikiKeymap)
+    }
+    
+    return extensions
+  },
+  
+  /**
+   * Extend engine API with TiddlyWiki-specific methods
+   */
+  extendAPI(engine: any, context: CM6PluginContext): Record<string, Function> {
+    return {
+      // ==== Formatting Commands ====
+      
+      toggleBold() {
+        if (this._destroyed) return false
+        return toggleBold(this.view)
+      },
+      
+      toggleItalic() {
+        if (this._destroyed) return false
+        return toggleItalic(this.view)
+      },
+      
+      toggleUnderline() {
+        if (this._destroyed) return false
+        return toggleUnderline(this.view)
+      },
+      
+      toggleStrikethrough() {
+        if (this._destroyed) return false
+        return toggleStrikethrough(this.view)
+      },
+      
+      toggleSuperscript() {
+        if (this._destroyed) return false
+        return toggleSuperscript(this.view)
+      },
+      
+      toggleSubscript() {
+        if (this._destroyed) return false
+        return toggleSubscript(this.view)
+      },
+      
+      toggleInlineCode() {
+        if (this._destroyed) return false
+        return toggleInlineCode(this.view)
+      },
+      
+      // ==== Link/Transclusion Commands ====
+      
+      insertWikiLink() {
+        if (this._destroyed) return false
+        return insertWikiLink(this.view)
+      },
+      
+      insertTransclusion() {
+        if (this._destroyed) return false
+        return insertTransclusion(this.view)
+      },
+      
+      // ==== Heading Commands ====
+      
+      setHeading(level: number) {
+        if (this._destroyed) return false
+        const commands = [null, setHeading1, setHeading2, setHeading3, setHeading4, setHeading5, setHeading6]
+        const cmd = commands[level]
+        return cmd ? cmd(this.view) : false
+      },
+      
+      removeHeading() {
+        if (this._destroyed) return false
+        return removeHeading(this.view)
+      },
+      
+      // ==== List Commands ====
+      
+      toggleBulletList() {
+        if (this._destroyed) return false
+        return toggleBulletList(this.view)
+      },
+      
+      toggleNumberedList() {
+        if (this._destroyed) return false
+        return toggleNumberedList(this.view)
+      },
+      
+      // ==== Block Commands ====
+      
+      insertCodeBlock() {
+        if (this._destroyed) return false
+        return insertCodeBlock(this.view)
+      },
+      
+      // ==== Language Configuration ====
+      
+      setTiddlyWikiLanguage(enabled: boolean) {
+        if (this._destroyed) return
+        const compartments = this._compartments
+        if (compartments?.tiddlywikiLanguage) {
+          this.reconfigure("tiddlywikiLanguage", enabled ? tiddlywikiLanguage : [])
+        }
+      }
+    }
+  },
+  
+  /**
+   * Register event handlers
+   */
+  registerEvents(engine: any, context: CM6PluginContext): Record<string, Function> {
+    return {
+      // Handle TiddlyWiki-specific text operations
+      textOperation(operation: any) {
+        if (!operation) return
+        
+        switch (operation.type) {
+          case "toggle-bold":
+            this.toggleBold?.()
+            break
+          case "toggle-italic":
+            this.toggleItalic?.()
+            break
+          case "toggle-underline":
+            this.toggleUnderline?.()
+            break
+          case "insert-link":
+            this.insertWikiLink?.()
+            break
+          case "insert-transclusion":
+            this.insertTransclusion?.()
+            break
+        }
+      }
+    }
+  }
 }
 
-// Default export for convenient requiring
+// Default export
 export default plugin
