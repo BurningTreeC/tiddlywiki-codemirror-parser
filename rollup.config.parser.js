@@ -1,55 +1,51 @@
-import resolve from '@rollup/plugin-node-resolve';
-import typescript from '@rollup/plugin-typescript';
-import dts from 'rollup-plugin-dts';
+import resolve from "@rollup/plugin-node-resolve";
+import commonjs from "@rollup/plugin-commonjs";
+import typescript from "@rollup/plugin-typescript";
+import dts from "rollup-plugin-dts";
 
-const external = [
-  '@lezer/common',
-  '@lezer/highlight'
-];
+const external = ["@lezer/common", "@lezer/highlight"];
 
-const plugins = [
-  resolve(),
+const jsPlugins = [
+  resolve({
+    extensions: [".mjs", ".js", ".json", ".ts"]
+  }),
+  commonjs(),
   typescript({
-    tsconfig: './tsconfig.json',
+    tsconfig: "./tsconfig.json",
     declaration: false,
     declarationMap: false
   })
 ];
 
 export default [
-  // ESM build
+  // JS builds (ESM + CJS) from the same input
   {
-    input: 'src/index.ts',
-    output: {
-      file: 'dist/parser.js',
-      format: 'es',
-      sourcemap: true
-    },
+    input: "src/index.ts",
     external,
-    plugins
-  },
-
-  // CommonJS build
-  {
-    input: 'src/index.ts',
-    output: {
-      file: 'dist/parser.cjs',
-      format: 'cjs',
-      sourcemap: true,
-      exports: 'named'
-    },
-    external,
-    plugins
+    plugins: jsPlugins,
+    output: [
+      {
+        file: "dist/parser.js",
+        format: "es",
+        sourcemap: true
+      },
+      {
+        file: "dist/parser.cjs",
+        format: "cjs",
+        sourcemap: true,
+        exports: "named"
+      }
+    ]
   },
 
   // Type definitions
   {
-    input: 'src/index.ts',
-    output: {
-      file: 'dist/parser.d.ts',
-      format: 'es'
-    },
+    input: "src/index.ts",
     external,
-    plugins: [dts()]
+    plugins: [dts()],
+    output: {
+      file: "dist/parser.d.ts",
+      format: "es"
+    }
   }
 ];
