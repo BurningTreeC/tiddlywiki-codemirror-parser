@@ -261,12 +261,12 @@ export class TiddlyWikiParser extends Parser {
         types.push(NodeType.define({ id, name, props: [] }))
       }
       nodeSet = new NodeSet(types)
+    }
 
-      // Apply style props
-      if (config.props) {
-        for (const source of config.props) {
-          nodeSet = nodeSet.extend(source)
-        }
+    // Apply props (always, not just when defineNodes is set)
+    if (config.props) {
+      for (const source of config.props) {
+        nodeSet = nodeSet.extend(source)
       }
     }
 

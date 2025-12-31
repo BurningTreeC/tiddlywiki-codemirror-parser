@@ -8,7 +8,7 @@
 import { Prec, EditorState } from "@codemirror/state"
 import { KeyBinding, keymap } from "@codemirror/view"
 import { Language, LanguageSupport, LanguageDescription, syntaxTree } from "@codemirror/language"
-import { Completion, CompletionContext, CompletionResult } from "@codemirror/autocomplete"
+import { Completion, CompletionContext, CompletionResult, autocompletion, completionKeymap } from "@codemirror/autocomplete"
 import { syntaxHighlighting, HighlightStyle } from "@codemirror/language"
 import { tags as t } from "@lezer/highlight"
 import { html, htmlCompletionSource } from "@codemirror/lang-html"
@@ -219,6 +219,12 @@ export function tiddlywiki(config: TiddlyWikiLanguageConfig = {}): LanguageSuppo
     htmlTagLanguage.support,
     headerIndent,
     syntaxHighlighting(tiddlywikiHighlightStyle),
+    // Enable autocompletion with activate on typing
+    // Completion sources are registered via lang.data.of() and found via languageDataAt()
+    autocompletion({
+      activateOnTyping: true,
+    }),
+    keymap.of(completionKeymap),
   ]
 
   // Handle default code language
@@ -246,7 +252,7 @@ export function tiddlywiki(config: TiddlyWikiLanguageConfig = {}): LanguageSuppo
   // Create the language
   const lang = mkLang(configuredParser)
 
-  // Add completions
+  // Add completions via language data
   if (completeWidgets) {
     support.push(lang.data.of({
       autocomplete: widgetCompletion(getWidgetNames)
@@ -307,7 +313,9 @@ function widgetCompletion(getWidgetNames?: () => string[]) {
       node = node.parent!
     }
 
-    const widgets = getWidgetNames ? getWidgetNames() : coreWidgets
+    // Use provided widget names, fall back to core widgets if empty
+    const customWidgets = getWidgetNames ? getWidgetNames() : []
+    const widgets = customWidgets.length > 0 ? customWidgets : coreWidgets
     const options: Completion[] = widgets.map(w => ({
       label: "<" + w,
       type: "keyword",
@@ -352,7 +360,9 @@ function macroCompletion(getMacroNames?: () => string[]) {
       node = node.parent!
     }
 
-    const macros = getMacroNames ? getMacroNames() : commonMacros
+    // Use provided macro names, fall back to common macros if empty
+    const customMacros = getMacroNames ? getMacroNames() : []
+    const macros = customMacros.length > 0 ? customMacros : commonMacros
     const options: Completion[] = macros.map(m => ({
       label: "<<" + m,
       type: "function",

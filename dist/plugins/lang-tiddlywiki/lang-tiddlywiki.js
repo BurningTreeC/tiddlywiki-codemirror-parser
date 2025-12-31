@@ -2625,11 +2625,11 @@ class TiddlyWikiParser extends common.Parser {
                 types.push(common.NodeType.define({ id, name, props: [] }));
             }
             nodeSet = new common.NodeSet(types);
-            // Apply style props
-            if (config.props) {
-                for (const source of config.props) {
-                    nodeSet = nodeSet.extend(source);
-                }
+        }
+        // Apply props (always, not just when defineNodes is set)
+        if (config.props) {
+            for (const source of config.props) {
+                nodeSet = nodeSet.extend(source);
             }
         }
         return new TiddlyWikiParser(nodeSet, pragmaParsers, blockParsers, inlineParsers);
@@ -2709,6 +2709,9 @@ function isBlock(type) {
 }
 /**
  * Configure the base parser with CodeMirror-specific props
+ * NOTE: languageDataProp is NOT configured here because it must use
+ * the same instance at runtime as the one used for lookups.
+ * It's configured in mkLang() instead.
  */
 const configured = parser.configure({
     props: [
@@ -2729,11 +2732,8 @@ const configured = parser.configure({
         // Indentation
         language.indentNodeProp.add({
             Document: () => null
-        }),
-        // Language data
-        language.languageDataProp.add({
-            Document: data
         })
+        // NOTE: languageDataProp is added at runtime in mkLang()
     ]
 });
 /**
@@ -2771,9 +2771,19 @@ const headerIndent = language.foldService.of((state, start, end) => {
 });
 /**
  * Create a Language from a TiddlyWiki parser
+ * Configures languageDataProp at runtime to ensure the same instance
+ * is used for both configuration and lookups.
  */
 function mkLang(parser) {
-    return new language.Language(data, parser, [], "tiddlywiki");
+    // Configure languageDataProp at runtime
+    const configuredParser = parser.configure({
+        props: [
+            language.languageDataProp.add({
+                Document: data
+            })
+        ]
+    });
+    return new language.Language(data, configuredParser, [], "tiddlywiki");
 }
 /**
  * The base TiddlyWiki language (without extensions)
@@ -2880,6 +2890,12 @@ function tiddlywiki(config = {}) {
         htmlTagLanguage.support,
         headerIndent,
         language.syntaxHighlighting(tiddlywikiHighlightStyle),
+        // Enable autocompletion with activate on typing
+        // Completion sources are registered via lang.data.of() and found via languageDataAt()
+        autocomplete.autocompletion({
+            activateOnTyping: true,
+        }),
+        view.keymap.of(autocomplete.completionKeymap),
     ];
     if (defaultCodeLanguage instanceof language.LanguageSupport) {
         support.push(defaultCodeLanguage.support);
@@ -2898,7 +2914,7 @@ function tiddlywiki(config = {}) {
     }
     // Create the language
     const lang = mkLang(configuredParser);
-    // Add completions
+    // Add completions via language data
     if (completeWidgets) {
         support.push(lang.data.of({
             autocomplete: widgetCompletion(getWidgetNames)
@@ -2952,7 +2968,9 @@ function widgetCompletion(getWidgetNames) {
             }
             node = node.parent;
         }
-        const widgets = getWidgetNames ? getWidgetNames() : coreWidgets;
+        // Use provided widget names, fall back to core widgets if empty
+        const customWidgets = getWidgetNames ? getWidgetNames() : [];
+        const widgets = customWidgets.length > 0 ? customWidgets : coreWidgets;
         const options = widgets.map(w => ({
             label: "<" + w,
             type: "keyword",
@@ -2993,7 +3011,9 @@ function macroCompletion(getMacroNames) {
             }
             node = node.parent;
         }
-        const macros = getMacroNames ? getMacroNames() : commonMacros;
+        // Use provided macro names, fall back to common macros if empty
+        const customMacros = getMacroNames ? getMacroNames() : [];
+        const macros = customMacros.length > 0 ? customMacros : commonMacros;
         const options = macros.map(m => ({
             label: "<<" + m,
             type: "function",

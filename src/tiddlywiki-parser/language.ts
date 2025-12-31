@@ -53,6 +53,9 @@ function isBlock(type: NodeType): boolean {
 
 /**
  * Configure the base parser with CodeMirror-specific props
+ * NOTE: languageDataProp is NOT configured here because it must use
+ * the same instance at runtime as the one used for lookups.
+ * It's configured in mkLang() instead.
  */
 const configured = baseParser.configure({
   props: [
@@ -75,12 +78,9 @@ const configured = baseParser.configure({
     // Indentation
     indentNodeProp.add({
       Document: () => null
-    }),
-
-    // Language data
-    languageDataProp.add({
-      Document: data
     })
+
+    // NOTE: languageDataProp is added at runtime in mkLang()
   ]
 })
 
@@ -116,9 +116,19 @@ export const headerIndent = foldService.of((state, start, end) => {
 
 /**
  * Create a Language from a TiddlyWiki parser
+ * Configures languageDataProp at runtime to ensure the same instance
+ * is used for both configuration and lookups.
  */
 export function mkLang(parser: TiddlyWikiParser): Language {
-  return new Language(data, parser, [], "tiddlywiki")
+  // Configure languageDataProp at runtime
+  const configuredParser = parser.configure({
+    props: [
+      languageDataProp.add({
+        Document: data
+      })
+    ]
+  })
+  return new Language(data, configuredParser, [], "tiddlywiki")
 }
 
 /**
