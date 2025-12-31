@@ -1,5 +1,5 @@
 {
-  "name": "@prtw/lang-tiddlywiki",
+  "name": "@BurningTreeC/lang-tiddlywiki",
   "version": "1.0.0",
   "description": "TiddlyWiki5 language support for CodeMirror 6",
   "main": "./dist/index.cjs",

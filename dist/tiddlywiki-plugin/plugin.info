@@ -1,5 +1,5 @@
 {
-    "title": "$:/plugins/prtw/codemirror-tiddlywiki",
+    "title": "$:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/lang-tiddlywiki",
     "name": "CodeMirror 6 TiddlyWiki Mode",
     "description": "TiddlyWiki5 syntax highlighting and language support for CodeMirror 6",
     "version": "1.0.0",
@@ -7,6 +7,6 @@
     "dependents": "",
     "list": "readme license",
     "core-version": ">=5.3.0",
-    "author": "PRTW",
-    "source": "https://github.com/prtw/lang-tiddlywiki"
+    "author": "BurningTreeC",
+    "source": "https://github.com/BurningTreeC/lang-tiddlywiki"
 }

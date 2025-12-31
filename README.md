@@ -1,4 +1,4 @@
-# @prtw/lang-tiddlywiki
+# @BurningTreeC/lang-tiddlywiki
 
 TiddlyWiki5 language support for [CodeMirror 6](https://codemirror.net/), providing syntax highlighting, autocompletion, and editing commands for TiddlyWiki's Wikitext format.
 
@@ -51,7 +51,7 @@ The engine uses a modular plugin architecture via `module-type: codemirror6-plug
 ## Installation
 
 ```bash
-npm install @prtw/lang-tiddlywiki
+npm install @BurningTreeC/lang-tiddlywiki
 ```
 
 ## Usage
@@ -60,7 +60,7 @@ npm install @prtw/lang-tiddlywiki
 
 ```javascript
 import {EditorView, basicSetup} from "codemirror"
-import {tiddlywiki} from "@prtw/lang-tiddlywiki"
+import {tiddlywiki} from "@BurningTreeC/lang-tiddlywiki"
 
 const view = new EditorView({
   parent: document.body,
@@ -80,7 +80,7 @@ This is ''bold'' and //italic// text.
 ### Parser Only (without CodeMirror)
 
 ```javascript
-import {parser} from "@prtw/lang-tiddlywiki/parser"
+import {parser} from "@BurningTreeC/lang-tiddlywiki/parser"
 
 const tree = parser.parse(`! Heading\n\nParagraph text`)
 // Use the syntax tree for analysis

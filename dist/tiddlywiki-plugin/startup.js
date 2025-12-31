@@ -1,5 +1,5 @@
 /*\
-title: $:/plugins/prtw/codemirror-tiddlywiki/startup.js
+title: $:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/lang-tiddlywiki/startup.js
 type: application/javascript
 module-type: startup
 

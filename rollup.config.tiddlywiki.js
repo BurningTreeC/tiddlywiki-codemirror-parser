@@ -10,7 +10,7 @@ import typescript from "@rollup/plugin-typescript";
 
 // Banner for TiddlyWiki module
 const banner = `/*\\
-title: $:/plugins/prtw/codemirror-tiddlywiki/lang-tiddlywiki.js
+title: $:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/lang-tiddlywiki/lang-tiddlywiki.js
 type: application/javascript
 module-type: codemirror6-plugin
 
@@ -28,20 +28,20 @@ Built with Rollup - DO NOT EDIT DIRECTLY
 
 const twPaths = {
   "@codemirror/state":
-    "$:/plugins/BTC/tiddlywiki-codemirror-6/lib/codemirror-state.js",
+    "$:/plugins/BurningTreeC/tiddlywiki-codemirror/lib/codemirror-state.js",
   "@codemirror/view":
-    "$:/plugins/BTC/tiddlywiki-codemirror-6/lib/codemirror-view.js",
+    "$:/plugins/BurningTreeC/tiddlywiki-codemirror/lib/codemirror-view.js",
   "@codemirror/language":
-    "$:/plugins/BTC/tiddlywiki-codemirror-6/lib/codemirror-language.js",
+    "$:/plugins/BurningTreeC/tiddlywiki-codemirror/lib/codemirror-language.js",
   "@codemirror/commands":
-    "$:/plugins/BTC/tiddlywiki-codemirror-6/lib/codemirror-commands.js",
+    "$:/plugins/BurningTreeC/tiddlywiki-codemirror/lib/codemirror-commands.js",
   "@codemirror/autocomplete":
-    "$:/plugins/BTC/tiddlywiki-codemirror-6/lib/codemirror-autocomplete.js",
+    "$:/plugins/BurningTreeC/tiddlywiki-codemirror/lib/codemirror-autocomplete.js",
   "@codemirror/lang-html":
-    "$:/plugins/BTC/tiddlywiki-codemirror-6/lib/codemirror-lang-html.js",
-  "@lezer/common": "$:/plugins/BTC/tiddlywiki-codemirror-6/lib/lezer-common.js",
+    "$:/plugins/BurningTreeC/tiddlywiki-codemirror/lib/codemirror-lang-html.js",
+  "@lezer/common": "$:/plugins/BurningTreeC/tiddlywiki-codemirror/lib/lezer-common.js",
   "@lezer/highlight":
-    "$:/plugins/BTC/tiddlywiki-codemirror-6/lib/lezer-highlight.js"
+    "$:/plugins/BurningTreeC/tiddlywiki-codemirror/lib/lezer-highlight.js"
 };
 
 const external = Object.keys(twPaths);

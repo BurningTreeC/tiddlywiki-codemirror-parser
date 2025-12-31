@@ -1,5 +1,5 @@
 /*\
-title: $:/plugins/BTC/tiddlywiki-codemirror-6/engine.js
+title: $:/plugins/BurningTreeC/tiddlywiki-codemirror/engine.js
 type: application/javascript
 module-type: library
 
@@ -24,7 +24,7 @@ Plugin module-type: codemirror6-plugin
 // Constants
 // ============================================================================
 
-var CORE_LIB_TITLE = "$:/plugins/BTC/tiddlywiki-codemirror-6/lib/library-core.js";
+var CORE_LIB_TITLE = "$:/plugins/BurningTreeC/tiddlywiki-codemirror/lib/library-core.js";
 var PLUGIN_MODULE_TYPE = "codemirror6-plugin";
 
 // ============================================================================
