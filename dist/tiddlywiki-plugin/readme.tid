@@ -5,17 +5,31 @@ type: text/vnd.tiddlywiki
 
 This plugin provides TiddlyWiki5 syntax support for CodeMirror 6.
 
-!! Plugin System
+!! Modular Plugin Architecture
 
-This plugin uses the `codemirror6-plugin` module-type. It is automatically loaded by the CM6 engine when editing tiddlers with:
+The CM6 engine uses a modular plugin system. Each feature is a separate plugin with `module-type: codemirror6-plugin`.
 
-* No type (empty type field)
-* `text/vnd.tiddlywiki`
-* `text/x-tiddlywiki`
+!!! Plugin Capabilities
 
-!! Creating Your Own CM6 Plugin
+Plugins can:
 
-To create a CodeMirror 6 plugin, create a module with:
+* ''Add API methods'' to the engine instance via `extendAPI()`
+* ''Register compartments'' for dynamic reconfiguration via `registerCompartments()`
+* ''Provide CM6 extensions'' via `getExtensions()`
+* ''Register event handlers'' via `registerEvents()`
+* ''Conditionally load'' based on tiddler type or options via `condition()`
+
+!!! Built-in Plugins
+
+|!Plugin |!Priority |!Features |
+|core-features |1000 |History, selection, cursor, document, scroll, line numbers |
+|syntax |900 |Bracket matching, syntax highlighting, indentation |
+|search |800 |Search panel, find/replace |
+|fold |700 |Code folding, fold gutter |
+|autocomplete |600 |Completion popup, close brackets |
+|tiddlywiki-syntax |100 |TiddlyWiki wikitext parsing and highlighting |
+
+!! Creating Your Own Plugin
 
 ```javascript
 /*\
@@ -23,24 +37,66 @@ title: $:/plugins/yourname/yourplugin/plugin.js
 type: application/javascript
 module-type: codemirror6-plugin
 \*/
+(function(){
+"use strict";
+
 exports.plugin = {
     name: "your-plugin-name",
-    priority: 50, // Higher = loaded first
+    description: "Plugin description",
+    priority: 50,
+    
+    // Optional: Initialize with CM6 core reference
+    init: function(cm6Core) {
+        this._core = cm6Core;
+    },
+    
+    // Optional: Return true if plugin should load
     condition: function(context) {
-        // Return true if plugin should load
-        // context.tiddlerType contains the content type
         return context.tiddlerType === "text/plain";
     },
+    
+    // Optional: Register compartments for dynamic reconfiguration
+    registerCompartments: function() {
+        var Compartment = this._core.state.Compartment;
+        return {
+            myFeature: new Compartment()
+        };
+    },
+    
+    // Optional: Return CM6 extensions
     getExtensions: function(context) {
-        // Return array of CM6 extensions
         return [];
+    },
+    
+    // Optional: Add methods to engine instance
+    extendAPI: function(engine, context) {
+        return {
+            myMethod: function() {
+                // 'this' is bound to engine
+                return this.getText().length;
+            }
+        };
+    },
+    
+    // Optional: Register event handlers
+    registerEvents: function(engine, context) {
+        return {
+            docChanged: function(update) {
+                console.log("Document changed!");
+            }
+        };
+    },
+    
+    // Optional: Cleanup when engine is destroyed
+    destroy: function(engine) {
+        // Cleanup code
     }
 };
+
+})();
 ```
 
 !! Context Object
-
-The `condition` and `getExtensions` functions receive a context object:
 
 |!Property |!Description |
 |`tiddlerTitle` |Title of the tiddler being edited |
@@ -48,11 +104,29 @@ The `condition` and `getExtensions` functions receive a context object:
 |`tiddlerFields` |All tiddler fields |
 |`readOnly` |Whether editor is read-only |
 |`cm6Core` |Reference to CM6 core library |
+|`engine` |The engine instance |
+|`options` |All options passed to engine |
 
-!! Supported Syntax
+!! Engine Events
 
-!!! Block-Level
+|!Event |!Description |
+|`docChanged` |Document content changed |
+|`selectionChanged` |Selection changed |
+|`focus` |Editor gained focus |
+|`blur` |Editor lost focus |
+|`textOperation` |Unknown text operation (for plugin handling) |
 
+!! TiddlyWiki Syntax Support
+
+The `tiddlywiki-syntax` plugin automatically loads for:
+
+* Empty type (no type field)
+* `text/vnd.tiddlywiki`
+* `text/x-tiddlywiki`
+
+!!! Supported Syntax
+
+!!!! Block-Level
 * Headings (`!` through `!!!!!!`)
 * Lists (bullets `*`, numbered `#`, definitions `;` and `:`)
 * Tables (`|`)
@@ -61,30 +135,15 @@ The `condition` and `getExtensions` functions receive a context object:
 * Typed blocks (`$$$`)
 * Horizontal rules (`---`)
 
-!!! Pragmas
+!!!! Pragmas
+* `\define`, `\procedure`, `\function`, `\widget`
+* `\rules`, `\import`, `\parameters`, `\whitespace`
 
-* `\define` - Macro definitions
-* `\procedure` - Procedure definitions  
-* `\function` - Function definitions
-* `\widget` - Widget definitions
-* `\rules` - Parser rules
-* `\import` - Import macros
-* `\parameters` - Parameter definitions
-* `\whitespace` - Whitespace handling
-
-!!! Inline
-
-* Bold (`''text''`), Italic (`//text//`)
-* Underline (`__text__`), Strikethrough (`~~text~~`)
-* Superscript (`^^text^^`), Subscript (`,,text,,`)
-* WikiLinks (`[[link]]`, `[[text|target]]`)
-* External links (`[ext[text|url]]`)
-* Images (`[img[tooltip|source]]`)
-* Transclusions (`{{tiddler}}`)
-* Filtered transclusions (`{{{filter}}}`)
-* Macros (`<<macroname params>>`)
-* Widgets (`<$widget attributes/>`)
-* Variables (`$(variable)$`)
+!!!! Inline
+* Bold (`''`), Italic (`//`), Underline (`__`), Strikethrough (`~~`)
+* Superscript (`^^`), Subscript (`,,`)
+* WikiLinks, External links, Images
+* Transclusions, Macros, Widgets, Variables
 
 !! Keyboard Shortcuts
 
