@@ -22,7 +22,7 @@
   ],
   "scripts": {
     "clean": "rm -rf dist",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.ci.json --noEmit",
     "build": "rollup -c rollup.config.js",
     "build:tiddlywiki": "rollup -c rollup.config.tiddlywiki.js",
     "prepublishOnly": "npm run clean && npm run typecheck && npm run build",
