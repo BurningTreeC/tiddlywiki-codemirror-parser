@@ -2,34 +2,30 @@
   "name": "@prtw/lang-tiddlywiki",
   "version": "1.0.0",
   "description": "TiddlyWiki5 language support for CodeMirror 6",
-  "main": "dist/index.cjs",
-  "module": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
-      "require": "./dist/index.cjs",
-      "types": "./dist/index.d.ts"
+      "require": "./dist/index.cjs"
     },
     "./parser": {
+      "types": "./dist/parser.d.ts",
       "import": "./dist/parser.js",
-      "require": "./dist/parser.cjs",
-      "types": "./dist/parser.d.ts"
+      "require": "./dist/parser.cjs"
     }
   },
   "files": [
-    "dist",
-    "src"
+    "dist"
   ],
   "scripts": {
-    "build": "npm run build:parser && npm run build:codemirror",
-    "build:parser": "rollup -c rollup.config.parser.js",
-    "build:codemirror": "rollup -c rollup.config.codemirror.js",
-    "build:all": "rollup -c rollup.config.js",
-    "build:tiddlywiki": "rollup -c rollup.config.tiddlywiki.js",
-    "build:types": "tsc --emitDeclarationOnly",
     "clean": "rm -rf dist",
-    "prepublishOnly": "npm run clean && npm run build && npm run build:types",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "rollup -c rollup.config.js",
+    "build:tiddlywiki": "rollup -c rollup.config.tiddlywiki.js",
+    "prepublishOnly": "npm run clean && npm run typecheck && npm run build",
     "test": "echo \"No tests yet\" && exit 0"
   },
   "keywords": [
@@ -77,5 +73,6 @@
   },
   "engines": {
     "node": ">=18"
-  }
+  },
+  "sideEffects": false
 }
