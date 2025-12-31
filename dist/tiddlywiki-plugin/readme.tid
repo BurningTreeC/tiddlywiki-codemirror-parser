@@ -1,0 +1,60 @@
+title: $:/plugins/prtw/codemirror-tiddlywiki/readme
+type: text/vnd.tiddlywiki
+
+! CodeMirror 6 TiddlyWiki Mode
+
+This plugin provides TiddlyWiki5 syntax support for CodeMirror 6, including:
+
+!! Block-Level Syntax
+
+* Headings (`!` through `!!!!!!`)
+* Lists (bullets `*`, numbered `#`, definitions `;` and `:`)
+* Tables (`|`)
+* Code blocks (triple backticks or indentation)
+* Block quotes (`<<<`)
+* Typed blocks (`$$$`)
+* Horizontal rules (`---`)
+
+!! Pragmas
+
+* `\define` - Macro definitions
+* `\procedure` - Procedure definitions
+* `\function` - Function definitions
+* `\widget` - Widget definitions
+* `\rules` - Parser rules
+* `\import` - Import macros
+* `\parameters` - Parameter definitions
+* `\whitespace` - Whitespace handling
+
+!! Inline Syntax
+
+* Bold (`''text''`)
+* Italic (`//text//`)
+* Underline (`__text__`)
+* Strikethrough (`~~text~~`)
+* Superscript (`^^text^^`)
+* Subscript (`,,text,,`)
+* Inline code (backticks)
+* WikiLinks (`[[link]]` and `[[text|link]]`)
+* External links (`[ext[text|url]]`)
+* Images (`[img[tooltip|source]]`)
+* Transclusions (`{{tiddler}}`)
+* Filtered transclusions (`{{{filter}}}`)
+* Macro calls (`<<macroname params>>`)
+* Widgets (`<$widget attributes/>`)
+* Variables (`$(variable)$`)
+* HTML tags and entities
+
+!! Keyboard Shortcuts
+
+|!Shortcut |!Action |
+|Mod-b |Toggle bold |
+|Mod-i |Toggle italic |
+|Mod-u |Toggle underline |
+|Mod-k |Insert wiki link |
+|Mod-1 to Mod-6 |Set heading level |
+|Mod-0 |Remove heading |
+
+!! Usage
+
+This plugin requires the CodeMirror 6 core plugin to be installed. Once both are installed, edit tiddlers will automatically use TiddlyWiki syntax highlighting.
