@@ -7,7 +7,6 @@ Initialization for TiddlyWiki CodeMirror 6 language plugin.
 The actual plugin is loaded automatically via module-type: codemirror6-plugin
 
 \*/
-(function(){
 
 /*jslint node: true, browser: true */
 /*global $tw: false */
@@ -25,5 +24,3 @@ exports.startup = function() {
         console.log("TiddlyWiki syntax plugin available for CodeMirror 6");
     }
 };
-
-})();
