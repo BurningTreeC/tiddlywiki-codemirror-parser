@@ -191,14 +191,22 @@ export const plugin = {
 
       // ==== Heading Commands ====
 
-      setHeading(this: any, level: number) {
-        if (this._destroyed) return false;
-
-        const cmds = [null, setHeading1, setHeading2, setHeading3, setHeading4, setHeading5, setHeading6] as const;
-        const cmd = cmds[level as keyof typeof cmds];
-
-        return cmd ? runStateCommand(cmd, this.view) : false;
-      },
+	setHeading(this: any, level: number) {
+	  if (this._destroyed) return false;
+	
+	  const cmds: Array<((arg: { state: any; dispatch: any }) => boolean) | null> = [
+	    null,
+	    setHeading1,
+	    setHeading2,
+	    setHeading3,
+	    setHeading4,
+	    setHeading5,
+	    setHeading6
+	  ];
+	
+	  const cmd = cmds[level] ?? null;
+	  return cmd ? runStateCommand(cmd, this.view) : false;
+	},
 
       removeHeading(this: any) {
         if (this._destroyed) return false;
