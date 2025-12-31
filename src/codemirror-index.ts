@@ -10,7 +10,7 @@ import {Language, LanguageSupport, LanguageDescription, syntaxTree} from "@codem
 import {Completion, CompletionContext} from "@codemirror/autocomplete"
 import {TiddlyWikiExtension, TiddlyWikiParser} from "./tiddlywiki"
 import {html, htmlCompletionSource} from "@codemirror/lang-html"
-import {tiddlywikiBaseLanguage, tiddlywikiLanguage, mkLang, getCodeParser, headerIndent} from "./codemirror-tiddlywiki"
+import {tiddlywikiBaseLanguage, tiddlywikiLanguage, mkLang, getCodeParser, headerIndent} from "./language"
 import {
   insertNewlineContinueMarkup,
   insertNewlineContinueMarkupCommand,
