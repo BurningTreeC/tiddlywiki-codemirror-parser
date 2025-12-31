@@ -11,3 +11,10 @@ CLAUDE.md
 markdown/
 lang-markdown/
 TiddlyWiki5/
+
+# Library build outputs (npm)
+dist/index.*
+dist/parser.*
+
+# Test scripts
+test-*.mjs
