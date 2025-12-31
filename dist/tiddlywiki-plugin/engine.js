@@ -3,19 +3,15 @@ title: $:/plugins/BTC/tiddlywiki-codemirror-6/engine.js
 type: application/javascript
 module-type: library
 
-CodeMirror 6 engine for TiddlyWiki5 with comprehensive API.
+Modular CodeMirror 6 engine for TiddlyWiki5.
 
-Features:
-- Modular plugin architecture via module-type: codemirror6-plugin
-- Conditional plugin loading based on tiddler type
-- Dynamic reconfiguration via compartments
-- Full selection/cursor API
-- Decoration and gutter support
-- Search and replace
-- Autocomplete integration
-- Code folding
-- Event handling
-- TiddlyWiki toolbar integration
+The engine provides a minimal core and allows plugins to:
+- Add API methods to the engine instance
+- Register compartments for dynamic reconfiguration
+- Provide CodeMirror 6 extensions
+- Register event handlers
+
+Plugin module-type: codemirror6-plugin
 
 \*/
 
@@ -57,6 +53,10 @@ function isArray(a) {
 	return Array.isArray(a);
 }
 
+function isObject(o) {
+	return o !== null && typeof o === "object" && !isArray(o);
+}
+
 function clamp(n, min, max) {
 	return Math.max(min, Math.min(max, n));
 }
@@ -66,8 +66,6 @@ function hasWindowTimers() {
 		typeof window.setTimeout === "function" && 
 		typeof window.clearTimeout === "function";
 }
-
-function noop() {}
 
 // ============================================================================
 // Core Library Loading
@@ -99,7 +97,7 @@ function getCM6Core() {
 
 	throw new Error(
 		"CM6 core library not found. Provide " + CORE_LIB_TITLE + 
-		" exporting {state, view, commands, history, language, autocomplete, search, fold, lint}."
+		" exporting {state, view, commands, history, ...}."
 	);
 }
 
@@ -107,10 +105,41 @@ function getCM6Core() {
 // Plugin System
 // ============================================================================
 
+/**
+ * Plugin Definition Interface:
+ * 
+ * {
+ *   name: string,                    // Unique plugin name
+ *   description?: string,            // Plugin description
+ *   priority?: number,               // Load order (higher = first, default 0)
+ *   
+ *   condition?: (context) => boolean,  // Should plugin load?
+ *   
+ *   // Called once when plugin is discovered
+ *   init?: (cm6Core) => void,
+ *   
+ *   // Register compartments (called before extensions)
+ *   registerCompartments?: () => { [name: string]: Compartment },
+ *   
+ *   // Get CM6 extensions
+ *   getExtensions?: (context) => Extension[],
+ *   
+ *   // Extend engine API (called after view creation)
+ *   extendAPI?: (engine, context) => { [methodName: string]: Function },
+ *   
+ *   // Register event handlers
+ *   registerEvents?: (engine, context) => { [eventName: string]: Function },
+ *   
+ *   // Cleanup when engine is destroyed
+ *   destroy?: (engine) => void
+ * }
+ */
+
 function discoverPlugins() {
 	if (_pluginCache) return _pluginCache;
 
 	var plugins = [];
+	var core = getCM6Core();
 
 	if ($tw && $tw.modules && $tw.modules.types[PLUGIN_MODULE_TYPE]) {
 		var pluginModules = $tw.modules.types[PLUGIN_MODULE_TYPE];
@@ -120,10 +149,22 @@ function discoverPlugins() {
 				var pluginModule = require(moduleName);
 				var pluginDef = pluginModule.default || pluginModule.plugin || pluginModule;
 				
-				if (pluginDef && isFunction(pluginDef.getExtensions)) {
+				if (pluginDef && (isFunction(pluginDef.getExtensions) || 
+				                  isFunction(pluginDef.extendAPI) ||
+				                  isFunction(pluginDef.registerCompartments))) {
 					pluginDef.name = pluginDef.name || moduleName;
 					pluginDef.priority = isNumber(pluginDef.priority) ? pluginDef.priority : 0;
 					pluginDef._moduleName = moduleName;
+					
+					// Call init if present
+					if (isFunction(pluginDef.init)) {
+						try {
+							pluginDef.init(core);
+						} catch (e) {
+							console.error("Plugin init failed for '" + pluginDef.name + "':", e);
+						}
+					}
+					
 					plugins.push(pluginDef);
 				}
 			} catch (e) {
@@ -132,6 +173,7 @@ function discoverPlugins() {
 		});
 	}
 
+	// Sort by priority (higher first)
 	plugins.sort(function(a, b) {
 		return (b.priority || 0) - (a.priority || 0);
 	});
@@ -151,7 +193,8 @@ function buildPluginContext(options, engine) {
 		tiddlerFields: null,
 		readOnly: !!options.readOnly,
 		cm6Core: getCM6Core(),
-		engine: engine
+		engine: engine,
+		options: options
 	};
 
 	if (options.widget) {
@@ -186,71 +229,29 @@ function buildPluginContext(options, engine) {
 	return context;
 }
 
-function getPluginExtensions(context) {
-	var plugins = discoverPlugins();
-	var extensions = [];
-
-	for (var i = 0; i < plugins.length; i++) {
-		var plugin = plugins[i];
-		
-		try {
-			var shouldLoad = true;
-			if (isFunction(plugin.condition)) {
-				shouldLoad = plugin.condition(context);
-			}
-			
-			if (shouldLoad) {
-				var pluginExtensions = plugin.getExtensions(context);
-				if (isArray(pluginExtensions)) {
-					extensions = extensions.concat(pluginExtensions);
-				}
-			}
-		} catch (e) {
-			console.error("Error loading extensions from plugin '" + plugin.name + "':", e);
-		}
-	}
-
-	return extensions;
-}
-
 // ============================================================================
-// CodeMirror Engine
+// CodeMirror Engine - Minimal Core
 // ============================================================================
 
 /**
  * CodeMirror 6 Engine for TiddlyWiki5
  * 
- * @param {Object} options Configuration options
+ * Core options:
  * @param {Object} options.widget - TiddlyWiki widget reference
  * @param {HTMLElement} options.parentNode - DOM parent for editor
  * @param {Node} options.nextSibling - Insert before this sibling
  * @param {string} options.value - Initial text content
  * @param {boolean} options.readOnly - Read-only mode
  * @param {boolean} options.autofocus - Focus on mount
- * @param {boolean} options.lineNumbers - Show line numbers
- * @param {boolean} options.lineWrapping - Wrap long lines
- * @param {boolean} options.foldGutter - Show fold gutter
- * @param {boolean} options.highlightActiveLine - Highlight current line
- * @param {boolean} options.highlightSelectionMatches - Highlight selection matches
- * @param {boolean} options.bracketMatching - Match brackets
- * @param {boolean} options.closeBrackets - Auto-close brackets
- * @param {boolean} options.autocompletion - Enable autocomplete
- * @param {boolean} options.search - Enable search panel
- * @param {string} options.placeholder - Placeholder text
- * @param {string} options.theme - Theme name ('light' or 'dark')
- * @param {number} options.tabSize - Tab size (default 4)
- * @param {boolean} options.indentWithTabs - Use tabs for indentation
  * @param {Function} options.onChange - Change callback
- * @param {Function} options.onFocus - Focus callback
- * @param {Function} options.onBlur - Blur callback
  * @param {Function} options.onBlurSave - Blur save callback
- * @param {Function} options.onSelectionChange - Selection change callback
- * @param {Function} options.onCursorActivity - Cursor activity callback
  * @param {number} options.changeDebounceMs - Change debounce (default 150)
  * @param {string} options.tiddlerType - Explicit content type
  * @param {string} options.tiddlerTitle - Explicit tiddler title
  * @param {boolean} options.loadPlugins - Load plugins (default true)
  * @param {Array} options.extensions - Additional CM6 extensions
+ * 
+ * Additional options are passed to plugins via context.options
  */
 function CodeMirrorEngine(options) {
 	options = options || {};
@@ -287,11 +288,13 @@ function CodeMirrorEngine(options) {
 
 	// Callbacks
 	this._onChange = isFunction(options.onChange) ? options.onChange : null;
-	this._onFocus = isFunction(options.onFocus) ? options.onFocus : null;
-	this._onBlur = isFunction(options.onBlur) ? options.onBlur : null;
 	this._onBlurSave = isFunction(options.onBlurSave) ? options.onBlurSave : null;
-	this._onSelectionChange = isFunction(options.onSelectionChange) ? options.onSelectionChange : null;
-	this._onCursorActivity = isFunction(options.onCursorActivity) ? options.onCursorActivity : null;
+	
+	// Event handlers from plugins
+	this._eventHandlers = {};
+	
+	// Active plugins for this instance
+	this._activePlugins = [];
 
 	// ========================================================================
 	// Load CM6 Core
@@ -304,70 +307,63 @@ function CodeMirrorEngine(options) {
 	var EditorView = core.view.EditorView;
 	var Compartment = core.state.Compartment;
 	var cmKeymap = core.view.keymap;
-	var StateEffect = core.state.StateEffect;
-	var StateField = core.state.StateField;
 
-	// Commands
-	var defaultKeymap = (core.commands || {}).defaultKeymap || [];
-	var indentWithTab = (core.commands || {}).indentWithTab;
-	var historyKeymap = (core.history || {}).historyKeymap || [];
-	var history = (core.history || {}).history;
-	var undo = (core.history || {}).undo;
-	var redo = (core.history || {}).redo;
-	var undoDepth = (core.history || {}).undoDepth;
-	var redoDepth = (core.history || {}).redoDepth;
-
-	// Language
-	var indentUnit = (core.language || {}).indentUnit;
-	var syntaxHighlighting = (core.language || {}).syntaxHighlighting;
-	var defaultHighlightStyle = (core.language || {}).defaultHighlightStyle;
-	var bracketMatching = (core.language || {}).bracketMatching;
-	var foldGutter = (core.language || {}).foldGutter;
-	var foldKeymap = (core.language || {}).foldKeymap || [];
-	var codeFolding = (core.language || {}).codeFolding;
-
-	// View features
-	var lineNumbers = (core.view || {}).lineNumbers;
-	var highlightActiveLine = (core.view || {}).highlightActiveLine;
-	var highlightActiveLineGutter = (core.view || {}).highlightActiveLineGutter;
-	var highlightSpecialChars = (core.view || {}).highlightSpecialChars;
-	var drawSelection = (core.view || {}).drawSelection;
-	var dropCursor = (core.view || {}).dropCursor;
-	var rectangularSelection = (core.view || {}).rectangularSelection;
-	var crosshairCursor = (core.view || {}).crosshairCursor;
-	var placeholder = (core.view || {}).placeholder;
-
-	// Autocomplete
-	var autocompletion = (core.autocomplete || {}).autocompletion;
-	var completionKeymap = (core.autocomplete || {}).completionKeymap || [];
-	var closeBrackets = (core.autocomplete || {}).closeBrackets;
-	var closeBracketsKeymap = (core.autocomplete || {}).closeBracketsKeymap || [];
-
-	// Search
-	var searchKeymap = (core.search || {}).searchKeymap || [];
-	var highlightSelectionMatches = (core.search || {}).highlightSelectionMatches;
-
-	// Lint
-	var lintKeymap = (core.lint || {}).lintKeymap || [];
+	// Store for later use
+	this._EditorState = EditorState;
+	this._EditorView = EditorView;
+	this._Compartment = Compartment;
 
 	// ========================================================================
-	// Compartments for Dynamic Reconfiguration
+	// Compartments (core + plugin-registered)
 	// ========================================================================
 	
 	this._compartments = {
-		language: new Compartment(),
-		theme: new Compartment(),
-		readOnly: new Compartment(),
-		lineNumbers: new Compartment(),
-		lineWrapping: new Compartment(),
-		tabSize: new Compartment(),
-		placeholder: new Compartment(),
-		autocompletion: new Compartment(),
-		foldGutter: new Compartment(),
-		highlightActiveLine: new Compartment(),
-		bracketMatching: new Compartment(),
-		closeBrackets: new Compartment()
+		// Core compartment for read-only state
+		readOnly: new Compartment()
 	};
+
+	// ========================================================================
+	// Build Plugin Context
+	// ========================================================================
+	
+	var context = buildPluginContext(options, this);
+	this._pluginContext = context;
+
+	// ========================================================================
+	// Collect Plugin Compartments
+	// ========================================================================
+	
+	var plugins = options.loadPlugins !== false ? discoverPlugins() : [];
+	
+	for (var i = 0; i < plugins.length; i++) {
+		var plugin = plugins[i];
+		
+		try {
+			// Check condition
+			var shouldLoad = true;
+			if (isFunction(plugin.condition)) {
+				shouldLoad = plugin.condition(context);
+			}
+			
+			if (!shouldLoad) continue;
+			
+			// Register compartments
+			if (isFunction(plugin.registerCompartments)) {
+				var pluginCompartments = plugin.registerCompartments();
+				if (isObject(pluginCompartments)) {
+					for (var compName in pluginCompartments) {
+						if (pluginCompartments.hasOwnProperty(compName) && !this._compartments[compName]) {
+							this._compartments[compName] = pluginCompartments[compName];
+						}
+					}
+				}
+			}
+			
+			this._activePlugins.push(plugin);
+		} catch (e) {
+			console.error("Error processing plugin '" + plugin.name + "':", e);
+		}
+	}
 
 	// ========================================================================
 	// Build Extensions
@@ -375,126 +371,39 @@ function CodeMirrorEngine(options) {
 	
 	var extensions = [];
 
-	// Basic editing features
-	if (highlightSpecialChars) extensions.push(highlightSpecialChars());
-	if (drawSelection) extensions.push(drawSelection());
-	if (dropCursor) extensions.push(dropCursor());
-	if (rectangularSelection) extensions.push(rectangularSelection());
-
-	// History
-	if (isFunction(history)) extensions.push(history());
-
-	// Read-only compartment
+	// Core: Read-only compartment
 	extensions.push(
 		this._compartments.readOnly.of(
 			EditorState.readOnly.of(!!options.readOnly)
 		)
 	);
 
-	// Line numbers compartment
-	extensions.push(
-		this._compartments.lineNumbers.of(
-			options.lineNumbers !== false && lineNumbers ? lineNumbers() : []
-		)
-	);
-
-	// Line wrapping compartment
-	extensions.push(
-		this._compartments.lineWrapping.of(
-			options.lineWrapping ? EditorView.lineWrapping : []
-		)
-	);
-
-	// Tab size compartment
-	var tabSize = isNumber(options.tabSize) ? options.tabSize : 4;
-	if (indentUnit) {
-		extensions.push(
-			this._compartments.tabSize.of(
-				indentUnit.of(options.indentWithTabs ? "\t" : " ".repeat(tabSize))
-			)
-		);
-	}
-
-	// Placeholder compartment
-	if (placeholder && options.placeholder) {
-		extensions.push(
-			this._compartments.placeholder.of(placeholder(options.placeholder))
-		);
-	}
-
-	// Highlight active line compartment
-	extensions.push(
-		this._compartments.highlightActiveLine.of(
-			options.highlightActiveLine !== false && highlightActiveLine ? 
-				[highlightActiveLine(), highlightActiveLineGutter ? highlightActiveLineGutter() : []] : []
-		)
-	);
-
-	// Bracket matching compartment
-	extensions.push(
-		this._compartments.bracketMatching.of(
-			options.bracketMatching !== false && bracketMatching ? bracketMatching() : []
-		)
-	);
-
-	// Close brackets compartment
-	extensions.push(
-		this._compartments.closeBrackets.of(
-			options.closeBrackets && closeBrackets ? closeBrackets() : []
-		)
-	);
-
-	// Fold gutter compartment
-	extensions.push(
-		this._compartments.foldGutter.of(
-			options.foldGutter && foldGutter ? foldGutter() : []
-		)
-	);
-
-	// Selection matches
-	if (options.highlightSelectionMatches !== false && highlightSelectionMatches) {
-		extensions.push(highlightSelectionMatches());
-	}
-
-	// Autocompletion compartment
-	extensions.push(
-		this._compartments.autocompletion.of(
-			options.autocompletion && autocompletion ? autocompletion() : []
-		)
-	);
-
-	// Syntax highlighting
-	if (syntaxHighlighting && defaultHighlightStyle) {
-		extensions.push(syntaxHighlighting(defaultHighlightStyle, {fallback: true}));
-	}
-
-	// Theme compartment (placeholder for theme switching)
-	extensions.push(this._compartments.theme.of([]));
-
-	// Language compartment (placeholder for language switching)
-	extensions.push(this._compartments.language.of([]));
-
-	// Build keymap
+	// Core: Basic keymap if available
+	var defaultKeymap = (core.commands || {}).defaultKeymap || [];
+	var indentWithTab = (core.commands || {}).indentWithTab;
+	
 	var km = [];
-	if (closeBracketsKeymap.length) km = km.concat(closeBracketsKeymap);
 	if (defaultKeymap.length) km = km.concat(defaultKeymap);
-	if (searchKeymap.length && options.search !== false) km = km.concat(searchKeymap);
-	if (historyKeymap.length) km = km.concat(historyKeymap);
-	if (foldKeymap.length && options.foldGutter) km = km.concat(foldKeymap);
-	if (completionKeymap.length && options.autocompletion) km = km.concat(completionKeymap);
-	if (lintKeymap.length) km = km.concat(lintKeymap);
 	if (indentWithTab) km.push(indentWithTab);
 	
 	if (km.length && cmKeymap) {
 		extensions.push(cmKeymap.of(km));
 	}
 
-	// Load plugin extensions
-	if (options.loadPlugins !== false) {
-		var context = buildPluginContext(options, this);
-		this._pluginContext = context;
-		var pluginExtensions = getPluginExtensions(context);
-		extensions = extensions.concat(pluginExtensions);
+	// Collect extensions from plugins
+	for (var j = 0; j < this._activePlugins.length; j++) {
+		var activePlugin = this._activePlugins[j];
+		
+		try {
+			if (isFunction(activePlugin.getExtensions)) {
+				var pluginExtensions = activePlugin.getExtensions(context);
+				if (isArray(pluginExtensions)) {
+					extensions = extensions.concat(pluginExtensions);
+				}
+			}
+		} catch (e) {
+			console.error("Error getting extensions from plugin '" + activePlugin.name + "':", e);
+		}
 	}
 
 	// User-provided extensions
@@ -503,10 +412,9 @@ function CodeMirrorEngine(options) {
 	}
 
 	// ========================================================================
-	// Update Listeners
+	// Core Update Listener
 	// ========================================================================
 	
-	// Document change listener
 	extensions.push(
 		EditorView.updateListener.of(function(update) {
 			if (self._destroyed) return;
@@ -514,30 +422,20 @@ function CodeMirrorEngine(options) {
 			if (update.docChanged) {
 				self._pendingChange = true;
 				self._scheduleEmit();
+				self._triggerEvent("docChanged", update);
 			}
 			
-			if (update.selectionSet && self._onSelectionChange) {
-				try {
-					self._onSelectionChange(self.getSelection());
-				} catch (e) {
-					console.error("onSelectionChange failed:", e);
-				}
+			if (update.selectionSet) {
+				self._triggerEvent("selectionChanged", update);
 			}
-		})
-	);
-
-	// Focus/blur tracking
-	extensions.push(
-		EditorView.domEventHandlers({
-			focus: function(event, view) {
-				if (self._destroyed) return;
-				if (self._onFocus) {
-					try { self._onFocus(event); } catch (e) { console.error("onFocus failed:", e); }
+			
+			if (update.focusChanged) {
+				if (update.view.hasFocus) {
+					self._triggerEvent("focus", update);
+				} else {
+					self._handleBlur();
+					self._triggerEvent("blur", update);
 				}
-			},
-			blur: function(event, view) {
-				if (self._destroyed) return;
-				self._handleBlur();
 			}
 		})
 	);
@@ -566,22 +464,52 @@ function CodeMirrorEngine(options) {
 		this.parentNode.appendChild(this.domNode);
 	}
 
-	// Autofocus
-	if (options.autofocus) {
-		this.focus();
+	// ========================================================================
+	// Extend API from Plugins
+	// ========================================================================
+	
+	for (var k = 0; k < this._activePlugins.length; k++) {
+		var apiPlugin = this._activePlugins[k];
+		
+		try {
+			// Extend API
+			if (isFunction(apiPlugin.extendAPI)) {
+				var apiMethods = apiPlugin.extendAPI(this, context);
+				if (isObject(apiMethods)) {
+					for (var methodName in apiMethods) {
+						if (apiMethods.hasOwnProperty(methodName) && isFunction(apiMethods[methodName])) {
+							// Don't override existing methods
+							if (!this[methodName]) {
+								this[methodName] = apiMethods[methodName].bind(this);
+							}
+						}
+					}
+				}
+			}
+			
+			// Register events
+			if (isFunction(apiPlugin.registerEvents)) {
+				var eventHandlers = apiPlugin.registerEvents(this, context);
+				if (isObject(eventHandlers)) {
+					for (var eventName in eventHandlers) {
+						if (eventHandlers.hasOwnProperty(eventName) && isFunction(eventHandlers[eventName])) {
+							this.on(eventName, eventHandlers[eventName]);
+						}
+					}
+				}
+			}
+		} catch (e) {
+			console.error("Error extending API from plugin '" + apiPlugin.name + "':", e);
+		}
 	}
 
 	// ========================================================================
-	// Store References
+	// Autofocus
 	// ========================================================================
 	
-	this._undo = undo;
-	this._redo = redo;
-	this._undoDepth = undoDepth;
-	this._redoDepth = redoDepth;
-	this._EditorState = EditorState;
-	this._EditorView = EditorView;
-	this._StateEffect = StateEffect;
+	if (options.autofocus) {
+		this.focus();
+	}
 }
 
 // ============================================================================
@@ -628,350 +556,195 @@ CodeMirrorEngine.prototype._handleBlur = function() {
 	
 	this._emitNow();
 	
-	if (this._onBlur) {
-		try { this._onBlur(); } catch (e) { console.error("onBlur failed:", e); }
-	}
-	
 	if (this._pendingChange && this._onBlurSave) {
-		try { this._onBlurSave(); } catch (e) { console.error("onBlurSave failed:", e); }
+		try {
+			this._onBlurSave();
+		} catch (e) {
+			console.error("onBlurSave failed:", e);
+		}
+	}
+};
+
+CodeMirrorEngine.prototype._triggerEvent = function(eventName, data) {
+	var handlers = this._eventHandlers[eventName];
+	if (!handlers) return;
+	
+	for (var i = 0; i < handlers.length; i++) {
+		try {
+			handlers[i].call(this, data);
+		} catch (e) {
+			console.error("Event handler failed for '" + eventName + "':", e);
+		}
 	}
 };
 
 // ============================================================================
-// Document API
+// Event System
 // ============================================================================
 
+/**
+ * Register event handler
+ * @param {string} eventName
+ * @param {Function} handler
+ */
+CodeMirrorEngine.prototype.on = function(eventName, handler) {
+	if (!isFunction(handler)) return;
+	if (!this._eventHandlers[eventName]) {
+		this._eventHandlers[eventName] = [];
+	}
+	this._eventHandlers[eventName].push(handler);
+};
+
+/**
+ * Remove event handler
+ * @param {string} eventName
+ * @param {Function} handler
+ */
+CodeMirrorEngine.prototype.off = function(eventName, handler) {
+	var handlers = this._eventHandlers[eventName];
+	if (!handlers) return;
+	
+	var idx = handlers.indexOf(handler);
+	if (idx >= 0) {
+		handlers.splice(idx, 1);
+	}
+};
+
+// ============================================================================
+// Core Document API (minimal)
+// ============================================================================
+
+/**
+ * Get document text
+ * @returns {string}
+ */
 CodeMirrorEngine.prototype.getText = function() {
 	if (this._destroyed) return "";
 	return this.view.state.doc.toString();
 };
 
-CodeMirrorEngine.prototype.setText = function(text, preserveSelection) {
+/**
+ * Set document text
+ * @param {string} text
+ */
+CodeMirrorEngine.prototype.setText = function(text) {
 	if (this._destroyed) return;
 	if (!isString(text)) text = String(text);
 
 	var current = this.view.state.doc.toString();
 	if (text === current) return;
 
-	var transaction = {
-		changes: { from: 0, to: this.view.state.doc.length, insert: text }
-	};
+	var sel = this.view.state.selection.main;
+	var newLen = text.length;
 
-	if (preserveSelection !== false) {
-		var sel = this.view.state.selection.main;
-		var newLen = text.length;
-		transaction.selection = {
+	this.view.dispatch({
+		changes: { from: 0, to: this.view.state.doc.length, insert: text },
+		selection: {
 			anchor: clamp(sel.anchor, 0, newLen),
 			head: clamp(sel.head, 0, newLen)
-		};
-	}
-
-	this.view.dispatch(transaction);
-};
-
-CodeMirrorEngine.prototype.getLineCount = function() {
-	if (this._destroyed) return 0;
-	return this.view.state.doc.lines;
-};
-
-CodeMirrorEngine.prototype.getLine = function(lineNumber) {
-	if (this._destroyed) return "";
-	try {
-		return this.view.state.doc.line(lineNumber).text;
-	} catch (e) {
-		return "";
-	}
-};
-
-CodeMirrorEngine.prototype.getRange = function(from, to) {
-	if (this._destroyed) return "";
-	return this.view.state.doc.sliceString(from, to);
-};
-
-CodeMirrorEngine.prototype.replaceRange = function(from, to, text) {
-	if (this._destroyed) return;
-	this.view.dispatch({
-		changes: { from: from, to: to, insert: text }
-	});
-};
-
-CodeMirrorEngine.prototype.insert = function(text, pos) {
-	if (this._destroyed) return;
-	if (pos === undefined) {
-		pos = this.view.state.selection.main.head;
-	}
-	this.view.dispatch({
-		changes: { from: pos, insert: text },
-		selection: { anchor: pos + text.length }
-	});
-};
-
-// ============================================================================
-// Selection API
-// ============================================================================
-
-CodeMirrorEngine.prototype.getSelection = function() {
-	if (this._destroyed) return { from: 0, to: 0, text: "", isEmpty: true };
-	
-	var sel = this.view.state.selection.main;
-	return {
-		from: sel.from,
-		to: sel.to,
-		anchor: sel.anchor,
-		head: sel.head,
-		text: this.view.state.doc.sliceString(sel.from, sel.to),
-		isEmpty: sel.empty
-	};
-};
-
-CodeMirrorEngine.prototype.setSelection = function(anchor, head) {
-	if (this._destroyed) return;
-	if (head === undefined) head = anchor;
-	
-	var len = this.view.state.doc.length;
-	this.view.dispatch({
-		selection: {
-			anchor: clamp(anchor, 0, len),
-			head: clamp(head, 0, len)
 		}
 	});
 };
 
-CodeMirrorEngine.prototype.getCursor = function() {
-	if (this._destroyed) return 0;
-	return this.view.state.selection.main.head;
-};
-
-CodeMirrorEngine.prototype.setCursor = function(pos) {
-	this.setSelection(pos, pos);
-};
-
-CodeMirrorEngine.prototype.selectAll = function() {
-	if (this._destroyed) return;
-	this.setSelection(0, this.view.state.doc.length);
-};
-
-CodeMirrorEngine.prototype.replaceSelection = function(text, select) {
-	if (this._destroyed) return;
-	
-	var sel = this.view.state.selection.main;
-	var from = sel.from;
-	
-	var transaction = {
-		changes: { from: sel.from, to: sel.to, insert: text }
-	};
-	
-	if (select === "around") {
-		transaction.selection = { anchor: from, head: from + text.length };
-	} else if (select === "start") {
-		transaction.selection = { anchor: from };
-	} else {
-		transaction.selection = { anchor: from + text.length };
-	}
-	
-	this.view.dispatch(transaction);
-};
-
-CodeMirrorEngine.prototype.getWordAt = function(pos) {
-	if (this._destroyed) return { from: pos, to: pos, text: "" };
-	
-	var doc = this.view.state.doc;
-	var line = doc.lineAt(pos);
-	var text = line.text;
-	var lineStart = line.from;
-	var localPos = pos - lineStart;
-	
-	var wordChars = /[\w$]/;
-	var start = localPos;
-	var end = localPos;
-	
-	while (start > 0 && wordChars.test(text[start - 1])) start--;
-	while (end < text.length && wordChars.test(text[end])) end++;
-	
-	return {
-		from: lineStart + start,
-		to: lineStart + end,
-		text: text.slice(start, end)
-	};
-};
-
-// ============================================================================
-// Cursor/Position Utilities
-// ============================================================================
-
-CodeMirrorEngine.prototype.posToLineCol = function(pos) {
-	if (this._destroyed) return { line: 1, column: 1 };
-	
-	var line = this.view.state.doc.lineAt(pos);
-	return {
-		line: line.number,
-		column: pos - line.from + 1
-	};
-};
-
-CodeMirrorEngine.prototype.lineColToPos = function(line, column) {
-	if (this._destroyed) return 0;
-	
-	try {
-		var lineObj = this.view.state.doc.line(line);
-		return lineObj.from + Math.min(column - 1, lineObj.length);
-	} catch (e) {
-		return 0;
-	}
-};
-
-// ============================================================================
-// History API
-// ============================================================================
-
-CodeMirrorEngine.prototype.undo = function() {
-	if (this._destroyed || !this._undo) return;
-	this._undo(this.view);
-};
-
-CodeMirrorEngine.prototype.redo = function() {
-	if (this._destroyed || !this._redo) return;
-	this._redo(this.view);
-};
-
-CodeMirrorEngine.prototype.getUndoDepth = function() {
-	if (this._destroyed || !this._undoDepth) return 0;
-	return this._undoDepth(this.view.state);
-};
-
-CodeMirrorEngine.prototype.getRedoDepth = function() {
-	if (this._destroyed || !this._redoDepth) return 0;
-	return this._redoDepth(this.view.state);
-};
-
-CodeMirrorEngine.prototype.canUndo = function() {
-	return this.getUndoDepth() > 0;
-};
-
-CodeMirrorEngine.prototype.canRedo = function() {
-	return this.getRedoDepth() > 0;
-};
-
-// ============================================================================
-// Focus & Scroll API
-// ============================================================================
-
+/**
+ * Focus editor
+ */
 CodeMirrorEngine.prototype.focus = function() {
 	if (this._destroyed) return;
 	this.view.focus();
 };
 
+/**
+ * Check if editor has focus
+ * @returns {boolean}
+ */
 CodeMirrorEngine.prototype.hasFocus = function() {
 	if (this._destroyed) return false;
 	return this.view.hasFocus;
 };
 
-CodeMirrorEngine.prototype.scrollTo = function(pos) {
-	if (this._destroyed) return;
-	this.view.dispatch({
-		effects: this._EditorView.scrollIntoView(pos, { y: "center" })
-	});
-};
-
-CodeMirrorEngine.prototype.scrollCursorIntoView = function() {
-	if (this._destroyed) return;
-	this.scrollTo(this.getCursor());
-};
-
-CodeMirrorEngine.prototype.scrollToLine = function(line) {
-	if (this._destroyed) return;
-	try {
-		var lineObj = this.view.state.doc.line(line);
-		this.scrollTo(lineObj.from);
-	} catch (e) {}
-};
-
 // ============================================================================
-// Configuration API
+// Core Compartment API
 // ============================================================================
 
-CodeMirrorEngine.prototype.setReadOnly = function(readOnly) {
+/**
+ * Reconfigure a compartment
+ * @param {string} compartmentName
+ * @param {Extension|Extension[]} extension
+ */
+CodeMirrorEngine.prototype.reconfigure = function(compartmentName, extension) {
 	if (this._destroyed) return;
-	this.view.dispatch({
-		effects: this._compartments.readOnly.reconfigure(
-			this._EditorState.readOnly.of(!!readOnly)
-		)
-	});
-};
-
-CodeMirrorEngine.prototype.setLineNumbers = function(show) {
-	if (this._destroyed) return;
-	var lineNumbers = (this.cm.view || {}).lineNumbers;
-	this.view.dispatch({
-		effects: this._compartments.lineNumbers.reconfigure(
-			show && lineNumbers ? lineNumbers() : []
-		)
-	});
-};
-
-CodeMirrorEngine.prototype.setLineWrapping = function(wrap) {
-	if (this._destroyed) return;
-	this.view.dispatch({
-		effects: this._compartments.lineWrapping.reconfigure(
-			wrap ? this._EditorView.lineWrapping : []
-		)
-	});
-};
-
-CodeMirrorEngine.prototype.setPlaceholder = function(text) {
-	if (this._destroyed) return;
-	var placeholder = (this.cm.view || {}).placeholder;
-	if (!placeholder) return;
 	
-	this.view.dispatch({
-		effects: this._compartments.placeholder.reconfigure(
-			text ? placeholder(text) : []
-		)
-	});
-};
-
-CodeMirrorEngine.prototype.reconfigure = function(compartmentName, extensions) {
-	if (this._destroyed) return;
-	if (!this._compartments[compartmentName]) {
+	var compartment = this._compartments[compartmentName];
+	if (!compartment) {
 		console.warn("Unknown compartment:", compartmentName);
 		return;
 	}
 	
 	this.view.dispatch({
-		effects: this._compartments[compartmentName].reconfigure(extensions)
+		effects: compartment.reconfigure(extension)
 	});
 };
 
+/**
+ * Set read-only state
+ * @param {boolean} readOnly
+ */
+CodeMirrorEngine.prototype.setReadOnly = function(readOnly) {
+	this.reconfigure("readOnly", this._EditorState.readOnly.of(!!readOnly));
+};
+
+/**
+ * Get available compartment names
+ * @returns {string[]}
+ */
+CodeMirrorEngine.prototype.getCompartments = function() {
+	return Object.keys(this._compartments);
+};
+
 // ============================================================================
-// TiddlyWiki Integration API
+// TiddlyWiki Compatibility API
 // ============================================================================
 
+/**
+ * Update DOM node text (TW compatibility)
+ * @param {string} text
+ */
 CodeMirrorEngine.prototype.updateDomNodeText = function(text) {
 	this.setText(text);
 };
 
+/**
+ * Create text operation (TW compatibility)
+ * @param {string} type
+ * @returns {Object}
+ */
 CodeMirrorEngine.prototype.createTextOperation = function(type) {
 	if (this._destroyed) return null;
 
-	var sel = this.getSelection();
+	var sel = this.view.state.selection.main;
 
 	return {
 		type: type,
 		text: this.getText(),
 		selStart: sel.from,
 		selEnd: sel.to,
-		selection: sel.text,
+		selection: this.view.state.doc.sliceString(sel.from, sel.to),
 		replacement: null,
 		newSelStart: null,
 		newSelEnd: null
 	};
 };
 
+/**
+ * Execute text operation (TW compatibility)
+ * @param {Object} operation
+ */
 CodeMirrorEngine.prototype.executeTextOperation = function(operation) {
 	if (this._destroyed || !operation) return;
 
 	var type = operation.type;
-	var from = isNumber(operation.selStart) ? operation.selStart : this.getCursor();
+	var from = isNumber(operation.selStart) ? operation.selStart : this.view.state.selection.main.from;
 	var to = isNumber(operation.selEnd) ? operation.selEnd : from;
 
 	switch (type) {
@@ -981,84 +754,62 @@ CodeMirrorEngine.prototype.executeTextOperation = function(operation) {
 		case "insert-text":
 		case "replace-selection":
 			var insert = isString(operation.replacement) ? operation.replacement : "";
-			this.replaceRange(from, to, insert);
-			this.setCursor(from + insert.length);
-			break;
-		case "undo":
-			this.undo();
-			break;
-		case "redo":
-			this.redo();
+			this.view.dispatch({
+				changes: { from: from, to: to, insert: insert },
+				selection: { anchor: from + insert.length }
+			});
 			break;
 		case "set-selection":
 			if (isNumber(operation.newSelStart)) {
-				this.setSelection(
-					operation.newSelStart,
-					isNumber(operation.newSelEnd) ? operation.newSelEnd : operation.newSelStart
-				);
+				this.view.dispatch({
+					selection: {
+						anchor: operation.newSelStart,
+						head: isNumber(operation.newSelEnd) ? operation.newSelEnd : operation.newSelStart
+					}
+				});
 			}
 			break;
+		default:
+			// Let plugins handle unknown operations
+			this._triggerEvent("textOperation", operation);
 	}
 };
 
+/**
+ * Fix height (TW compatibility - no-op)
+ */
 CodeMirrorEngine.prototype.fixHeight = function() {};
 
+/**
+ * Refresh editor
+ */
 CodeMirrorEngine.prototype.refresh = function() {
 	if (this._destroyed) return;
 	this.view.requestMeasure();
 };
 
 // ============================================================================
-// Search API
-// ============================================================================
-
-CodeMirrorEngine.prototype.openSearchPanel = function() {
-	if (this._destroyed) return;
-	var openSearchPanel = (this.cm.search || {}).openSearchPanel;
-	if (openSearchPanel) openSearchPanel(this.view);
-};
-
-CodeMirrorEngine.prototype.closeSearchPanel = function() {
-	if (this._destroyed) return;
-	var closeSearchPanel = (this.cm.search || {}).closeSearchPanel;
-	if (closeSearchPanel) closeSearchPanel(this.view);
-};
-
-CodeMirrorEngine.prototype.findNext = function() {
-	if (this._destroyed) return;
-	var findNext = (this.cm.search || {}).findNext;
-	if (findNext) findNext(this.view);
-};
-
-CodeMirrorEngine.prototype.findPrevious = function() {
-	if (this._destroyed) return;
-	var findPrevious = (this.cm.search || {}).findPrevious;
-	if (findPrevious) findPrevious(this.view);
-};
-
-// ============================================================================
-// Folding API
-// ============================================================================
-
-CodeMirrorEngine.prototype.foldAll = function() {
-	if (this._destroyed) return;
-	var foldAll = (this.cm.language || {}).foldAll;
-	if (foldAll) foldAll(this.view);
-};
-
-CodeMirrorEngine.prototype.unfoldAll = function() {
-	if (this._destroyed) return;
-	var unfoldAll = (this.cm.language || {}).unfoldAll;
-	if (unfoldAll) unfoldAll(this.view);
-};
-
-// ============================================================================
 // Lifecycle
 // ============================================================================
 
+/**
+ * Destroy editor and clean up
+ */
 CodeMirrorEngine.prototype.destroy = function() {
 	if (this._destroyed) return;
 	this._destroyed = true;
+
+	// Notify plugins
+	for (var i = 0; i < this._activePlugins.length; i++) {
+		var plugin = this._activePlugins[i];
+		if (isFunction(plugin.destroy)) {
+			try {
+				plugin.destroy(this);
+			} catch (e) {
+				console.error("Plugin destroy failed for '" + plugin.name + "':", e);
+			}
+		}
+	}
 
 	if (this._debounceHandle !== null) {
 		window.clearTimeout(this._debounceHandle);
@@ -1081,8 +832,14 @@ CodeMirrorEngine.prototype.destroy = function() {
 	this.domNode = null;
 	this.widget = null;
 	this._compartments = null;
+	this._eventHandlers = null;
+	this._activePlugins = null;
 };
 
+/**
+ * Check if destroyed
+ * @returns {boolean}
+ */
 CodeMirrorEngine.prototype.isDestroyed = function() {
 	return this._destroyed;
 };
@@ -1096,5 +853,4 @@ exports.discoverPlugins = discoverPlugins;
 exports.clearPluginCache = clearPluginCache;
 exports.getCM6Core = getCM6Core;
 exports.buildPluginContext = buildPluginContext;
-exports.getPluginExtensions = getPluginExtensions;
 exports.PLUGIN_MODULE_TYPE = PLUGIN_MODULE_TYPE;
