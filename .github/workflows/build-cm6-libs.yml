@@ -1,0 +1,33 @@
+name: Build CM6 libs (TiddlyWiki modules)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-cm6-libs:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build CM6 libs
+        run: npx rollup -c rollup.config.cm6-libs.js
+
+      - name: Upload CM6 libs artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cm6-libs
+          path: dist/tiddlywiki/lib/
