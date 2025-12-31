@@ -1,5 +1,17 @@
-import { Extension, Compartment } from "@codemirror/state";
-import { keymap, type Command, type EditorView } from "@codemirror/view";
+/**
+ * TiddlyWiki5 CodeMirror 6 Plugin Entry Point
+ *
+ * module-type: codemirror6-plugin
+ *
+ * Production-ready notes:
+ * - Commands are `StateCommand`s (CM6 style) and are executed via `{state, dispatch}`.
+ * - No `EditorView` typing/usage is required for running commands.
+ * - `this` is typed as `any` because the CM6 engine object is provided by TiddlyWiki.
+ */
+
+import type { Extension } from "@codemirror/state";
+import { Compartment } from "@codemirror/state";
+import { keymap } from "@codemirror/view";
 import { tiddlywikiLanguage, tiddlywikiBaseLanguage, headerIndent } from "./codemirror-tiddlywiki";
 import {
   insertNewlineContinueMarkup,
@@ -30,9 +42,9 @@ export { tiddlywikiLanguage, tiddlywikiBaseLanguage };
 export * from "./commands";
 
 /**
- * Run a CodeMirror Command against an EditorView
+ * Execute a StateCommand against an engine view
  */
-function runCommand(cmd: Command, view: EditorView): boolean {
+function runStateCommand(cmd: (arg: { state: any; dispatch: any }) => boolean, view: any): boolean {
   return cmd({ state: view.state, dispatch: view.dispatch });
 }
 
@@ -76,120 +88,143 @@ export const plugin = {
   description: "TiddlyWiki5 Wikitext syntax highlighting and editing support",
   priority: 100,
 
+  /**
+   * Initialize with CM6 core reference
+   */
   init(cm6Core: any) {
     _core = cm6Core;
   },
 
+  /**
+   * Only activate for TiddlyWiki content types
+   */
   condition(context: CM6PluginContext): boolean {
-    const type = context.tiddlerType;
-    return TW_TYPES.includes(type || "");
+    return TW_TYPES.includes(context.tiddlerType || "");
   },
 
+  /**
+   * Register language compartment
+   */
   registerCompartments(): Record<string, Compartment> {
     if (!_core) return {};
-    const Compartment = _core.state.Compartment;
-    return {
-      tiddlywikiLanguage: new Compartment()
-    };
+    const CoreCompartment = _core.state.Compartment;
+    return { tiddlywikiLanguage: new CoreCompartment() };
   },
 
+  /**
+   * Get CodeMirror extensions
+   */
   getExtensions(context: CM6PluginContext): Extension[] {
     const extensions: Extension[] = [];
-    const engine = context.engine;
-    const compartments = engine?._compartments;
+    const engine = context.engine as any;
+    const compartments = engine?._compartments as any;
 
+    // Language support via compartment if available
     if (compartments?.tiddlywikiLanguage) {
       extensions.push(compartments.tiddlywikiLanguage.of(tiddlywikiLanguage));
     } else {
       extensions.push(tiddlywikiLanguage);
     }
 
+    // Header folding support
     extensions.push(headerIndent);
 
-    if (!context.readOnly) {
-      extensions.push(tiddlywikiKeymap);
-    }
+    // Keymap (unless read-only)
+    if (!context.readOnly) extensions.push(tiddlywikiKeymap);
 
     return extensions;
   },
 
   /**
-   * IMPORTANT: don't type this as Record<string, Function>
-   * because it poisons `this` and gives you the TS2345 mess.
+   * Extend engine API with TiddlyWiki-specific methods
    */
-  extendAPI(engine: any, context: CM6PluginContext): Record<string, any> {
+  extendAPI(_engine: any, _context: CM6PluginContext): Record<string, any> {
     return {
+      // ==== Formatting Commands ====
+
       toggleBold(this: any) {
         if (this._destroyed) return false;
-        return runCommand(toggleBold, this.view as EditorView);
+        return runStateCommand(toggleBold, this.view);
       },
+
       toggleItalic(this: any) {
         if (this._destroyed) return false;
-        return runCommand(toggleItalic, this.view as EditorView);
+        return runStateCommand(toggleItalic, this.view);
       },
+
       toggleUnderline(this: any) {
         if (this._destroyed) return false;
-        return runCommand(toggleUnderline, this.view as EditorView);
+        return runStateCommand(toggleUnderline, this.view);
       },
+
       toggleStrikethrough(this: any) {
         if (this._destroyed) return false;
-        return runCommand(toggleStrikethrough, this.view as EditorView);
+        return runStateCommand(toggleStrikethrough, this.view);
       },
+
       toggleSuperscript(this: any) {
         if (this._destroyed) return false;
-        return runCommand(toggleSuperscript, this.view as EditorView);
+        return runStateCommand(toggleSuperscript, this.view);
       },
+
       toggleSubscript(this: any) {
         if (this._destroyed) return false;
-        return runCommand(toggleSubscript, this.view as EditorView);
+        return runStateCommand(toggleSubscript, this.view);
       },
+
       toggleInlineCode(this: any) {
         if (this._destroyed) return false;
-        return runCommand(toggleInlineCode, this.view as EditorView);
+        return runStateCommand(toggleInlineCode, this.view);
       },
+
+      // ==== Link/Transclusion Commands ====
 
       insertWikiLink(this: any) {
         if (this._destroyed) return false;
-        return runCommand(insertWikiLink, this.view as EditorView);
+        return runStateCommand(insertWikiLink, this.view);
       },
+
       insertTransclusion(this: any) {
         if (this._destroyed) return false;
-        return runCommand(insertTransclusion, this.view as EditorView);
+        return runStateCommand(insertTransclusion, this.view);
       },
+
+      // ==== Heading Commands ====
 
       setHeading(this: any, level: number) {
         if (this._destroyed) return false;
-        const commands: Array<Command | null> = [
-          null,
-          setHeading1,
-          setHeading2,
-          setHeading3,
-          setHeading4,
-          setHeading5,
-          setHeading6
-        ];
-        const cmd = commands[level];
-        return cmd ? runCommand(cmd, this.view as EditorView) : false;
+
+        const cmds = [null, setHeading1, setHeading2, setHeading3, setHeading4, setHeading5, setHeading6] as const;
+        const cmd = cmds[level as keyof typeof cmds];
+
+        return cmd ? runStateCommand(cmd, this.view) : false;
       },
 
       removeHeading(this: any) {
         if (this._destroyed) return false;
-        return runCommand(removeHeading, this.view as EditorView);
+        return runStateCommand(removeHeading, this.view);
       },
+
+      // ==== List Commands ====
 
       toggleBulletList(this: any) {
         if (this._destroyed) return false;
-        return runCommand(toggleBulletList, this.view as EditorView);
+        return runStateCommand(toggleBulletList, this.view);
       },
+
       toggleNumberedList(this: any) {
         if (this._destroyed) return false;
-        return runCommand(toggleNumberedList, this.view as EditorView);
+        return runStateCommand(toggleNumberedList, this.view);
       },
+
+      // ==== Block Commands ====
 
       insertCodeBlock(this: any) {
         if (this._destroyed) return false;
-        return runCommand(insertCodeBlock, this.view as EditorView);
+        return runStateCommand(insertCodeBlock, this.view);
       },
+
+      // ==== Language Configuration ====
 
       setTiddlyWikiLanguage(this: any, enabled: boolean) {
         if (this._destroyed) return;
@@ -201,7 +236,10 @@ export const plugin = {
     };
   },
 
-  registerEvents(engine: any, context: CM6PluginContext): Record<string, any> {
+  /**
+   * Register event handlers
+   */
+  registerEvents(_engine: any, _context: CM6PluginContext): Record<string, any> {
     return {
       textOperation(this: any, operation: any) {
         if (!operation) return;
