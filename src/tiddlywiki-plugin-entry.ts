@@ -8,8 +8,10 @@
  */
 
 import {Extension, Compartment} from "@codemirror/state"
-import {keymap} from "@codemirror/view"
+import {keymap, EditorView} from "@codemirror/view"
+import {LanguageSupport} from "@codemirror/language"
 import {tiddlywikiLanguage, tiddlywikiBaseLanguage, headerIndent} from "./language"
+import {tiddlywiki} from "./codemirror-index"
 import {
   insertNewlineContinueMarkup,
   deleteMarkupBackward,
@@ -35,7 +37,7 @@ import {
 } from "./commands"
 
 // Re-export for external use
-export {tiddlywikiLanguage, tiddlywikiBaseLanguage}
+export {tiddlywikiLanguage, tiddlywikiBaseLanguage, tiddlywiki}
 export * from "./commands"
 
 /**
@@ -130,18 +132,36 @@ export const plugin = {
     const extensions: Extension[] = []
     const engine = context.engine
     const compartments = engine?._compartments
+    const options = context.options || {}
     
-    // Language support via compartment if available
-    if (compartments?.tiddlywikiLanguage) {
-      extensions.push(
-        compartments.tiddlywikiLanguage.of(tiddlywikiLanguage)
-      )
+    // Use full LanguageSupport (with autocompletion) or just the language
+    const useFullSupport = options.useFullLanguageSupport !== false
+    
+    if (useFullSupport) {
+      // Get full LanguageSupport with autocompletion, etc.
+      const langSupport = tiddlywiki({
+        addKeymap: false, // We add our own keymap below
+        completeHTMLTags: options.completeHTMLTags !== false,
+        completeWidgets: options.completeWidgets !== false,
+        completeMacros: options.completeMacros !== false
+      })
+      
+      if (compartments?.tiddlywikiLanguage) {
+        extensions.push(compartments.tiddlywikiLanguage.of(langSupport))
+      } else {
+        extensions.push(langSupport)
+      }
     } else {
-      extensions.push(tiddlywikiLanguage)
+      // Just the language, no extras
+      if (compartments?.tiddlywikiLanguage) {
+        extensions.push(compartments.tiddlywikiLanguage.of(tiddlywikiLanguage))
+      } else {
+        extensions.push(tiddlywikiLanguage)
+      }
+      
+      // Header folding support (included in LanguageSupport above)
+      extensions.push(headerIndent)
     }
-    
-    // Header folding support
-    extensions.push(headerIndent)
     
     // Keymap (unless read-only)
     if (!context.readOnly) {
@@ -155,54 +175,60 @@ export const plugin = {
    * Extend engine API with TiddlyWiki-specific methods
    */
   extendAPI(_engine: any, _context: CM6PluginContext): Record<string, any> {
+    // Helper to create properly typed command target from view
+    const getCommandTarget = (view: EditorView) => ({
+      state: view.state,
+      dispatch: (tr: Transaction) => view.dispatch(tr)
+    })
+    
     return {
       // ==== Formatting Commands ====
       
       toggleBold(this: any) {
         if (this._destroyed || !this.view) return false
-        return toggleBold({state: this.view.state, dispatch: this.view.dispatch.bind(this.view)})
+        return toggleBold(getCommandTarget(this.view))
       },
       
       toggleItalic(this: any) {
         if (this._destroyed || !this.view) return false
-        return toggleItalic({state: this.view.state, dispatch: this.view.dispatch.bind(this.view)})
+        return toggleItalic(getCommandTarget(this.view))
       },
       
       toggleUnderline(this: any) {
         if (this._destroyed || !this.view) return false
-        return toggleUnderline({state: this.view.state, dispatch: this.view.dispatch.bind(this.view)})
+        return toggleUnderline(getCommandTarget(this.view))
       },
       
       toggleStrikethrough(this: any) {
         if (this._destroyed || !this.view) return false
-        return toggleStrikethrough({state: this.view.state, dispatch: this.view.dispatch.bind(this.view)})
+        return toggleStrikethrough(getCommandTarget(this.view))
       },
       
       toggleSuperscript(this: any) {
         if (this._destroyed || !this.view) return false
-        return toggleSuperscript({state: this.view.state, dispatch: this.view.dispatch.bind(this.view)})
+        return toggleSuperscript(getCommandTarget(this.view))
       },
       
       toggleSubscript(this: any) {
         if (this._destroyed || !this.view) return false
-        return toggleSubscript({state: this.view.state, dispatch: this.view.dispatch.bind(this.view)})
+        return toggleSubscript(getCommandTarget(this.view))
       },
       
       toggleInlineCode(this: any) {
         if (this._destroyed || !this.view) return false
-        return toggleInlineCode({state: this.view.state, dispatch: this.view.dispatch.bind(this.view)})
+        return toggleInlineCode(getCommandTarget(this.view))
       },
       
       // ==== Link/Transclusion Commands ====
       
       insertWikiLink(this: any) {
         if (this._destroyed || !this.view) return false
-        return insertWikiLink({state: this.view.state, dispatch: this.view.dispatch.bind(this.view)})
+        return insertWikiLink(getCommandTarget(this.view))
       },
       
       insertTransclusion(this: any) {
         if (this._destroyed || !this.view) return false
-        return insertTransclusion({state: this.view.state, dispatch: this.view.dispatch.bind(this.view)})
+        return insertTransclusion(getCommandTarget(this.view))
       },
       
       // ==== Heading Commands ====
@@ -212,38 +238,38 @@ export const plugin = {
         const commands = [null, setHeading1, setHeading2, setHeading3, setHeading4, setHeading5, setHeading6]
         const cmd = commands[level]
         if (!cmd) return false
-        return cmd({state: this.view.state, dispatch: this.view.dispatch.bind(this.view)})
+        return cmd(getCommandTarget(this.view))
       },
       
       removeHeading(this: any) {
         if (this._destroyed || !this.view) return false
-        return removeHeading({state: this.view.state, dispatch: this.view.dispatch.bind(this.view)})
+        return removeHeading(getCommandTarget(this.view))
       },
       
       // ==== List Commands ====
       
       toggleBulletList(this: any) {
         if (this._destroyed || !this.view) return false
-        return toggleBulletList({state: this.view.state, dispatch: this.view.dispatch.bind(this.view)})
+        return toggleBulletList(getCommandTarget(this.view))
       },
       
       toggleNumberedList(this: any) {
         if (this._destroyed || !this.view) return false
-        return toggleNumberedList({state: this.view.state, dispatch: this.view.dispatch.bind(this.view)})
+        return toggleNumberedList(getCommandTarget(this.view))
       },
       
       // ==== Block Commands ====
       
       insertCodeBlock(this: any) {
         if (this._destroyed || !this.view) return false
-        return insertCodeBlock({state: this.view.state, dispatch: this.view.dispatch.bind(this.view)})
+        return insertCodeBlock(getCommandTarget(this.view))
       },
       
       // ==== Language Configuration ====
       
       setTiddlyWikiLanguage(this: any, enabled: boolean) {
         if (this._destroyed) return
-        const compartments = this._compartments
+        const compartments = this._compartments as Record<string, Compartment> | undefined
         if (compartments?.tiddlywikiLanguage) {
           this.reconfigure("tiddlywikiLanguage", enabled ? tiddlywikiLanguage : [])
         }
