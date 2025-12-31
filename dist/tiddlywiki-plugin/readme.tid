@@ -3,9 +3,55 @@ type: text/vnd.tiddlywiki
 
 ! CodeMirror 6 TiddlyWiki Mode
 
-This plugin provides TiddlyWiki5 syntax support for CodeMirror 6, including:
+This plugin provides TiddlyWiki5 syntax support for CodeMirror 6.
 
-!! Block-Level Syntax
+!! Plugin System
+
+This plugin uses the `codemirror6-plugin` module-type. It is automatically loaded by the CM6 engine when editing tiddlers with:
+
+* No type (empty type field)
+* `text/vnd.tiddlywiki`
+* `text/x-tiddlywiki`
+
+!! Creating Your Own CM6 Plugin
+
+To create a CodeMirror 6 plugin, create a module with:
+
+```javascript
+/*\
+title: $:/plugins/yourname/yourplugin/plugin.js
+type: application/javascript
+module-type: codemirror6-plugin
+\*/
+exports.plugin = {
+    name: "your-plugin-name",
+    priority: 50, // Higher = loaded first
+    condition: function(context) {
+        // Return true if plugin should load
+        // context.tiddlerType contains the content type
+        return context.tiddlerType === "text/plain";
+    },
+    getExtensions: function(context) {
+        // Return array of CM6 extensions
+        return [];
+    }
+};
+```
+
+!! Context Object
+
+The `condition` and `getExtensions` functions receive a context object:
+
+|!Property |!Description |
+|`tiddlerTitle` |Title of the tiddler being edited |
+|`tiddlerType` |Content type (empty string for wikitext) |
+|`tiddlerFields` |All tiddler fields |
+|`readOnly` |Whether editor is read-only |
+|`cm6Core` |Reference to CM6 core library |
+
+!! Supported Syntax
+
+!!! Block-Level
 
 * Headings (`!` through `!!!!!!`)
 * Lists (bullets `*`, numbered `#`, definitions `;` and `:`)
@@ -15,10 +61,10 @@ This plugin provides TiddlyWiki5 syntax support for CodeMirror 6, including:
 * Typed blocks (`$$$`)
 * Horizontal rules (`---`)
 
-!! Pragmas
+!!! Pragmas
 
 * `\define` - Macro definitions
-* `\procedure` - Procedure definitions
+* `\procedure` - Procedure definitions  
 * `\function` - Function definitions
 * `\widget` - Widget definitions
 * `\rules` - Parser rules
@@ -26,24 +72,19 @@ This plugin provides TiddlyWiki5 syntax support for CodeMirror 6, including:
 * `\parameters` - Parameter definitions
 * `\whitespace` - Whitespace handling
 
-!! Inline Syntax
+!!! Inline
 
-* Bold (`''text''`)
-* Italic (`//text//`)
-* Underline (`__text__`)
-* Strikethrough (`~~text~~`)
-* Superscript (`^^text^^`)
-* Subscript (`,,text,,`)
-* Inline code (backticks)
-* WikiLinks (`[[link]]` and `[[text|link]]`)
+* Bold (`''text''`), Italic (`//text//`)
+* Underline (`__text__`), Strikethrough (`~~text~~`)
+* Superscript (`^^text^^`), Subscript (`,,text,,`)
+* WikiLinks (`[[link]]`, `[[text|target]]`)
 * External links (`[ext[text|url]]`)
 * Images (`[img[tooltip|source]]`)
 * Transclusions (`{{tiddler}}`)
 * Filtered transclusions (`{{{filter}}}`)
-* Macro calls (`<<macroname params>>`)
+* Macros (`<<macroname params>>`)
 * Widgets (`<$widget attributes/>`)
 * Variables (`$(variable)$`)
-* HTML tags and entities
 
 !! Keyboard Shortcuts
 
@@ -54,7 +95,3 @@ This plugin provides TiddlyWiki5 syntax support for CodeMirror 6, including:
 |Mod-k |Insert wiki link |
 |Mod-1 to Mod-6 |Set heading level |
 |Mod-0 |Remove heading |
-
-!! Usage
-
-This plugin requires the CodeMirror 6 core plugin to be installed. Once both are installed, edit tiddlers will automatically use TiddlyWiki syntax highlighting.
