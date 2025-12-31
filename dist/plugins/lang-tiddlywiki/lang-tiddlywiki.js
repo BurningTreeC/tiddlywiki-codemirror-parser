@@ -13,2338 +13,3080 @@ Built with Rollup - DO NOT EDIT DIRECTLY
 
 "use strict";
 
+
+'use strict';
+
 var view = require('$:/plugins/BurningTreeC/tiddlywiki-codemirror/lib/codemirror-view.js');
-var language = require('$:/plugins/BurningTreeC/tiddlywiki-codemirror/lib/codemirror-language.js');
 var common = require('$:/plugins/BurningTreeC/tiddlywiki-codemirror/lib/lezer-common.js');
 var highlight = require('$:/plugins/BurningTreeC/tiddlywiki-codemirror/lib/lezer-highlight.js');
+var language = require('$:/plugins/BurningTreeC/tiddlywiki-codemirror/lib/codemirror-language.js');
 var state = require('$:/plugins/BurningTreeC/tiddlywiki-codemirror/lib/codemirror-state.js');
 var autocomplete = require('$:/plugins/BurningTreeC/tiddlywiki-codemirror/lib/codemirror-autocomplete.js');
 var langHtml = require('$:/plugins/BurningTreeC/tiddlywiki-codemirror/lib/codemirror-lang-html.js');
 
 /**
- * @lezer/tiddlywiki - TiddlyWiki5 Parser für Lezer/CodeMirror 6
+ * TiddlyWiki Parser - Node Types
  *
- * Analog zum @lezer/markdown Parser, aber für TiddlyWiki5 Wikitext Syntax.
- * Unterstützt alle Block- und Inline-Level Konstrukte von TiddlyWiki5.
+ * Following the Lezer Markdown architecture, this enum defines all node types
+ * used in the TiddlyWiki parse tree.
  */
-// ============================================================================
-// Composite Block Helper
-// ============================================================================
-class CompositeBlock {
-	static create(type, value, from, parentHash, end) {
-		let hash = (parentHash + (parentHash << 8) + type + (value << 4)) | 0;
-		return new CompositeBlock(type, value, from, hash, end, [], []);
-	}
-	constructor(type, value, from, hash, end, children, positions) {
-		this.type = type;
-		this.value = value;
-		this.from = from;
-		this.hash = hash;
-		this.end = end;
-		this.children = children;
-		this.positions = positions;
-		this.hashProp = [[common.NodeProp.contextHash, hash]];
-	}
-	addChild(child, pos) {
-		if (child.prop(common.NodeProp.contextHash) != this.hash)
-			child = new common.Tree(child.type, child.children, child.positions, child.length, this.hashProp);
-		this.children.push(child);
-		this.positions.push(pos);
-	}
-	toTree(nodeSet, end = this.end) {
-		let last = this.children.length - 1;
-		if (last >= 0)
-			end = Math.max(end, this.positions[last] + this.children[last].length + this.from);
-		return new common.Tree(nodeSet.types[this.type], this.children, this.positions, end - this.from).balance({
-			makeTree: (children, positions, length) => new common.Tree(common.NodeType.none, children, positions, length, this.hashProp)
-		});
-	}
-}
-// ============================================================================
-// Node Types Enumeration
-// ============================================================================
 var Type;
 (function (Type) {
-	Type[Type["Document"] = 1] = "Document";
-	// Block-Level
-	Type[Type["CodeBlock"] = 2] = "CodeBlock";
-	Type[Type["FencedCode"] = 3] = "FencedCode";
-	Type[Type["BlockQuote"] = 4] = "BlockQuote";
-	Type[Type["HorizontalRule"] = 5] = "HorizontalRule";
-	Type[Type["BulletList"] = 6] = "BulletList";
-	Type[Type["NumberedList"] = 7] = "NumberedList";
-	Type[Type["DefinitionList"] = 8] = "DefinitionList";
-	Type[Type["ListItem"] = 9] = "ListItem";
-	Type[Type["DefinitionTerm"] = 10] = "DefinitionTerm";
-	Type[Type["DefinitionDescription"] = 11] = "DefinitionDescription";
-	Type[Type["Heading1"] = 12] = "Heading1";
-	Type[Type["Heading2"] = 13] = "Heading2";
-	Type[Type["Heading3"] = 14] = "Heading3";
-	Type[Type["Heading4"] = 15] = "Heading4";
-	Type[Type["Heading5"] = 16] = "Heading5";
-	Type[Type["Heading6"] = 17] = "Heading6";
-	Type[Type["HTMLBlock"] = 18] = "HTMLBlock";
-	Type[Type["Paragraph"] = 19] = "Paragraph";
-	Type[Type["CommentBlock"] = 20] = "CommentBlock";
-	Type[Type["Table"] = 21] = "Table";
-	Type[Type["TableRow"] = 22] = "TableRow";
-	Type[Type["TableCell"] = 23] = "TableCell";
-	Type[Type["TableHeader"] = 24] = "TableHeader";
-	Type[Type["TypedBlock"] = 25] = "TypedBlock";
-	// Pragma Blocks
-	Type[Type["PragmaBlock"] = 26] = "PragmaBlock";
-	Type[Type["MacroDefinition"] = 27] = "MacroDefinition";
-	Type[Type["ProcedureDefinition"] = 28] = "ProcedureDefinition";
-	Type[Type["FunctionDefinition"] = 29] = "FunctionDefinition";
-	Type[Type["WidgetDefinition"] = 30] = "WidgetDefinition";
-	Type[Type["RulesPragma"] = 31] = "RulesPragma";
-	Type[Type["ImportPragma"] = 32] = "ImportPragma";
-	Type[Type["ParametersPragma"] = 33] = "ParametersPragma";
-	Type[Type["WhitespacePragma"] = 34] = "WhitespacePragma";
-	// Inline
-	Type[Type["Escape"] = 35] = "Escape";
-	Type[Type["Entity"] = 36] = "Entity";
-	Type[Type["HardBreak"] = 37] = "HardBreak";
-	Type[Type["Bold"] = 38] = "Bold";
-	Type[Type["Italic"] = 39] = "Italic";
-	Type[Type["Underline"] = 40] = "Underline";
-	Type[Type["Strikethrough"] = 41] = "Strikethrough";
-	Type[Type["Superscript"] = 42] = "Superscript";
-	Type[Type["Subscript"] = 43] = "Subscript";
-	Type[Type["InlineCode"] = 44] = "InlineCode";
-	Type[Type["Highlight"] = 45] = "Highlight";
-	Type[Type["WikiLink"] = 46] = "WikiLink";
-	Type[Type["ExternalLink"] = 47] = "ExternalLink";
-	Type[Type["ImageLink"] = 48] = "ImageLink";
-	Type[Type["Transclusion"] = 49] = "Transclusion";
-	Type[Type["FilteredTransclusion"] = 50] = "FilteredTransclusion";
-	Type[Type["MacroCall"] = 51] = "MacroCall";
-	Type[Type["Widget"] = 52] = "Widget";
-	Type[Type["WidgetAttr"] = 53] = "WidgetAttr";
-	Type[Type["Variable"] = 54] = "Variable";
-	Type[Type["HTMLTag"] = 55] = "HTMLTag";
-	Type[Type["Comment"] = 56] = "Comment";
-	// Smaller tokens / Marks
-	Type[Type["HeadingMark"] = 57] = "HeadingMark";
-	Type[Type["QuoteMark"] = 58] = "QuoteMark";
-	Type[Type["ListMark"] = 59] = "ListMark";
-	Type[Type["LinkMark"] = 60] = "LinkMark";
-	Type[Type["EmphasisMark"] = 61] = "EmphasisMark";
-	Type[Type["CodeMark"] = 62] = "CodeMark";
-	Type[Type["CodeText"] = 63] = "CodeText";
-	Type[Type["CodeInfo"] = 64] = "CodeInfo";
-	Type[Type["LinkTarget"] = 65] = "LinkTarget";
-	Type[Type["LinkText"] = 66] = "LinkText";
-	Type[Type["TransclusionTarget"] = 67] = "TransclusionTarget";
-	Type[Type["MacroName"] = 68] = "MacroName";
-	Type[Type["MacroParams"] = 69] = "MacroParams";
-	Type[Type["WidgetName"] = 70] = "WidgetName";
-	Type[Type["FilterExpression"] = 71] = "FilterExpression";
-	Type[Type["PragmaMark"] = 72] = "PragmaMark";
-	Type[Type["PragmaName"] = 73] = "PragmaName";
-	Type[Type["PragmaParams"] = 74] = "PragmaParams";
-	Type[Type["TableDelimiter"] = 75] = "TableDelimiter";
-	Type[Type["TypedBlockMark"] = 76] = "TypedBlockMark";
-	Type[Type["TypedBlockInfo"] = 77] = "TypedBlockInfo";
-	Type[Type["URL"] = 78] = "URL";
+    // Document root
+    Type[Type["Document"] = 1] = "Document";
+    // === PRAGMAS (must appear at document start) ===
+    Type[Type["Pragma"] = 2] = "Pragma";
+    Type[Type["PragmaMark"] = 3] = "PragmaMark";
+    Type[Type["PragmaKeyword"] = 4] = "PragmaKeyword";
+    Type[Type["PragmaName"] = 5] = "PragmaName";
+    Type[Type["PragmaParams"] = 6] = "PragmaParams";
+    Type[Type["PragmaBody"] = 7] = "PragmaBody";
+    Type[Type["PragmaEnd"] = 8] = "PragmaEnd";
+    Type[Type["MacroDefinition"] = 9] = "MacroDefinition";
+    Type[Type["ProcedureDefinition"] = 10] = "ProcedureDefinition";
+    Type[Type["FunctionDefinition"] = 11] = "FunctionDefinition";
+    Type[Type["WidgetDefinition"] = 12] = "WidgetDefinition";
+    Type[Type["RulesPragma"] = 13] = "RulesPragma";
+    Type[Type["ImportPragma"] = 14] = "ImportPragma";
+    Type[Type["ParametersPragma"] = 15] = "ParametersPragma";
+    Type[Type["WhitespacePragma"] = 16] = "WhitespacePragma";
+    // === BLOCK ELEMENTS ===
+    Type[Type["Paragraph"] = 17] = "Paragraph";
+    // Headings
+    Type[Type["Heading1"] = 18] = "Heading1";
+    Type[Type["Heading2"] = 19] = "Heading2";
+    Type[Type["Heading3"] = 20] = "Heading3";
+    Type[Type["Heading4"] = 21] = "Heading4";
+    Type[Type["Heading5"] = 22] = "Heading5";
+    Type[Type["Heading6"] = 23] = "Heading6";
+    Type[Type["HeadingMark"] = 24] = "HeadingMark";
+    // Lists
+    Type[Type["BulletList"] = 25] = "BulletList";
+    Type[Type["OrderedList"] = 26] = "OrderedList";
+    Type[Type["DefinitionList"] = 27] = "DefinitionList";
+    Type[Type["ListItem"] = 28] = "ListItem";
+    Type[Type["DefinitionTerm"] = 29] = "DefinitionTerm";
+    Type[Type["DefinitionDescription"] = 30] = "DefinitionDescription";
+    Type[Type["ListMark"] = 31] = "ListMark";
+    // Block quote (multi-line with <<<)
+    Type[Type["BlockQuote"] = 32] = "BlockQuote";
+    Type[Type["QuoteMark"] = 33] = "QuoteMark";
+    // Tables
+    Type[Type["Table"] = 34] = "Table";
+    Type[Type["TableHeader"] = 35] = "TableHeader";
+    Type[Type["TableBody"] = 36] = "TableBody";
+    Type[Type["TableFooter"] = 37] = "TableFooter";
+    Type[Type["TableCaption"] = 38] = "TableCaption";
+    Type[Type["TableRow"] = 39] = "TableRow";
+    Type[Type["TableCell"] = 40] = "TableCell";
+    Type[Type["TableHeaderCell"] = 41] = "TableHeaderCell";
+    Type[Type["TableDelimiter"] = 42] = "TableDelimiter";
+    Type[Type["TableClass"] = 43] = "TableClass";
+    Type[Type["TableMarker"] = 44] = "TableMarker";
+    // Code blocks
+    Type[Type["FencedCode"] = 45] = "FencedCode";
+    Type[Type["CodeMark"] = 46] = "CodeMark";
+    Type[Type["CodeInfo"] = 47] = "CodeInfo";
+    Type[Type["CodeText"] = 48] = "CodeText";
+    // Typed blocks
+    Type[Type["TypedBlock"] = 49] = "TypedBlock";
+    Type[Type["TypedBlockMark"] = 50] = "TypedBlockMark";
+    Type[Type["TypedBlockType"] = 51] = "TypedBlockType";
+    // Other blocks
+    Type[Type["HorizontalRule"] = 52] = "HorizontalRule";
+    Type[Type["CommentBlock"] = 53] = "CommentBlock";
+    Type[Type["CommentMarker"] = 54] = "CommentMarker";
+    // HTML/Widget blocks
+    Type[Type["HTMLBlock"] = 55] = "HTMLBlock";
+    Type[Type["HTMLEndTag"] = 56] = "HTMLEndTag";
+    Type[Type["Widget"] = 57] = "Widget";
+    Type[Type["WidgetEnd"] = 58] = "WidgetEnd";
+    Type[Type["WidgetName"] = 59] = "WidgetName";
+    Type[Type["TagName"] = 60] = "TagName";
+    Type[Type["TagAttributes"] = 61] = "TagAttributes";
+    Type[Type["Attribute"] = 62] = "Attribute";
+    Type[Type["AttributeName"] = 63] = "AttributeName";
+    Type[Type["AttributeValue"] = 64] = "AttributeValue";
+    Type[Type["AttributeString"] = 65] = "AttributeString";
+    Type[Type["AttributeNumber"] = 66] = "AttributeNumber";
+    Type[Type["AttributeIndirect"] = 67] = "AttributeIndirect";
+    Type[Type["AttributeFiltered"] = 68] = "AttributeFiltered";
+    Type[Type["AttributeMacro"] = 69] = "AttributeMacro";
+    Type[Type["AttributeSubstituted"] = 70] = "AttributeSubstituted";
+    Type[Type["SelfClosingMarker"] = 71] = "SelfClosingMarker";
+    // Transclusion blocks
+    Type[Type["TransclusionBlock"] = 72] = "TransclusionBlock";
+    Type[Type["FilteredTransclusionBlock"] = 73] = "FilteredTransclusionBlock";
+    Type[Type["MacroCallBlock"] = 74] = "MacroCallBlock";
+    // === INLINE ELEMENTS ===
+    // Emphasis
+    Type[Type["Bold"] = 75] = "Bold";
+    Type[Type["BoldMark"] = 76] = "BoldMark";
+    Type[Type["Italic"] = 77] = "Italic";
+    Type[Type["ItalicMark"] = 78] = "ItalicMark";
+    Type[Type["Underline"] = 79] = "Underline";
+    Type[Type["UnderlineMark"] = 80] = "UnderlineMark";
+    Type[Type["Strikethrough"] = 81] = "Strikethrough";
+    Type[Type["StrikethroughMark"] = 82] = "StrikethroughMark";
+    Type[Type["Superscript"] = 83] = "Superscript";
+    Type[Type["SuperscriptMark"] = 84] = "SuperscriptMark";
+    Type[Type["Subscript"] = 85] = "Subscript";
+    Type[Type["SubscriptMark"] = 86] = "SubscriptMark";
+    Type[Type["Highlight"] = 87] = "Highlight";
+    Type[Type["HighlightMark"] = 88] = "HighlightMark";
+    // Code
+    Type[Type["InlineCode"] = 89] = "InlineCode";
+    Type[Type["InlineCodeMark"] = 90] = "InlineCodeMark";
+    // Links
+    Type[Type["WikiLink"] = 91] = "WikiLink";
+    Type[Type["WikiLinkMark"] = 92] = "WikiLinkMark";
+    Type[Type["LinkText"] = 93] = "LinkText";
+    Type[Type["LinkSeparator"] = 94] = "LinkSeparator";
+    Type[Type["LinkTarget"] = 95] = "LinkTarget";
+    Type[Type["ExternalLink"] = 96] = "ExternalLink";
+    Type[Type["ExtLinkMark"] = 97] = "ExtLinkMark";
+    Type[Type["ImageLink"] = 98] = "ImageLink";
+    Type[Type["ImageMark"] = 99] = "ImageMark";
+    Type[Type["ImageSource"] = 100] = "ImageSource";
+    Type[Type["ImageWidth"] = 101] = "ImageWidth";
+    Type[Type["ImageHeight"] = 102] = "ImageHeight";
+    Type[Type["ImageClass"] = 103] = "ImageClass";
+    Type[Type["ImageAlt"] = 104] = "ImageAlt";
+    Type[Type["ImageTooltip"] = 105] = "ImageTooltip";
+    Type[Type["CamelCaseLink"] = 106] = "CamelCaseLink";
+    Type[Type["SystemLink"] = 107] = "SystemLink";
+    Type[Type["URLLink"] = 108] = "URLLink";
+    // Transclusions
+    Type[Type["Transclusion"] = 109] = "Transclusion";
+    Type[Type["TransclusionMark"] = 110] = "TransclusionMark";
+    Type[Type["TransclusionTarget"] = 111] = "TransclusionTarget";
+    Type[Type["TransclusionField"] = 112] = "TransclusionField";
+    Type[Type["TransclusionIndex"] = 113] = "TransclusionIndex";
+    Type[Type["TransclusionTemplate"] = 114] = "TransclusionTemplate";
+    Type[Type["FilteredTransclusion"] = 115] = "FilteredTransclusion";
+    Type[Type["FilteredTransclusionMark"] = 116] = "FilteredTransclusionMark";
+    Type[Type["FilterExpression"] = 117] = "FilterExpression";
+    // Macro calls
+    Type[Type["MacroCall"] = 118] = "MacroCall";
+    Type[Type["MacroCallMark"] = 119] = "MacroCallMark";
+    Type[Type["MacroName"] = 120] = "MacroName";
+    Type[Type["MacroParam"] = 121] = "MacroParam";
+    Type[Type["MacroParamName"] = 122] = "MacroParamName";
+    Type[Type["MacroParamValue"] = 123] = "MacroParamValue";
+    // Widgets (inline)
+    Type[Type["InlineWidget"] = 124] = "InlineWidget";
+    // HTML tags (inline)
+    Type[Type["HTMLTag"] = 125] = "HTMLTag";
+    Type[Type["OpenTag"] = 126] = "OpenTag";
+    Type[Type["CloseTag"] = 127] = "CloseTag";
+    // Special
+    Type[Type["Escape"] = 128] = "Escape";
+    Type[Type["Entity"] = 129] = "Entity";
+    Type[Type["HardBreak"] = 130] = "HardBreak";
+    Type[Type["Dash"] = 131] = "Dash";
+    Type[Type["Variable"] = 132] = "Variable";
+    // Text
+    Type[Type["Text"] = 133] = "Text";
+    // Marks (for processing instructions/delimiters that shouldn't render)
+    Type[Type["ProcessingInstruction"] = 134] = "ProcessingInstruction";
+    Type[Type["Mark"] = 135] = "Mark";
 })(Type || (Type = {}));
-// ============================================================================
-// Data Structures
-// ============================================================================
-class LeafBlock {
-	constructor(start, content) {
-		this.start = start;
-		this.content = content;
-		this.marks = [];
-		this.parsers = [];
-	}
-}
-class Line {
-	constructor() {
-		this.text = "";
-		this.baseIndent = 0;
-		this.basePos = 0;
-		this.depth = 0;
-		this.markers = [];
-		this.pos = 0;
-		this.indent = 0;
-		this.next = -1;
-	}
-	forward() {
-		if (this.basePos > this.pos)
-			this.forwardInner();
-	}
-	forwardInner() {
-		let newPos = this.skipSpace(this.basePos);
-		this.indent = this.countIndent(newPos, this.pos, this.indent);
-		this.pos = newPos;
-		this.next = newPos == this.text.length ? -1 : this.text.charCodeAt(newPos);
-	}
-	skipSpace(from) { return skipSpace(this.text, from); }
-	reset(text) {
-		this.text = text;
-		this.baseIndent = this.basePos = this.pos = this.indent = 0;
-		this.forwardInner();
-		this.depth = 1;
-		while (this.markers.length)
-			this.markers.pop();
-	}
-	moveBase(to) {
-		this.basePos = to;
-		this.baseIndent = this.countIndent(to, this.pos, this.indent);
-	}
-	moveBaseColumn(indent) {
-		this.baseIndent = indent;
-		this.basePos = this.findColumn(indent);
-	}
-	addMarker(elt) {
-		this.markers.push(elt);
-	}
-	countIndent(to, from = 0, indent = 0) {
-		for (let i = from; i < to; i++)
-			indent += this.text.charCodeAt(i) == 9 ? 4 - indent % 4 : 1;
-		return indent;
-	}
-	findColumn(goal) {
-		let i = 0;
-		for (let indent = 0; i < this.text.length && indent < goal; i++)
-			indent += this.text.charCodeAt(i) == 9 ? 4 - indent % 4 : 1;
-		return i;
-	}
-	scrub() {
-		if (!this.baseIndent)
-			return this.text;
-		let result = "";
-		for (let i = 0; i < this.basePos; i++)
-			result += " ";
-		return result + this.text.slice(this.basePos);
-	}
-}
-// ============================================================================
-// Utility Functions
-// ============================================================================
-function space(ch) { return ch == 32 || ch == 9 || ch == 10 || ch == 13; }
-function skipSpace(line, i = 0) {
-	while (i < line.length && space(line.charCodeAt(i)))
-		i++;
-	return i;
-}
-function skipSpaceBack(line, i, to) {
-	while (i > to && space(line.charCodeAt(i - 1)))
-		i--;
-	return i;
-}
-// ============================================================================
-// Block-Level Detection Functions
-// ============================================================================
-// TiddlyWiki Heading: ! !! !!! etc.
-function isHeading$1(line) {
-	if (line.next != 33 /* '!' */)
-		return -1;
-	let pos = line.pos + 1;
-	while (pos < line.text.length && line.text.charCodeAt(pos) == 33)
-		pos++;
-	let level = pos - line.pos;
-	// Must have space or end of line after markers
-	if (pos < line.text.length && !space(line.text.charCodeAt(pos)))
-		return -1;
-	return level > 6 ? -1 : level;
-}
-// TiddlyWiki Horizontal Rule: ---
-function isHorizontalRule(line) {
-	if (line.next != 45 /* '-' */)
-		return false;
-	let pos = line.pos;
-	let count = 0;
-	while (pos < line.text.length && line.text.charCodeAt(pos) == 45) {
-		count++;
-		pos++;
-	}
-	// Rest must be whitespace
-	while (pos < line.text.length) {
-		if (!space(line.text.charCodeAt(pos)))
-			return false;
-		pos++;
-	}
-	return count >= 3;
-}
-// TiddlyWiki Fenced Code: ```
-function isFencedCode(line) {
-	if (line.next != 96 /* '`' */)
-		return -1;
-	let pos = line.pos + 1;
-	while (pos < line.text.length && line.text.charCodeAt(pos) == 96)
-		pos++;
-	if (pos < line.pos + 3)
-		return -1;
-	return pos;
-}
-// TiddlyWiki Block Quote: <<<
-function isBlockQuote(line) {
-	if (line.next != 60 /* '<' */)
-		return -1;
-	let pos = line.pos;
-	let count = 0;
-	while (pos < line.text.length && line.text.charCodeAt(pos) == 60) {
-		count++;
-		pos++;
-	}
-	return count >= 3 ? pos : -1;
-}
-// TiddlyWiki Bullet List: * ** ***
-function isBulletList(line) {
-	if (line.next != 42 /* '*' */)
-		return -1;
-	let pos = line.pos + 1;
-	while (pos < line.text.length && line.text.charCodeAt(pos) == 42)
-		pos++;
-	// Must have space after markers
-	if (pos < line.text.length && !space(line.text.charCodeAt(pos)))
-		return -1;
-	return pos - line.pos;
-}
-// TiddlyWiki Numbered List: # ## ###
-function isNumberedList(line) {
-	if (line.next != 35 /* '#' */)
-		return -1;
-	let pos = line.pos + 1;
-	while (pos < line.text.length && line.text.charCodeAt(pos) == 35)
-		pos++;
-	// Must have space after markers
-	if (pos < line.text.length && !space(line.text.charCodeAt(pos)))
-		return -1;
-	return pos - line.pos;
-}
-// TiddlyWiki Definition List: ; term : definition
-function isDefinitionTerm(line) {
-	return line.next == 59; /* ';' */
-}
-function isDefinitionDescription(line) {
-	return line.next == 58; /* ':' */
-}
-// TiddlyWiki Table: |cell|cell|
-function isTable(line) {
-	return line.next == 124; /* '|' */
-}
-// TiddlyWiki Typed Block: $$$.type
-function isTypedBlock(line) {
-	if (line.next != 36 /* '$' */)
-		return null;
-	let pos = line.pos;
-	if (line.text.charCodeAt(pos + 1) != 36 || line.text.charCodeAt(pos + 2) != 36)
-		return null;
-	pos += 3;
-	if (pos < line.text.length && line.text.charCodeAt(pos) == 46 /* '.' */) {
-		let infoStart = pos + 1;
-		while (pos < line.text.length && !space(line.text.charCodeAt(pos)))
-			pos++;
-		return { end: pos, info: line.text.slice(infoStart, pos) };
-	}
-	return { end: pos, info: "" };
-}
-// TiddlyWiki Pragma: \define, \procedure, \function, \widget, \rules, \import, \parameters, \whitespace
-function isPragma(line) {
-	if (line.next != 92 /* '\\' */)
-		return null;
-	let pos = line.pos + 1;
-	let nameStart = pos;
-	while (pos < line.text.length && /[a-zA-Z]/.test(line.text[pos]))
-		pos++;
-	let name = line.text.slice(nameStart, pos).toLowerCase();
-	const pragmaTypes = ['define', 'procedure', 'function', 'widget', 'rules', 'import', 'parameters', 'whitespace'];
-	if (pragmaTypes.includes(name)) {
-		return { type: name, end: pos };
-	}
-	return null;
-}
-// HTML Block detection
-function isHTMLBlock(line) {
-	if (line.next != 60 /* '<' */)
-		return false;
-	let rest = line.text.slice(line.pos);
-	// Check for HTML tags (not widgets which start with <$)
-	return /^<(?![\$\/\$])[a-zA-Z][^>]*>/.test(rest) || /^<\/[a-zA-Z][^>]*>/.test(rest);
-}
-function addCodeText(marks, from, to) {
-	let last = marks.length - 1;
-	if (last >= 0 && marks[last].to == from && marks[last].type == Type.CodeText)
-		marks[last].to = to;
-	else
-		marks.push(elt(Type.CodeText, from, to));
-}
-const DefaultBlockParsers = {
-	Pragma(cx, line) {
-		let pragma = isPragma(line);
-		if (!pragma)
-			return false;
-		let from = cx.lineStart + line.pos;
-		let marks = [elt(Type.PragmaMark, from, from + 1)]; // backslash
-		let nameEnd = cx.lineStart + pragma.end;
-		marks.push(elt(Type.PragmaName, from + 1, nameEnd));
-		// Handle multi-line pragmas (\define, \procedure, \function, \widget)
-		const multiLinePragmas = ['define', 'procedure', 'function', 'widget'];
-		if (multiLinePragmas.includes(pragma.type)) {
-			// Parse until \end
-			let to = cx.lineStart + line.text.length;
-			while (cx.nextLine()) {
-				let trimmed = line.text.trim();
-				if (trimmed === '\\end' || trimmed.startsWith('\\end ')) {
-					marks.push(elt(Type.PragmaMark, cx.lineStart + line.pos, cx.lineStart + line.text.length));
-					to = cx.lineStart + line.text.length;
-					cx.nextLine();
-					break;
-				}
-				to = cx.lineStart + line.text.length;
-			}
-			let nodeType = pragma.type === 'define' ? Type.MacroDefinition :
-				pragma.type === 'procedure' ? Type.ProcedureDefinition :
-					pragma.type === 'function' ? Type.FunctionDefinition :
-						Type.WidgetDefinition;
-			cx.addNode(cx.buffer.writeElements(marks, -from).finish(nodeType, to - from), from);
-		}
-		else {
-			// Single-line pragmas
-			let to = cx.lineStart + line.text.length;
-			let nodeType = pragma.type === 'rules' ? Type.RulesPragma :
-				pragma.type === 'import' ? Type.ImportPragma :
-					pragma.type === 'parameters' ? Type.ParametersPragma :
-						Type.WhitespacePragma;
-			cx.addNode(cx.buffer.writeElements(marks, -from).finish(nodeType, to - from), from);
-			cx.nextLine();
-		}
-		return true;
-	},
-	Heading(cx, line) {
-		let level = isHeading$1(line);
-		if (level < 0)
-			return false;
-		let from = cx.lineStart + line.pos;
-		let headingType = Type.Heading1 - 1 + level;
-		let buf = cx.buffer
-			.write(Type.HeadingMark, 0, level)
-			.writeElements(cx.parser.parseInline(line.text.slice(line.pos + level), from + level), -from);
-		let node = buf.finish(headingType, line.text.length - line.pos);
-		cx.nextLine();
-		cx.addNode(node, from);
-		return true;
-	},
-	HorizontalRule(cx, line) {
-		if (!isHorizontalRule(line))
-			return false;
-		let from = cx.lineStart + line.pos;
-		cx.nextLine();
-		cx.addNode(Type.HorizontalRule, from);
-		return true;
-	},
-	FencedCode(cx, line) {
-		let fenceEnd = isFencedCode(line);
-		if (fenceEnd < 0)
-			return false;
-		let from = cx.lineStart + line.pos;
-		let len = fenceEnd - line.pos;
-		let infoFrom = line.skipSpace(fenceEnd);
-		let infoTo = skipSpaceBack(line.text, line.text.length, infoFrom);
-		let marks = [elt(Type.CodeMark, from, from + len)];
-		if (infoFrom < infoTo)
-			marks.push(elt(Type.CodeInfo, cx.lineStart + infoFrom, cx.lineStart + infoTo));
-		while (cx.nextLine() && line.depth >= cx.stack.length) {
-			let i = line.pos;
-			while (i < line.text.length && line.text.charCodeAt(i) == 96)
-				i++;
-			if (i - line.pos >= len && line.skipSpace(i) == line.text.length) {
-				marks.push(elt(Type.CodeMark, cx.lineStart + line.pos, cx.lineStart + i));
-				cx.nextLine();
-				break;
-			}
-			else {
-				let textStart = cx.lineStart + line.basePos;
-				let textEnd = cx.lineStart + line.text.length;
-				if (textStart < textEnd)
-					addCodeText(marks, textStart, textEnd);
-			}
-		}
-		cx.addNode(cx.buffer.writeElements(marks, -from).finish(Type.FencedCode, cx.prevLineEnd() - from), from);
-		return true;
-	},
-	BlockQuote(cx, line) {
-		let end = isBlockQuote(line);
-		if (end < 0)
-			return false;
-		let from = cx.lineStart + line.pos;
-		let marks = [elt(Type.QuoteMark, from, cx.lineStart + end)];
-		let content = [];
-		// Parse content until closing <<<
-		while (cx.nextLine()) {
-			let closeEnd = isBlockQuote(line);
-			if (closeEnd >= 0) {
-				marks.push(elt(Type.QuoteMark, cx.lineStart + line.pos, cx.lineStart + closeEnd));
-				cx.nextLine();
-				break;
-			}
-			// Parse inline content
-			let lineContent = cx.parser.parseInline(line.text.slice(line.pos), cx.lineStart + line.pos);
-			content.push(...lineContent);
-		}
-		cx.addNode(cx.buffer.writeElements([...marks, ...content], -from)
-			.finish(Type.BlockQuote, cx.prevLineEnd() - from), from);
-		return true;
-	},
-	BulletList(cx, line) {
-		let size = isBulletList(line);
-		if (size < 0)
-			return false;
-		if (cx.block.type != Type.BulletList)
-			cx.startContext(Type.BulletList, line.basePos, line.next);
-		let newBase = line.pos + size + 1;
-		cx.startContext(Type.ListItem, line.basePos, newBase - line.baseIndent);
-		cx.addNode(Type.ListMark, cx.lineStart + line.pos, cx.lineStart + line.pos + size);
-		line.moveBaseColumn(newBase);
-		return null;
-	},
-	NumberedList(cx, line) {
-		let size = isNumberedList(line);
-		if (size < 0)
-			return false;
-		if (cx.block.type != Type.NumberedList)
-			cx.startContext(Type.NumberedList, line.basePos, line.next);
-		let newBase = line.pos + size + 1;
-		cx.startContext(Type.ListItem, line.basePos, newBase - line.baseIndent);
-		cx.addNode(Type.ListMark, cx.lineStart + line.pos, cx.lineStart + line.pos + size);
-		line.moveBaseColumn(newBase);
-		return null;
-	},
-	DefinitionList(cx, line) {
-		if (!isDefinitionTerm(line) && !isDefinitionDescription(line))
-			return false;
-		if (cx.block.type != Type.DefinitionList)
-			cx.startContext(Type.DefinitionList, line.basePos, 0);
-		let isTerm = isDefinitionTerm(line);
-		let nodeType = isTerm ? Type.DefinitionTerm : Type.DefinitionDescription;
-		cx.startContext(nodeType, line.basePos, 1);
-		cx.addNode(Type.ListMark, cx.lineStart + line.pos, cx.lineStart + line.pos + 1);
-		line.moveBase(line.pos + 1);
-		return null;
-	},
-	Table(cx, line) {
-		if (!isTable(line))
-			return false;
-		let from = cx.lineStart + line.pos;
-		let rows = [];
-		let isHeader = true;
-		do {
-			let rowFrom = cx.lineStart + line.pos;
-			let cells = [];
-			let text = line.text;
-			let pos = line.pos;
-			while (pos < text.length) {
-				if (text.charCodeAt(pos) == 124 /* '|' */) {
-					cells.push(elt(Type.TableDelimiter, cx.lineStart + pos, cx.lineStart + pos + 1));
-					pos++;
-					let cellStart = pos;
-					// Find cell content
-					while (pos < text.length && text.charCodeAt(pos) != 124)
-						pos++;
-					if (pos > cellStart) {
-						let cellContent = text.slice(cellStart, pos).trim();
-						if (cellContent) {
-							let cellType = isHeader ? Type.TableHeader : Type.TableCell;
-							let inline = cx.parser.parseInline(cellContent, cx.lineStart + cellStart);
-							cells.push(elt(cellType, cx.lineStart + cellStart, cx.lineStart + pos, inline));
-						}
-					}
-				}
-				else {
-					pos++;
-				}
-			}
-			if (cells.length > 0) {
-				rows.push(elt(Type.TableRow, rowFrom, cx.lineStart + line.text.length, cells));
-			}
-			// Check for header separator |---|---|
-			if (isHeader && /^\|[-:|\s]+\|$/.test(text.slice(line.pos))) {
-				isHeader = false;
-			}
-			else {
-				isHeader = false;
-			}
-		} while (cx.nextLine() && isTable(line));
-		cx.addNode(cx.buffer.writeElements(rows, -from).finish(Type.Table, cx.prevLineEnd() - from), from);
-		return true;
-	},
-	TypedBlock(cx, line) {
-		let typed = isTypedBlock(line);
-		if (!typed)
-			return false;
-		let from = cx.lineStart + line.pos;
-		let marks = [elt(Type.TypedBlockMark, from, cx.lineStart + typed.end)];
-		if (typed.info) {
-			marks.push(elt(Type.TypedBlockInfo, cx.lineStart + 3, cx.lineStart + typed.end));
-		}
-		// Parse until closing $$$
-		while (cx.nextLine()) {
-			if (line.text.trim() === '$$$') {
-				marks.push(elt(Type.TypedBlockMark, cx.lineStart + line.pos, cx.lineStart + line.text.length));
-				cx.nextLine();
-				break;
-			}
-			let textStart = cx.lineStart + line.pos;
-			let textEnd = cx.lineStart + line.text.length;
-			if (textStart < textEnd)
-				addCodeText(marks, textStart, textEnd);
-		}
-		cx.addNode(cx.buffer.writeElements(marks, -from).finish(Type.TypedBlock, cx.prevLineEnd() - from), from);
-		return true;
-	},
-	HTMLBlock(cx, line) {
-		if (!isHTMLBlock(line))
-			return false;
-		let from = cx.lineStart + line.pos;
-		let depth = 1;
-		line.text.slice(line.pos);
-		// Simple HTML block handling - find matching close tag or empty line
-		while (cx.nextLine() && depth > 0) {
-			if (line.text.trim() === '')
-				break;
-			// Count opening and closing tags
-			let matches = line.text.match(/<[a-zA-Z][^>]*>/g) || [];
-			let closes = line.text.match(/<\/[a-zA-Z][^>]*>/g) || [];
-			depth += matches.length - closes.length;
-		}
-		cx.addNode(Type.HTMLBlock, from, cx.prevLineEnd());
-		return true;
-	}
-};
-// Skip markup handlers for composite blocks
-function skipForList(bl, cx, line) {
-	if (line.pos == line.text.length ||
-		(bl != cx.block && line.indent >= cx.stack[line.depth + 1].value + line.baseIndent))
-		return true;
-	if (line.indent >= line.baseIndent + 4)
-		return false;
-	let size = bl.type == Type.NumberedList ? isNumberedList(line) : isBulletList(line);
-	return size > 0;
-}
-const DefaultSkipMarkup = {
-	[Type.BlockQuote](bl, cx, line) {
-		// Block quotes don't need continuation markers in TiddlyWiki
-		return true;
-	},
-	[Type.ListItem](bl, _cx, line) {
-		if (line.indent < line.baseIndent + bl.value && line.next > -1)
-			return false;
-		line.moveBaseColumn(line.baseIndent + bl.value);
-		return true;
-	},
-	[Type.BulletList]: skipForList,
-	[Type.NumberedList]: skipForList,
-	[Type.DefinitionList](bl, cx, line) {
-		return isDefinitionTerm(line) || isDefinitionDescription(line);
-	},
-	[Type.DefinitionTerm]() { return true; },
-	[Type.DefinitionDescription]() { return true; },
-	[Type.Document]() { return true; }
-};
-// Leaf block parsers
-const DefaultLeafBlocks = {
-	Pragma() { return null; },
-	Heading() { return null; },
-	HorizontalRule() { return null; },
-	FencedCode() { return null; },
-	BlockQuote() { return null; },
-	BulletList() { return null; },
-	NumberedList() { return null; },
-	DefinitionList() { return null; },
-	Table() { return null; },
-	TypedBlock() { return null; },
-	HTMLBlock() { return null; }
-};
-const DefaultEndLeaf = [
-	(_, line) => isHeading$1(line) >= 0,
-	(_, line) => isFencedCode(line) >= 0,
-	(_, line) => isBlockQuote(line) >= 0,
-	(_, line) => isBulletList(line) >= 0,
-	(_, line) => isNumberedList(line) >= 0,
-	(_, line) => isHorizontalRule(line),
-	(_, line) => isTable(line),
-	(_, line) => isTypedBlock(line) != null,
-	(_, line) => isPragma(line) != null
-];
-// ============================================================================
-// Inline Parsers
-// ============================================================================
-let Punctuation = /[!"#$%&'()*+,\-.\/:;<=>?@\[\\\]^_`{|}~\xA1\u2010-\u2027]/;
-try {
-	Punctuation = new RegExp("[\\p{S}|\\p{P}]", "u");
-}
-catch (_) { }
-class InlineDelimiter {
-	constructor(type, from, to, side) {
-		this.type = type;
-		this.from = from;
-		this.to = to;
-		this.side = side;
-	}
-}
-// Delimiter types for TiddlyWiki formatting
-const BoldDelim = { resolve: "Bold", mark: "EmphasisMark" };
-const ItalicDelim = { resolve: "Italic", mark: "EmphasisMark" };
-const UnderlineDelim = { resolve: "Underline", mark: "EmphasisMark" };
-const StrikethroughDelim = { resolve: "Strikethrough", mark: "EmphasisMark" };
-const SuperscriptDelim = { resolve: "Superscript", mark: "EmphasisMark" };
-const SubscriptDelim = { resolve: "Subscript", mark: "EmphasisMark" };
-const DefaultInline = {
-	// Escape: ~ before wikitext characters
-	Escape(cx, next, start) {
-		if (next != 126 /* '~' */)
-			return -1;
-		let escaped = cx.char(start + 1);
-		if (escaped < 0)
-			return -1;
-		// TiddlyWiki escape prevents wikitext interpretation
-		return cx.append(elt(Type.Escape, start, start + 2));
-	},
-	// HTML Entity: &entity;
-	Entity(cx, next, start) {
-		if (next != 38 /* '&' */)
-			return -1;
-		let m = /^(?:#\d+|#x[a-f\d]+|\w+);/i.exec(cx.slice(start + 1, start + 31));
-		return m ? cx.append(elt(Type.Entity, start, start + 1 + m[0].length)) : -1;
-	},
-	// Inline Code: `code`
-	InlineCode(cx, next, start) {
-		if (next != 96 /* '`' */)
-			return -1;
-		let pos = start + 1;
-		while (pos < cx.end && cx.char(pos) == 96)
-			pos++;
-		let size = pos - start;
-		let curSize = 0;
-		for (; pos < cx.end; pos++) {
-			if (cx.char(pos) == 96) {
-				curSize++;
-				if (curSize == size && cx.char(pos + 1) != 96)
-					return cx.append(elt(Type.InlineCode, start, pos + 1, [
-						elt(Type.CodeMark, start, start + size),
-						elt(Type.CodeMark, pos + 1 - size, pos + 1)
-					]));
-			}
-			else {
-				curSize = 0;
-			}
-		}
-		return -1;
-	},
-	// Bold: ''text''
-	Bold(cx, next, start) {
-		if (next != 39 /* '\'' */ || cx.char(start + 1) != 39)
-			return -1;
-		let after = cx.slice(start + 2, start + 3);
-		let sBefore = start == cx.offset || /\s/.test(cx.slice(start - 1, start));
-		let sAfter = /\s|^$/.test(after);
-		return cx.append(new InlineDelimiter(BoldDelim, start, start + 2, (!sAfter ? 1 /* Mark.Open */ : 0 /* Mark.None */) | (!sBefore ? 2 /* Mark.Close */ : 0 /* Mark.None */)));
-	},
-	// Italic: //text//
-	Italic(cx, next, start) {
-		if (next != 47 /* '/' */ || cx.char(start + 1) != 47)
-			return -1;
-		let after = cx.slice(start + 2, start + 3);
-		let sBefore = start == cx.offset || /\s/.test(cx.slice(start - 1, start));
-		let sAfter = /\s|^$/.test(after);
-		return cx.append(new InlineDelimiter(ItalicDelim, start, start + 2, (!sAfter ? 1 /* Mark.Open */ : 0 /* Mark.None */) | (!sBefore ? 2 /* Mark.Close */ : 0 /* Mark.None */)));
-	},
-	// Underline: __text__
-	Underline(cx, next, start) {
-		if (next != 95 /* '_' */ || cx.char(start + 1) != 95)
-			return -1;
-		let after = cx.slice(start + 2, start + 3);
-		let sBefore = start == cx.offset || /\s/.test(cx.slice(start - 1, start));
-		let sAfter = /\s|^$/.test(after);
-		return cx.append(new InlineDelimiter(UnderlineDelim, start, start + 2, (!sAfter ? 1 /* Mark.Open */ : 0 /* Mark.None */) | (!sBefore ? 2 /* Mark.Close */ : 0 /* Mark.None */)));
-	},
-	// Strikethrough: ~~text~~
-	Strikethrough(cx, next, start) {
-		if (next != 126 /* '~' */ || cx.char(start + 1) != 126)
-			return -1;
-		// Check it's not an escape (single ~)
-		if (cx.char(start + 2) == 126)
-			return -1; // ~~~ is not strikethrough
-		let after = cx.slice(start + 2, start + 3);
-		let sBefore = start == cx.offset || /\s/.test(cx.slice(start - 1, start));
-		let sAfter = /\s|^$/.test(after);
-		return cx.append(new InlineDelimiter(StrikethroughDelim, start, start + 2, (!sAfter ? 1 /* Mark.Open */ : 0 /* Mark.None */) | (!sBefore ? 2 /* Mark.Close */ : 0 /* Mark.None */)));
-	},
-	// Superscript: ^^text^^
-	Superscript(cx, next, start) {
-		if (next != 94 /* '^' */ || cx.char(start + 1) != 94)
-			return -1;
-		let after = cx.slice(start + 2, start + 3);
-		let sBefore = start == cx.offset || /\s/.test(cx.slice(start - 1, start));
-		let sAfter = /\s|^$/.test(after);
-		return cx.append(new InlineDelimiter(SuperscriptDelim, start, start + 2, (!sAfter ? 1 /* Mark.Open */ : 0 /* Mark.None */) | (!sBefore ? 2 /* Mark.Close */ : 0 /* Mark.None */)));
-	},
-	// Subscript: ,,text,,
-	Subscript(cx, next, start) {
-		if (next != 44 /* ',' */ || cx.char(start + 1) != 44)
-			return -1;
-		let after = cx.slice(start + 2, start + 3);
-		let sBefore = start == cx.offset || /\s/.test(cx.slice(start - 1, start));
-		let sAfter = /\s|^$/.test(after);
-		return cx.append(new InlineDelimiter(SubscriptDelim, start, start + 2, (!sAfter ? 1 /* Mark.Open */ : 0 /* Mark.None */) | (!sBefore ? 2 /* Mark.Close */ : 0 /* Mark.None */)));
-	},
-	// WikiLink: [[link]] or [[text|link]]
-	WikiLink(cx, next, start) {
-		if (next != 91 /* '[' */ || cx.char(start + 1) != 91)
-			return -1;
-		let pos = start + 2;
-		let hasText = false;
-		let textEnd = pos;
-		// Find closing ]]
-		while (pos < cx.end) {
-			let ch = cx.char(pos);
-			if (ch == 124 /* '|' */ && !hasText) {
-				hasText = true;
-				textEnd = pos;
-			}
-			else if (ch == 93 /* ']' */ && cx.char(pos + 1) == 93) {
-				let children = [elt(Type.LinkMark, start, start + 2)];
-				if (hasText) {
-					children.push(elt(Type.LinkText, start + 2, textEnd));
-					children.push(elt(Type.LinkMark, textEnd, textEnd + 1));
-					children.push(elt(Type.LinkTarget, textEnd + 1, pos));
-				}
-				else {
-					children.push(elt(Type.LinkTarget, start + 2, pos));
-				}
-				children.push(elt(Type.LinkMark, pos, pos + 2));
-				return cx.append(elt(Type.WikiLink, start, pos + 2, children));
-			}
-			pos++;
-		}
-		return -1;
-	},
-	// External Link: [ext[text|url]] or [img[tooltip|url]]
-	ExternalLink(cx, next, start) {
-		if (next != 91 /* '[' */)
-			return -1;
-		let pos = start + 1;
-		let type = "";
-		// Check for ext[ or img[
-		if (cx.slice(pos, pos + 4) === "ext[") {
-			type = "ext";
-			pos += 4;
-		}
-		else if (cx.slice(pos, pos + 4) === "img[") {
-			type = "img";
-			pos += 4;
-		}
-		else {
-			return -1;
-		}
-		let textStart = pos;
-		let textEnd = pos;
-		let hasText = false;
-		// Find closing ]]
-		while (pos < cx.end) {
-			let ch = cx.char(pos);
-			if (ch == 124 /* '|' */ && !hasText) {
-				hasText = true;
-				textEnd = pos;
-			}
-			else if (ch == 93 /* ']' */ && cx.char(pos + 1) == 93) {
-				let children = [elt(Type.LinkMark, start, start + 1 + type.length + 1)];
-				if (hasText) {
-					children.push(elt(Type.LinkText, textStart, textEnd));
-					children.push(elt(Type.LinkMark, textEnd, textEnd + 1));
-					children.push(elt(Type.URL, textEnd + 1, pos));
-				}
-				else {
-					children.push(elt(Type.URL, textStart, pos));
-				}
-				children.push(elt(Type.LinkMark, pos, pos + 2));
-				let nodeType = type === "img" ? Type.ImageLink : Type.ExternalLink;
-				return cx.append(elt(nodeType, start, pos + 2, children));
-			}
-			pos++;
-		}
-		return -1;
-	},
-	// Transclusion: {{tiddler}} or {{tiddler!!field}} or {{tiddler##index}}
-	Transclusion(cx, next, start) {
-		if (next != 123 /* '{' */ || cx.char(start + 1) != 123)
-			return -1;
-		// Check for filtered transclusion {{{ }}}
-		if (cx.char(start + 2) == 123) {
-			return -1; // Let FilteredTransclusion handle it
-		}
-		let pos = start + 2;
-		// Find closing }}
-		while (pos < cx.end) {
-			if (cx.char(pos) == 125 /* '}' */ && cx.char(pos + 1) == 125) {
-				let children = [
-					elt(Type.LinkMark, start, start + 2),
-					elt(Type.TransclusionTarget, start + 2, pos),
-					elt(Type.LinkMark, pos, pos + 2)
-				];
-				return cx.append(elt(Type.Transclusion, start, pos + 2, children));
-			}
-			pos++;
-		}
-		return -1;
-	},
-	// Filtered Transclusion: {{{ filter }}}
-	FilteredTransclusion(cx, next, start) {
-		if (next != 123 /* '{' */ || cx.char(start + 1) != 123 || cx.char(start + 2) != 123)
-			return -1;
-		let pos = start + 3;
-		// Find closing }}}
-		while (pos < cx.end) {
-			if (cx.char(pos) == 125 /* '}' */ && cx.char(pos + 1) == 125 && cx.char(pos + 2) == 125) {
-				let children = [
-					elt(Type.LinkMark, start, start + 3),
-					elt(Type.FilterExpression, start + 3, pos),
-					elt(Type.LinkMark, pos, pos + 3)
-				];
-				return cx.append(elt(Type.FilteredTransclusion, start, pos + 3, children));
-			}
-			pos++;
-		}
-		return -1;
-	},
-	// Macro Call: <<macroname params>>
-	MacroCall(cx, next, start) {
-		if (next != 60 /* '<' */ || cx.char(start + 1) != 60)
-			return -1;
-		let pos = start + 2;
-		let nameStart = pos;
-		// Skip whitespace
-		while (pos < cx.end && space(cx.char(pos)))
-			pos++;
-		nameStart = pos;
-		// Read macro name
-		while (pos < cx.end && /[\w\-\$]/.test(cx.slice(pos, pos + 1)))
-			pos++;
-		let nameEnd = pos;
-		if (nameEnd == nameStart)
-			return -1; // No name
-		// Find closing >>
-		let depth = 1;
-		while (pos < cx.end && depth > 0) {
-			if (cx.char(pos) == 60 && cx.char(pos + 1) == 60)
-				depth++;
-			else if (cx.char(pos) == 62 && cx.char(pos + 1) == 62)
-				depth--;
-			if (depth > 0)
-				pos++;
-		}
-		if (depth != 0)
-			return -1;
-		let children = [
-			elt(Type.LinkMark, start, start + 2),
-			elt(Type.MacroName, nameStart, nameEnd)
-		];
-		if (nameEnd < pos) {
-			children.push(elt(Type.MacroParams, nameEnd, pos));
-		}
-		children.push(elt(Type.LinkMark, pos, pos + 2));
-		return cx.append(elt(Type.MacroCall, start, pos + 2, children));
-	},
-	// Widget: <$widget attr="value">...</$widget> or <$widget/>
-	Widget(cx, next, start) {
-		if (next != 60 /* '<' */ || cx.char(start + 1) != 36 /* '$' */)
-			return -1;
-		let pos = start + 2;
-		let nameStart = pos;
-		// Read widget name
-		while (pos < cx.end && /[\w\-]/.test(cx.slice(pos, pos + 1)))
-			pos++;
-		let nameEnd = pos;
-		if (nameEnd == nameStart)
-			return -1; // No name
-		// Parse attributes until > or />
-		let attrs = [];
-		while (pos < cx.end) {
-			// Skip whitespace
-			while (pos < cx.end && space(cx.char(pos)))
-				pos++;
-			if (cx.char(pos) == 47 /* '/' */ && cx.char(pos + 1) == 62 /* '>' */) {
-				// Self-closing
-				let children = [
-					elt(Type.LinkMark, start, start + 2),
-					elt(Type.WidgetName, nameStart, nameEnd),
-					...attrs,
-					elt(Type.LinkMark, pos, pos + 2)
-				];
-				return cx.append(elt(Type.Widget, start, pos + 2, children));
-			}
-			if (cx.char(pos) == 62 /* '>' */) {
-				let depth = 1;
-				pos++;
-				while (pos < cx.end && depth > 0) {
-					if (cx.char(pos) == 60 /* '<' */) {
-						if (cx.char(pos + 1) == 36 /* '$' */) {
-							// Check if it's the same widget name
-							let checkPos = pos + 2;
-							while (checkPos < cx.end && /[\w\-]/.test(cx.slice(checkPos, checkPos + 1)))
-								checkPos++;
-							depth++;
-						}
-						else if (cx.char(pos + 1) == 47 /* '/' */ && cx.char(pos + 2) == 36 /* '$' */) {
-							// Closing tag
-							let closeNameStart = pos + 3;
-							let closeNameEnd = closeNameStart;
-							while (closeNameEnd < cx.end && /[\w\-]/.test(cx.slice(closeNameEnd, closeNameEnd + 1)))
-								closeNameEnd++;
-							let closeName = cx.slice(closeNameStart, closeNameEnd);
-							let openName = cx.slice(nameStart, nameEnd);
-							if (closeName === openName) {
-								depth--;
-								if (depth == 0) {
-									// Find the >
-									while (closeNameEnd < cx.end && cx.char(closeNameEnd) != 62)
-										closeNameEnd++;
-									let children = [
-										elt(Type.LinkMark, start, start + 2),
-										elt(Type.WidgetName, nameStart, nameEnd),
-										...attrs,
-										elt(Type.LinkMark, pos, pos + 1),
-										elt(Type.LinkMark, pos, closeNameEnd + 1)
-									];
-									return cx.append(elt(Type.Widget, start, closeNameEnd + 1, children));
-								}
-							}
-						}
-					}
-					pos++;
-				}
-				return -1;
-			}
-			// Try to parse attribute
-			let attrStart = pos;
-			while (pos < cx.end && /[\w\-]/.test(cx.slice(pos, pos + 1)))
-				pos++;
-			if (pos > attrStart) {
-				// Check for =
-				while (pos < cx.end && space(cx.char(pos)))
-					pos++;
-				if (cx.char(pos) == 61 /* '=' */) {
-					pos++;
-					while (pos < cx.end && space(cx.char(pos)))
-						pos++;
-					// Parse value
-					let quote = cx.char(pos);
-					if (quote == 34 /* '"' */ || quote == 39 /* '\'' */) {
-						pos++;
-						while (pos < cx.end && cx.char(pos) != quote)
-							pos++;
-						if (cx.char(pos) == quote)
-							pos++;
-					}
-					else if (quote == 123 /* '{' */ && cx.char(pos + 1) == 123) {
-						// Indirect attribute {{ref}}
-						pos += 2;
-						while (pos < cx.end && !(cx.char(pos) == 125 && cx.char(pos + 1) == 125))
-							pos++;
-						if (cx.char(pos) == 125)
-							pos += 2;
-					}
-					else if (quote == 60 /* '<' */ && cx.char(pos + 1) == 60) {
-						// Macro attribute <<macro>>
-						pos += 2;
-						let depth = 1;
-						while (pos < cx.end && depth > 0) {
-							if (cx.char(pos) == 60 && cx.char(pos + 1) == 60)
-								depth++;
-							else if (cx.char(pos) == 62 && cx.char(pos + 1) == 62)
-								depth--;
-							pos++;
-						}
-						pos++;
-					}
-					else {
-						// Unquoted value
-						while (pos < cx.end && !space(cx.char(pos)) && cx.char(pos) != 62 && cx.char(pos) != 47)
-							pos++;
-					}
-				}
-				attrs.push(elt(Type.WidgetAttr, attrStart, pos));
-			}
-			else {
-				break;
-			}
-		}
-		return -1;
-	},
-	// Variable: $(varname)$
-	Variable(cx, next, start) {
-		if (next != 36 /* '$' */ || cx.char(start + 1) != 40 /* '(' */)
-			return -1;
-		let pos = start + 2;
-		// Find closing )$
-		while (pos < cx.end) {
-			if (cx.char(pos) == 41 /* ')' */ && cx.char(pos + 1) == 36 /* '$' */) {
-				return cx.append(elt(Type.Variable, start, pos + 2));
-			}
-			pos++;
-		}
-		return -1;
-	},
-	// HTML Tag
-	HTMLTag(cx, next, start) {
-		if (next != 60 /* '<' */)
-			return -1;
-		// Don't match widgets
-		if (cx.char(start + 1) == 36 /* '$' */)
-			return -1;
-		let after = cx.slice(start + 1, cx.end);
-		let m = /^(?:\/\s*[a-zA-Z][\w-]*\s*>|[a-zA-Z][\w-]*(?:\s+[a-zA-Z:_][\w-.]*(?:\s*=\s*(?:[^\s"'=<>`]+|'[^']*'|"[^"]*"))?)*\s*\/?>)/.exec(after);
-		if (!m)
-			return -1;
-		return cx.append(elt(Type.HTMLTag, start, start + 1 + m[0].length));
-	},
-	// Hard Break
-	HardBreak(cx, next, start) {
-		if (next == 60 /* '<' */) {
-			let after = cx.slice(start, start + 4).toLowerCase();
-			if (after === "<br>" || after === "<br/") {
-				let end = start + 4;
-				if (cx.char(end) == 62)
-					end++;
-				return cx.append(elt(Type.HardBreak, start, end));
-			}
-		}
-		return -1;
-	}
-};
-// ============================================================================
-// Element and Buffer Classes
-// ============================================================================
-const none = [];
-class Buffer {
-	constructor(nodeSet) {
-		this.nodeSet = nodeSet;
-		this.content = [];
-		this.nodes = [];
-	}
-	write(type, from, to, children = 0) {
-		this.content.push(type, from, to, 4 + children * 4);
-		return this;
-	}
-	writeElements(elts, offset = 0) {
-		for (let e of elts)
-			e.writeTo(this, offset);
-		return this;
-	}
-	finish(type, length) {
-		return common.Tree.build({
-			buffer: this.content,
-			nodeSet: this.nodeSet,
-			reused: this.nodes,
-			topID: type,
-			length
-		});
-	}
-}
-class Element {
-	constructor(type, from, to, children = none) {
-		this.type = type;
-		this.from = from;
-		this.to = to;
-		this.children = children;
-	}
-	writeTo(buf, offset) {
-		let startOff = buf.content.length;
-		buf.writeElements(this.children, offset);
-		buf.content.push(this.type, this.from + offset, this.to + offset, buf.content.length + 4 - startOff);
-	}
-	toTree(nodeSet) {
-		return new Buffer(nodeSet).writeElements(this.children, -this.from).finish(this.type, this.to - this.from);
-	}
-}
-class TreeElement {
-	constructor(tree, from) {
-		this.tree = tree;
-		this.from = from;
-	}
-	get to() { return this.from + this.tree.length; }
-	get type() { return this.tree.type.id; }
-	get children() { return none; }
-	writeTo(buf, offset) {
-		buf.nodes.push(this.tree);
-		buf.content.push(buf.nodes.length - 1, this.from + offset, this.to + offset, -1);
-	}
-	toTree() { return this.tree; }
-}
-function elt(type, from, to, children) {
-	return new Element(type, from, to, children);
-}
-// ============================================================================
-// Inline Context
-// ============================================================================
-class InlineContext {
-	constructor(parser, text, offset) {
-		this.parser = parser;
-		this.text = text;
-		this.offset = offset;
-		this.parts = [];
-	}
-	char(pos) { return pos >= this.end ? -1 : this.text.charCodeAt(pos - this.offset); }
-	get end() { return this.offset + this.text.length; }
-	slice(from, to) { return this.text.slice(from - this.offset, to - this.offset); }
-	append(elt) {
-		this.parts.push(elt);
-		return elt.to;
-	}
-	addDelimiter(type, from, to, open, close) {
-		return this.append(new InlineDelimiter(type, from, to, (open ? 1 /* Mark.Open */ : 0 /* Mark.None */) | (close ? 2 /* Mark.Close */ : 0 /* Mark.None */)));
-	}
-	addElement(elt) {
-		return this.append(elt);
-	}
-	resolveMarkers(from) {
-		for (let i = from; i < this.parts.length; i++) {
-			let close = this.parts[i];
-			if (!(close instanceof InlineDelimiter && close.type.resolve && (close.side & 2 /* Mark.Close */)))
-				continue;
-			close.to - close.from;
-			let open, j = i - 1;
-			for (; j >= from; j--) {
-				let part = this.parts[j];
-				if (part instanceof InlineDelimiter && (part.side & 1 /* Mark.Open */) && part.type == close.type) {
-					open = part;
-					break;
-				}
-			}
-			if (!open)
-				continue;
-			let type = close.type.resolve, content = [];
-			let start = open.from, end = close.to;
-			if (open.type.mark)
-				content.push(this.elt(open.type.mark, start, open.to));
-			for (let k = j + 1; k < i; k++) {
-				if (this.parts[k] instanceof Element)
-					content.push(this.parts[k]);
-				this.parts[k] = null;
-			}
-			if (close.type.mark)
-				content.push(this.elt(close.type.mark, close.from, end));
-			let element = this.elt(type, start, end, content);
-			this.parts[j] = null;
-			this.parts[i] = element;
-		}
-		let result = [];
-		for (let i = from; i < this.parts.length; i++) {
-			let part = this.parts[i];
-			if (part instanceof Element)
-				result.push(part);
-		}
-		return result;
-	}
-	skipSpace(from) { return skipSpace(this.text, from - this.offset) + this.offset; }
-	elt(type, from, to, children) {
-		if (typeof type == "string")
-			return elt(this.parser.getNodeType(type), from, to, children);
-		return new TreeElement(type, from);
-	}
-}
-// ============================================================================
-// Block Context
-// ============================================================================
-class BlockContext {
-	constructor(parser, input, fragments, ranges) {
-		this.parser = parser;
-		this.input = input;
-		this.ranges = ranges;
-		this.line = new Line();
-		this.atEnd = false;
-		this.reusePlaceholders = new Map;
-		this.stoppedAt = null;
-		this.rangeI = 0;
-		this.to = ranges[ranges.length - 1].to;
-		this.lineStart = this.absoluteLineStart = this.absoluteLineEnd = ranges[0].from;
-		this.block = CompositeBlock.create(Type.Document, 0, this.lineStart, 0, 0);
-		this.stack = [this.block];
-		this.fragments = fragments.length ? new FragmentCursor(fragments, input) : null;
-		this.readLine();
-	}
-	get parsedPos() {
-		return this.absoluteLineStart;
-	}
-	advance() {
-		if (this.stoppedAt != null && this.absoluteLineStart > this.stoppedAt)
-			return this.finish();
-		let { line } = this;
-		for (; ;) {
-			for (let markI = 0; ;) {
-				let next = line.depth < this.stack.length ? this.stack[this.stack.length - 1] : null;
-				while (markI < line.markers.length && (!next || line.markers[markI].from < next.end)) {
-					let mark = line.markers[markI++];
-					this.addNode(mark.type, mark.from, mark.to);
-				}
-				if (!next)
-					break;
-				this.finishContext();
-			}
-			if (line.pos < line.text.length)
-				break;
-			if (!this.nextLine())
-				return this.finish();
-		}
-		if (this.fragments && this.reuseFragment(line.basePos))
-			return null;
-		start: for (; ;) {
-			for (let type of this.parser.blockParsers)
-				if (type) {
-					let result = type(this, line);
-					if (result != false) {
-						if (result == true)
-							return null;
-						line.forward();
-						continue start;
-					}
-				}
-			break;
-		}
-		let leaf = new LeafBlock(this.lineStart + line.pos, line.text.slice(line.pos));
-		for (let parse of this.parser.leafBlockParsers)
-			if (parse) {
-				let parser = parse(this, leaf);
-				if (parser)
-					leaf.parsers.push(parser);
-			}
-		lines: while (this.nextLine()) {
-			if (line.pos == line.text.length)
-				break;
-			if (line.indent < line.baseIndent + 4) {
-				for (let stop of this.parser.endLeafBlock)
-					if (stop(this, line, leaf))
-						break lines;
-			}
-			for (let parser of leaf.parsers)
-				if (parser.nextLine(this, line, leaf))
-					return null;
-			leaf.content += "\n" + line.scrub();
-			for (let m of line.markers)
-				leaf.marks.push(m);
-		}
-		this.finishLeaf(leaf);
-		return null;
-	}
-	stopAt(pos) {
-		if (this.stoppedAt != null && this.stoppedAt < pos)
-			throw new RangeError("Can't move stoppedAt forward");
-		this.stoppedAt = pos;
-	}
-	reuseFragment(start) {
-		if (!this.fragments.moveTo(this.absoluteLineStart + start, this.absoluteLineStart) ||
-			!this.fragments.matches(this.block.hash))
-			return false;
-		let taken = this.fragments.takeNodes(this);
-		if (!taken)
-			return false;
-		this.absoluteLineStart += taken;
-		this.lineStart = toRelative(this.absoluteLineStart, this.ranges);
-		this.moveRangeI();
-		if (this.absoluteLineStart < this.to) {
-			this.lineStart++;
-			this.absoluteLineStart++;
-			this.readLine();
-		}
-		else {
-			this.atEnd = true;
-			this.readLine();
-		}
-		return true;
-	}
-	get depth() {
-		return this.stack.length;
-	}
-	parentType(depth = this.depth - 1) {
-		return this.parser.nodeSet.types[this.stack[depth].type];
-	}
-	nextLine() {
-		this.lineStart += this.line.text.length;
-		if (this.absoluteLineEnd >= this.to) {
-			this.absoluteLineStart = this.absoluteLineEnd;
-			this.atEnd = true;
-			this.readLine();
-			return false;
-		}
-		else {
-			this.lineStart++;
-			this.absoluteLineStart = this.absoluteLineEnd + 1;
-			this.moveRangeI();
-			this.readLine();
-			return true;
-		}
-	}
-	moveRangeI() {
-		while (this.rangeI < this.ranges.length - 1 && this.absoluteLineStart >= this.ranges[this.rangeI].to) {
-			this.rangeI++;
-			this.absoluteLineStart = Math.max(this.absoluteLineStart, this.ranges[this.rangeI].from);
-		}
-	}
-	scanLine(start) {
-		let r = { text: "", end: start };
-		if (start >= this.to) {
-			r.text = "";
-		}
-		else {
-			r.text = this.lineChunkAt(start);
-			r.end += r.text.length;
-			if (this.ranges.length > 1) {
-				let textOffset = this.absoluteLineStart, rangeI = this.rangeI;
-				while (this.ranges[rangeI].to < r.end) {
-					rangeI++;
-					let nextFrom = this.ranges[rangeI].from;
-					let after = this.lineChunkAt(nextFrom);
-					r.end = nextFrom + after.length;
-					r.text = r.text.slice(0, this.ranges[rangeI - 1].to - textOffset) + after;
-					textOffset = r.end - r.text.length;
-				}
-			}
-		}
-		return r;
-	}
-	readLine() {
-		let { line } = this, { text, end } = this.scanLine(this.absoluteLineStart);
-		this.absoluteLineEnd = end;
-		line.reset(text);
-		for (; line.depth < this.stack.length; line.depth++) {
-			let cx = this.stack[line.depth], handler = this.parser.skipContextMarkup[cx.type];
-			if (!handler)
-				throw new Error("Unhandled block context " + Type[cx.type]);
-			let marks = this.line.markers.length;
-			if (!handler(cx, this, line)) {
-				if (this.line.markers.length > marks)
-					cx.end = this.line.markers[this.line.markers.length - 1].to;
-				line.forward();
-				break;
-			}
-			line.forward();
-		}
-	}
-	lineChunkAt(pos) {
-		let next = this.input.chunk(pos), text;
-		if (!this.input.lineChunks) {
-			let eol = next.indexOf("\n");
-			text = eol < 0 ? next : next.slice(0, eol);
-		}
-		else {
-			text = next == "\n" ? "" : next;
-		}
-		return pos + text.length > this.to ? text.slice(0, this.to - pos) : text;
-	}
-	prevLineEnd() { return this.atEnd ? this.lineStart : this.lineStart - 1; }
-	startContext(type, start, value = 0) {
-		this.block = CompositeBlock.create(type, value, this.lineStart + start, this.block.hash, this.lineStart + this.line.text.length);
-		this.stack.push(this.block);
-	}
-	startComposite(type, start, value = 0) {
-		this.startContext(this.parser.getNodeType(type), start, value);
-	}
-	addNode(block, from, to) {
-		if (typeof block == "number")
-			block = new common.Tree(this.parser.nodeSet.types[block], none, none, (to ?? this.prevLineEnd()) - from);
-		this.block.addChild(block, from - this.block.from);
-	}
-	addElement(elt) {
-		this.block.addChild(elt.toTree(this.parser.nodeSet), elt.from - this.block.from);
-	}
-	addLeafElement(leaf, elt) {
-		this.addNode(this.buffer
-			.writeElements(injectMarks(elt.children, leaf.marks), -elt.from)
-			.finish(elt.type, elt.to - elt.from), elt.from);
-	}
-	finishContext() {
-		let cx = this.stack.pop();
-		let top = this.stack[this.stack.length - 1];
-		top.addChild(cx.toTree(this.parser.nodeSet), cx.from - top.from);
-		this.block = top;
-	}
-	finish() {
-		while (this.stack.length > 1)
-			this.finishContext();
-		return this.addGaps(this.block.toTree(this.parser.nodeSet, this.lineStart));
-	}
-	addGaps(tree) {
-		return this.ranges.length > 1 ?
-			injectGaps(this.ranges, 0, tree.topNode, this.ranges[0].from, this.reusePlaceholders) : tree;
-	}
-	finishLeaf(leaf) {
-		for (let parser of leaf.parsers)
-			if (parser.finish(this, leaf))
-				return;
-		let inline = injectMarks(this.parser.parseInline(leaf.content, leaf.start), leaf.marks);
-		this.addNode(this.buffer
-			.writeElements(inline, -leaf.start)
-			.finish(Type.Paragraph, leaf.content.length), leaf.start);
-	}
-	elt(type, from, to, children) {
-		if (typeof type == "string")
-			return elt(this.parser.getNodeType(type), from, to, children);
-		return new TreeElement(type, from);
-	}
-	get buffer() { return new Buffer(this.parser.nodeSet); }
-}
-// ============================================================================
-// Helper Functions
-// ============================================================================
-function injectGaps(ranges, rangeI, tree, offset, dummies) {
-	let rangeEnd = ranges[rangeI].to;
-	let children = [], positions = [], start = tree.from + offset;
-	function movePastNext(upto, inclusive) {
-		while (inclusive ? upto >= rangeEnd : upto > rangeEnd) {
-			let size = ranges[rangeI + 1].from - rangeEnd;
-			offset += size;
-			upto += size;
-			rangeI++;
-			rangeEnd = ranges[rangeI].to;
-		}
-	}
-	for (let ch = tree.firstChild; ch; ch = ch.nextSibling) {
-		movePastNext(ch.from + offset, true);
-		let from = ch.from + offset, node, reuse = dummies.get(ch.tree);
-		if (reuse) {
-			node = reuse;
-		}
-		else if (ch.to + offset > rangeEnd) {
-			node = injectGaps(ranges, rangeI, ch, offset, dummies);
-			movePastNext(ch.to + offset, false);
-		}
-		else {
-			node = ch.toTree();
-		}
-		children.push(node);
-		positions.push(from - start);
-	}
-	movePastNext(tree.to + offset, false);
-	return new common.Tree(tree.type, children, positions, tree.to + offset - start, tree.tree ? tree.tree.propValues : undefined);
-}
-function toRelative(abs, ranges) {
-	let pos = abs;
-	for (let i = 1; i < ranges.length; i++) {
-		let gapFrom = ranges[i - 1].to, gapTo = ranges[i].from;
-		if (gapFrom < abs)
-			pos -= gapTo - gapFrom;
-	}
-	return pos;
-}
-function injectMarks(elements, marks) {
-	if (!marks.length)
-		return elements;
-	if (!elements.length)
-		return marks;
-	let elts = elements.slice(), eI = 0;
-	for (let mark of marks) {
-		while (eI < elts.length && elts[eI].to < mark.to)
-			eI++;
-		if (eI < elts.length && elts[eI].from < mark.from) {
-			let e = elts[eI];
-			if (e instanceof Element)
-				elts[eI] = new Element(e.type, e.from, e.to, injectMarks(e.children, [mark]));
-		}
-		else {
-			elts.splice(eI++, 0, mark);
-		}
-	}
-	return elts;
-}
-// ============================================================================
-// Fragment Cursor for Incremental Parsing
-// ============================================================================
-const NotLast = [Type.CodeBlock, Type.ListItem, Type.BulletList, Type.NumberedList];
-class FragmentCursor {
-	constructor(fragments, input) {
-		this.fragments = fragments;
-		this.input = input;
-		this.i = 0;
-		this.fragment = null;
-		this.fragmentEnd = -1;
-		this.cursor = null;
-		if (fragments.length)
-			this.fragment = fragments[this.i++];
-	}
-	nextFragment() {
-		this.fragment = this.i < this.fragments.length ? this.fragments[this.i++] : null;
-		this.cursor = null;
-		this.fragmentEnd = -1;
-	}
-	moveTo(pos, lineStart) {
-		while (this.fragment && this.fragment.to <= pos)
-			this.nextFragment();
-		if (!this.fragment || this.fragment.from > (pos ? pos - 1 : 0))
-			return false;
-		if (this.fragmentEnd < 0) {
-			let end = this.fragment.to;
-			while (end > 0 && this.input.read(end - 1, end) != "\n")
-				end--;
-			this.fragmentEnd = end ? end - 1 : 0;
-		}
-		let c = this.cursor;
-		if (!c) {
-			c = this.cursor = this.fragment.tree.cursor();
-			c.firstChild();
-		}
-		let rPos = pos + this.fragment.offset;
-		while (c.to <= rPos)
-			if (!c.parent())
-				return false;
-		for (; ;) {
-			if (c.from >= rPos)
-				return this.fragment.from <= lineStart;
-			if (!c.childAfter(rPos))
-				return false;
-		}
-	}
-	matches(hash) {
-		let tree = this.cursor.tree;
-		return tree && tree.prop(common.NodeProp.contextHash) == hash;
-	}
-	takeNodes(cx) {
-		let cur = this.cursor, off = this.fragment.offset, fragEnd = this.fragmentEnd - (this.fragment.openEnd ? 1 : 0);
-		let start = cx.absoluteLineStart, end = start, blockI = cx.block.children.length;
-		let prevEnd = end, prevI = blockI;
-		for (; ;) {
-			if (cur.to - off > fragEnd) {
-				if (cur.type.isAnonymous && cur.firstChild())
-					continue;
-				break;
-			}
-			let pos = toRelative(cur.from - off, cx.ranges);
-			if (cur.to - off <= cx.ranges[cx.rangeI].to) {
-				cx.addNode(cur.tree, pos);
-			}
-			else {
-				let dummy = new common.Tree(cx.parser.nodeSet.types[Type.Paragraph], [], [], 0, cx.block.hashProp);
-				cx.reusePlaceholders.set(dummy, cur.tree);
-				cx.addNode(dummy, pos);
-			}
-			if (cur.type.is("Block")) {
-				if (NotLast.indexOf(cur.type.id) < 0) {
-					end = cur.to - off;
-					blockI = cx.block.children.length;
-				}
-				else {
-					end = prevEnd;
-					blockI = prevI;
-					prevEnd = cur.to - off;
-					prevI = cx.block.children.length;
-				}
-			}
-			if (!cur.nextSibling())
-				break;
-		}
-		while (cx.block.children.length > blockI) {
-			cx.block.children.pop();
-			cx.block.positions.pop();
-		}
-		return end - start;
-	}
-}
-// ============================================================================
-// Main Parser Class
-// ============================================================================
-class TiddlyWikiParser extends common.Parser {
-	constructor(nodeSet, blockParsers, leafBlockParsers, blockNames, endLeafBlock, skipContextMarkup, inlineParsers, inlineNames, wrappers) {
-		super();
-		this.nodeSet = nodeSet;
-		this.blockParsers = blockParsers;
-		this.leafBlockParsers = leafBlockParsers;
-		this.blockNames = blockNames;
-		this.endLeafBlock = endLeafBlock;
-		this.skipContextMarkup = skipContextMarkup;
-		this.inlineParsers = inlineParsers;
-		this.inlineNames = inlineNames;
-		this.wrappers = wrappers;
-		this.nodeTypes = Object.create(null);
-		for (let t of nodeSet.types)
-			this.nodeTypes[t.name] = t.id;
-	}
-	createParse(input, fragments, ranges) {
-		let parse = new BlockContext(this, input, fragments, ranges);
-		for (let w of this.wrappers)
-			parse = w(parse, input, fragments, ranges);
-		return parse;
-	}
-	configure(spec) {
-		let config = resolveConfig(spec);
-		if (!config)
-			return this;
-		let { nodeSet, skipContextMarkup } = this;
-		let blockParsers = this.blockParsers.slice(), leafBlockParsers = this.leafBlockParsers.slice(), blockNames = this.blockNames.slice(), inlineParsers = this.inlineParsers.slice(), inlineNames = this.inlineNames.slice(), endLeafBlock = this.endLeafBlock.slice(), wrappers = this.wrappers;
-		if (nonEmpty(config.defineNodes)) {
-			skipContextMarkup = Object.assign({}, skipContextMarkup);
-			let nodeTypes = nodeSet.types.slice(), styles;
-			for (let s of config.defineNodes) {
-				let { name, block, composite, style } = typeof s == "string" ? { name: s } : s;
-				if (nodeTypes.some(t => t.name == name))
-					continue;
-				if (composite)
-					skipContextMarkup[nodeTypes.length] =
-						(bl, cx, line) => composite(cx, line, bl.value);
-				let id = nodeTypes.length;
-				let group = composite ? ["Block", "BlockContext"] : !block ? undefined
-					: id >= Type.Heading1 && id <= Type.Heading6 ? ["Block", "LeafBlock", "Heading"] : ["Block", "LeafBlock"];
-				nodeTypes.push(common.NodeType.define({
-					id,
-					name,
-					props: group && [[common.NodeProp.group, group]]
-				}));
-				if (style) {
-					if (!styles)
-						styles = {};
-					if (Array.isArray(style) || style instanceof highlight.Tag)
-						styles[name] = style;
-					else
-						Object.assign(styles, style);
-				}
-			}
-			nodeSet = new common.NodeSet(nodeTypes);
-			if (styles)
-				nodeSet = nodeSet.extend(highlight.styleTags(styles));
-		}
-		if (nonEmpty(config.props))
-			nodeSet = nodeSet.extend(...config.props);
-		if (nonEmpty(config.remove)) {
-			for (let rm of config.remove) {
-				let block = this.blockNames.indexOf(rm), inline = this.inlineNames.indexOf(rm);
-				if (block > -1)
-					blockParsers[block] = leafBlockParsers[block] = undefined;
-				if (inline > -1)
-					inlineParsers[inline] = undefined;
-			}
-		}
-		if (nonEmpty(config.parseBlock)) {
-			for (let spec of config.parseBlock) {
-				let found = blockNames.indexOf(spec.name);
-				if (found > -1) {
-					blockParsers[found] = spec.parse;
-					leafBlockParsers[found] = spec.leaf;
-				}
-				else {
-					let pos = spec.before ? findName(blockNames, spec.before)
-						: spec.after ? findName(blockNames, spec.after) + 1 : blockNames.length - 1;
-					blockParsers.splice(pos, 0, spec.parse);
-					leafBlockParsers.splice(pos, 0, spec.leaf);
-					blockNames.splice(pos, 0, spec.name);
-				}
-				if (spec.endLeaf)
-					endLeafBlock.push(spec.endLeaf);
-			}
-		}
-		if (nonEmpty(config.parseInline)) {
-			for (let spec of config.parseInline) {
-				let found = inlineNames.indexOf(spec.name);
-				if (found > -1) {
-					inlineParsers[found] = spec.parse;
-				}
-				else {
-					let pos = spec.before ? findName(inlineNames, spec.before)
-						: spec.after ? findName(inlineNames, spec.after) + 1 : inlineNames.length - 1;
-					inlineParsers.splice(pos, 0, spec.parse);
-					inlineNames.splice(pos, 0, spec.name);
-				}
-			}
-		}
-		if (config.wrap)
-			wrappers = wrappers.concat(config.wrap);
-		return new TiddlyWikiParser(nodeSet, blockParsers, leafBlockParsers, blockNames, endLeafBlock, skipContextMarkup, inlineParsers, inlineNames, wrappers);
-	}
-	getNodeType(name) {
-		let found = this.nodeTypes[name];
-		if (found == null)
-			throw new RangeError(`Unknown node type '${name}'`);
-		return found;
-	}
-	parseInline(text, offset) {
-		let cx = new InlineContext(this, text, offset);
-		outer: for (let pos = offset; pos < cx.end;) {
-			let next = cx.char(pos);
-			for (let token of this.inlineParsers)
-				if (token) {
-					let result = token(cx, next, pos);
-					if (result >= 0) {
-						pos = result;
-						continue outer;
-					}
-				}
-			pos++;
-		}
-		return cx.resolveMarkers(0);
-	}
-}
-// ============================================================================
-// Helper Functions for Configuration
-// ============================================================================
-function nonEmpty(a) {
-	return a != null && a.length > 0;
-}
-function resolveConfig(spec) {
-	if (!Array.isArray(spec))
-		return spec;
-	if (spec.length == 0)
-		return null;
-	let conf = resolveConfig(spec[0]);
-	if (spec.length == 1)
-		return conf;
-	let rest = resolveConfig(spec.slice(1));
-	if (!rest || !conf)
-		return conf || rest;
-	let conc = (a, b) => (a || none).concat(b || none);
-	let wrapA = conf.wrap, wrapB = rest.wrap;
-	return {
-		props: conc(conf.props, rest.props),
-		defineNodes: conc(conf.defineNodes, rest.defineNodes),
-		parseBlock: conc(conf.parseBlock, rest.parseBlock),
-		parseInline: conc(conf.parseInline, rest.parseInline),
-		remove: conc(conf.remove, rest.remove),
-		wrap: !wrapA ? wrapB : !wrapA ? wrapA :
-			(inner, input, fragments, ranges) => wrapA(wrapB(inner, input, fragments, ranges), input, fragments, ranges)
-	};
-}
-function findName(names, name) {
-	let found = names.indexOf(name);
-	if (found < 0)
-		throw new RangeError(`Position specified relative to unknown parser ${name}`);
-	return found;
-}
-// ============================================================================
-// Node Type Definitions
-// ============================================================================
-let nodeTypes = [common.NodeType.none];
-for (let i = 1, name; name = Type[i]; i++) {
-	nodeTypes[i] = common.NodeType.define({
-		id: i,
-		name,
-		props: i >= Type.Escape ? [] : [[common.NodeProp.group, i in DefaultSkipMarkup ? ["Block", "BlockContext"] : ["Block", "LeafBlock"]]],
-		top: name == "Document"
-	});
-}
-// ============================================================================
-// Syntax Highlighting
-// ============================================================================
-const tiddlywikiHighlighting = highlight.styleTags({
-	"BlockQuote/...": highlight.tags.quote,
-	HorizontalRule: highlight.tags.contentSeparator,
-	"Heading1/...": highlight.tags.heading1,
-	"Heading2/...": highlight.tags.heading2,
-	"Heading3/...": highlight.tags.heading3,
-	"Heading4/...": highlight.tags.heading4,
-	"Heading5/...": highlight.tags.heading5,
-	"Heading6/...": highlight.tags.heading6,
-	"CommentBlock Comment": highlight.tags.comment,
-	Escape: highlight.tags.escape,
-	Entity: highlight.tags.character,
-	"Bold/...": highlight.tags.strong,
-	"Italic/...": highlight.tags.emphasis,
-	"Underline/...": highlight.tags.special(highlight.tags.emphasis),
-	"Strikethrough/...": highlight.tags.strikethrough,
-	"Superscript/...": highlight.tags.special(highlight.tags.content),
-	"Subscript/...": highlight.tags.special(highlight.tags.content),
-	"Highlight/...": highlight.tags.special(highlight.tags.content),
-	"WikiLink/... ExternalLink/... ImageLink/...": highlight.tags.link,
-	"Transclusion/... FilteredTransclusion/...": highlight.tags.special(highlight.tags.link),
-	"MacroCall/...": highlight.tags.macroName,
-	"Widget/...": highlight.tags.tagName,
-	Variable: highlight.tags.variableName,
-	"BulletList/... NumberedList/... DefinitionList/...": highlight.tags.list,
-	"InlineCode CodeText": highlight.tags.monospace,
-	"FencedCode/... CodeBlock/... TypedBlock/...": highlight.tags.monospace,
-	"URL LinkTarget": highlight.tags.url,
-	"HeadingMark QuoteMark ListMark LinkMark EmphasisMark CodeMark PragmaMark TypedBlockMark TableDelimiter": highlight.tags.processingInstruction,
-	"CodeInfo TypedBlockInfo PragmaName MacroName WidgetName": highlight.tags.labelName,
-	"LinkText": highlight.tags.string,
-	"FilterExpression": highlight.tags.special(highlight.tags.string),
-	"MacroParams PragmaParams WidgetAttr": highlight.tags.attributeValue,
-	Paragraph: highlight.tags.content,
-	"Table/...": highlight.tags.content,
-	"TableHeader/...": highlight.tags.heading,
-	"MacroDefinition/... ProcedureDefinition/... FunctionDefinition/... WidgetDefinition/...": highlight.tags.definitionKeyword,
-	"RulesPragma ImportPragma ParametersPragma WhitespacePragma": highlight.tags.keyword,
-	HTMLBlock: highlight.tags.content,
-	HTMLTag: highlight.tags.tagName
-});
-// ============================================================================
-// Default Parser Export
-// ============================================================================
-const parser = new TiddlyWikiParser(new common.NodeSet(nodeTypes).extend(tiddlywikiHighlighting), Object.keys(DefaultBlockParsers).map(n => DefaultBlockParsers[n]), Object.keys(DefaultBlockParsers).map(n => DefaultLeafBlocks[n]), Object.keys(DefaultBlockParsers), DefaultEndLeaf, DefaultSkipMarkup, Object.keys(DefaultInline).map(n => DefaultInline[n]), Object.keys(DefaultInline), []);
-
-/**
- * @lezer/tiddlywiki - Extensions
- *
- * Zusätzliche Parser-Erweiterungen für TiddlyWiki5 Syntax.
- */
-/// Extension for inline and display math using $ and $$ delimiters
-const MathExtension = {
-	defineNodes: [
-		{ name: "Math", style: highlight.tags.special(highlight.tags.string) },
-		{ name: "DisplayMath", block: true, style: highlight.tags.special(highlight.tags.string) },
-		{ name: "MathMark", style: highlight.tags.processingInstruction }
-	],
-	parseInline: [{
-		name: "Math",
-		parse(cx, next, pos) {
-			if (next != 36 /* '$' */)
-				return -1;
-			// Check for display math $$...$$
-			if (cx.char(pos + 1) == 36) {
-				let end = pos + 2;
-				while (end < cx.end) {
-					if (cx.char(end) == 36 && cx.char(end + 1) == 36) {
-						return cx.addElement(cx.elt("DisplayMath", pos, end + 2, [
-							cx.elt("MathMark", pos, pos + 2),
-							cx.elt("MathMark", end, end + 2)
-						]));
-					}
-					end++;
-				}
-				return -1;
-			}
-			// Inline math $...$
-			let end = pos + 1;
-			while (end < cx.end) {
-				if (cx.char(end) == 36 && cx.char(end - 1) != 92 /* not escaped */) {
-					return cx.addElement(cx.elt("Math", pos, end + 1, [
-						cx.elt("MathMark", pos, pos + 1),
-						cx.elt("MathMark", end, end + 1)
-					]));
-				}
-				end++;
-			}
-			return -1;
-		}
-	}]
-};
-// ============================================================================
-// Wikitext Comment Extension
-// ============================================================================
-/// Extension for HTML-style comments <!-- -->
-const CommentExtension = {
-	defineNodes: [
-		{ name: "Comment", style: highlight.tags.comment },
-		{ name: "CommentBlock", block: true, style: highlight.tags.comment }
-	],
-	parseInline: [{
-		name: "Comment",
-		parse(cx, next, pos) {
-			if (next != 60 /* '<' */)
-				return -1;
-			if (cx.slice(pos, pos + 4) !== "<!--")
-				return -1;
-			let end = pos + 4;
-			while (end < cx.end) {
-				if (cx.slice(end, end + 3) === "-->") {
-					return cx.addElement(cx.elt("Comment", pos, end + 3));
-				}
-				end++;
-			}
-			return -1;
-		}
-	}],
-	parseBlock: [{
-		name: "CommentBlock",
-		parse(cx, line) {
-			if (!line.text.slice(line.pos).startsWith("<!--"))
-				return false;
-			let from = cx.lineStart + line.pos;
-			let content = line.text.slice(line.pos);
-			// Check if comment ends on same line
-			let endIdx = content.indexOf("-->", 4);
-			if (endIdx >= 0) {
-				cx.addNode(cx.elt("CommentBlock", from, from + endIdx + 3).toTree(cx.parser.nodeSet), from);
-				cx.nextLine();
-				return true;
-			}
-			// Multi-line comment
-			while (cx.nextLine()) {
-				let closeIdx = line.text.indexOf("-->");
-				if (closeIdx >= 0) {
-					cx.addNode(cx.elt("CommentBlock", from, cx.lineStart + closeIdx + 3).toTree(cx.parser.nodeSet), from);
-					cx.nextLine();
-					return true;
-				}
-			}
-			// Unclosed comment
-			cx.addNode(cx.elt("CommentBlock", from, cx.prevLineEnd()).toTree(cx.parser.nodeSet), from);
-			return true;
-		}
-	}]
-};
-// ============================================================================
-// Raw/Verbatim Block Extension
-// ============================================================================
-/// Extension for raw content blocks using <nowiki>...</nowiki> or """"
-const RawExtension = {
-	defineNodes: [
-		{ name: "RawBlock", block: true, style: highlight.tags.monospace },
-		{ name: "RawInline", style: highlight.tags.monospace },
-		{ name: "RawMark", style: highlight.tags.processingInstruction }
-	],
-	parseInline: [{
-		name: "RawInline",
-		parse(cx, next, pos) {
-			// Check for "" (double quote literal)
-			if (next == 34 /* '"' */ && cx.char(pos + 1) == 34) {
-				let end = pos + 2;
-				while (end < cx.end) {
-					if (cx.char(end) == 34 && cx.char(end + 1) == 34) {
-						return cx.addElement(cx.elt("RawInline", pos, end + 2, [
-							cx.elt("RawMark", pos, pos + 2),
-							cx.elt("RawMark", end, end + 2)
-						]));
-					}
-					end++;
-				}
-			}
-			return -1;
-		}
-	}],
-	parseBlock: [{
-		name: "RawBlock",
-		parse(cx, line) {
-			// Multi-line raw block with """"
-			if (!line.text.slice(line.pos).startsWith('"""'))
-				return false;
-			let from = cx.lineStart + line.pos;
-			while (cx.nextLine()) {
-				if (line.text.trim() === '"""') {
-					cx.nextLine();
-					break;
-				}
-			}
-			cx.addNode(cx.elt("RawBlock", from, cx.prevLineEnd()).toTree(cx.parser.nodeSet), from);
-			return true;
-		}
-	}]
-};
-// ============================================================================
-// Stylish Block Extension (CSS Classes)
-// ============================================================================
-/// Extension for styled blocks using @@.class or @@color:value;
-const StyleExtension = {
-	defineNodes: [
-		{ name: "StyledBlock", block: true, style: highlight.tags.content },
-		{ name: "StyledInline", style: highlight.tags.content },
-		{ name: "StyleMark", style: highlight.tags.processingInstruction },
-		{ name: "StyleSpec", style: highlight.tags.attributeValue }
-	],
-	parseInline: [{
-		name: "StyledInline",
-		parse(cx, next, pos) {
-			if (next != 64 /* '@' */ || cx.char(pos + 1) != 64)
-				return -1;
-			let styleEnd = pos + 2;
-			// Skip style spec (class or CSS)
-			while (styleEnd < cx.end && cx.char(styleEnd) != 32 && cx.char(styleEnd) != 64)
-				styleEnd++;
-			// Find closing @@
-			let end = styleEnd;
-			while (end < cx.end) {
-				if (cx.char(end) == 64 && cx.char(end + 1) == 64) {
-					return cx.addElement(cx.elt("StyledInline", pos, end + 2, [
-						cx.elt("StyleMark", pos, pos + 2),
-						cx.elt("StyleSpec", pos + 2, styleEnd),
-						cx.elt("StyleMark", end, end + 2)
-					]));
-				}
-				end++;
-			}
-			return -1;
-		}
-	}],
-	parseBlock: [{
-		name: "StyledBlock",
-		parse(cx, line) {
-			if (!line.text.slice(line.pos).startsWith("@@"))
-				return false;
-			let from = cx.lineStart + line.pos;
-			// Check for single-line style
-			let restOfLine = line.text.slice(line.pos + 2);
-			if (restOfLine.includes("@@")) {
-				cx.nextLine();
-				return true;
-			}
-			// Multi-line styled block
-			while (cx.nextLine()) {
-				if (line.text.trim() === "@@") {
-					cx.nextLine();
-					break;
-				}
-			}
-			cx.addNode(cx.elt("StyledBlock", from, cx.prevLineEnd()).toTree(cx.parser.nodeSet), from);
-			return true;
-		}
-	}]
-};
-// ============================================================================
-// Hard Linebreak Extension
-// ============================================================================
-/// Extension for forced linebreaks (newline characters)
-const LineBreakExtension = {
-	defineNodes: [
-		{ name: "LineBreak", style: highlight.tags.processingInstruction }
-	],
-	parseInline: [{
-		name: "LineBreak",
-		parse(cx, next, pos) {
-			// TiddlyWiki uses \n or double-space at end of line for hard breaks
-			// In inline context, we check for explicit <br> or <br/>
-			if (next == 60 /* '<' */) {
-				let tag = cx.slice(pos, Math.min(pos + 5, cx.end)).toLowerCase();
-				if (tag.startsWith("<br>") || tag.startsWith("<br/")) {
-					let end = pos + 4;
-					if (cx.char(end) == 62)
-						end++;
-					return cx.addElement(cx.elt("LineBreak", pos, end));
-				}
-			}
-			return -1;
-		}
-	}]
-};
-// ============================================================================
-// Footnote Extension
-// ============================================================================
-/// Extension for footnotes using ^[text] syntax
-const FootnoteExtension = {
-	defineNodes: [
-		{ name: "Footnote", style: highlight.tags.special(highlight.tags.content) },
-		{ name: "FootnoteMark", style: highlight.tags.processingInstruction }
-	],
-	parseInline: [{
-		name: "Footnote",
-		parse(cx, next, pos) {
-			if (next != 94 /* '^' */ || cx.char(pos + 1) != 91 /* '[' */)
-				return -1;
-			let depth = 1;
-			let end = pos + 2;
-			while (end < cx.end && depth > 0) {
-				let ch = cx.char(end);
-				if (ch == 91)
-					depth++;
-				else if (ch == 93)
-					depth--;
-				end++;
-			}
-			if (depth == 0) {
-				return cx.addElement(cx.elt("Footnote", pos, end, [
-					cx.elt("FootnoteMark", pos, pos + 2),
-					cx.elt("FootnoteMark", end - 1, end)
-				]));
-			}
-			return -1;
-		}
-	}]
-};
-// ============================================================================
-// Image with Attributes Extension
-// ============================================================================
-/// Extended image syntax [img width=200 [tooltip|url]]
-const ExtendedImageExtension = {
-	defineNodes: [
-		{ name: "ExtendedImage", style: highlight.tags.link },
-		{ name: "ImageAttr", style: highlight.tags.attributeValue }
-	],
-	parseInline: [{
-		name: "ExtendedImage",
-		parse(cx, next, pos) {
-			if (next != 91 /* '[' */)
-				return -1;
-			if (cx.slice(pos + 1, pos + 5) !== "img ")
-				return -1;
-			let end = pos + 5;
-			let attrStart = end;
-			// Find the inner [
-			while (end < cx.end && cx.char(end) != 91)
-				end++;
-			if (end >= cx.end)
-				return -1;
-			let attrEnd = end;
-			end++; // skip [
-			// Find closing ]]
-			while (end < cx.end) {
-				if (cx.char(end) == 93 && cx.char(end + 1) == 93) {
-					let children = [
-						cx.elt("LinkMark", pos, pos + 5)
-					];
-					if (attrEnd > attrStart) {
-						children.push(cx.elt("ImageAttr", attrStart, attrEnd));
-					}
-					children.push(cx.elt("LinkMark", end, end + 2));
-					return cx.addElement(cx.elt("ExtendedImage", pos, end + 2, children));
-				}
-				end++;
-			}
-			return -1;
-		},
-		before: "ExternalLink"
-	}]
-};
-// ============================================================================
-// Conditional/Reveal Widgets shorthand
-// ============================================================================
-/// Extension for shorthand conditional syntax
-const ConditionalExtension = {
-	defineNodes: [
-		{ name: "ConditionalBlock", block: true, style: highlight.tags.keyword },
-		{ name: "ConditionMark", style: highlight.tags.processingInstruction }
-	],
-	parseBlock: [{
-		name: "ConditionalBlock",
-		parse(cx, line) {
-			// Check for <%if condition%> syntax
-			if (!line.text.slice(line.pos).startsWith("<%"))
-				return false;
-			let from = cx.lineStart + line.pos;
-			let depth = 1;
-			while (cx.nextLine() && depth > 0) {
-				let text = line.text;
-				if (text.includes("<%endif%>") || text.includes("<%/if%>"))
-					depth--;
-				else if (text.includes("<%if "))
-					depth++;
-			}
-			cx.addNode(cx.elt("ConditionalBlock", from, cx.prevLineEnd()).toTree(cx.parser.nodeSet), from);
-			return true;
-		}
-	}]
-};
-// ============================================================================
-// Bundle: All TiddlyWiki Extensions
-// ============================================================================
-/// Bundle containing all TiddlyWiki5 extensions
-const TiddlyWikiExtensions = [
-	MathExtension,
-	CommentExtension,
-	RawExtension,
-	StyleExtension,
-	LineBreakExtension,
-	FootnoteExtension,
-	ExtendedImageExtension,
-	ConditionalExtension
-];
-// ============================================================================
-// Individual Exports
-// ============================================================================
-/*export {
-  MathExtension,
-  CommentExtension,
-  RawExtension,
-  StyleExtension,
-  LineBreakExtension,
-  FootnoteExtension,
-  ExtendedImageExtension,
-  ConditionalExtension
-}*/
-
-/**
- * @codemirror/lang-tiddlywiki - Language Definition
- *
- * CodeMirror 6 Language Support für TiddlyWiki5 Wikitext.
- *
- * WICHTIG: Diese Datei darf KEINE commands importieren um zirkuläre
- * Abhängigkeiten zu vermeiden. Commands importieren von hier.
- */
-// ============================================================================
-// Language Facet Configuration
-// ============================================================================
-const data = language.defineLanguageFacet({
-	commentTokens: { block: { open: "<!--", close: "-->" } },
-});
-const headingProp = new common.NodeProp();
-// ============================================================================
-// Base Parser Configuration
-// ============================================================================
-const tiddlywikiBase = parser.configure({
-	props: [
-		// Folding für verschiedene Block-Typen
-		language.foldNodeProp.add(type => {
-			if (!type.is("Block") || type.is("Document"))
-				return undefined;
-			let heading = isHeading(type);
-			if (heading != null)
-				return undefined; // Headings get special handling
-			if (isList(type))
-				return undefined;
-			// Default folding für andere Blocks
-			return (tree, state) => ({ from: state.doc.lineAt(tree.from).to, to: tree.to });
-		}),
-		headingProp.add(isHeading),
-		language.indentNodeProp.add({
-			Document: () => null
-		}),
-		language.languageDataProp.add({
-			Document: data
-		})
-	]
-});
-// ============================================================================
-// Helper Functions
-// ============================================================================
-function isHeading(type) {
-	let match = /^Heading(\d)$/.exec(type.name);
-	return match ? +match[1] : undefined;
-}
-function isList(type) {
-	return type.name == "BulletList" || type.name == "NumberedList" || type.name == "DefinitionList";
-}
-function findSectionEnd(headerNode, level) {
-	let last = headerNode;
-	for (; ;) {
-		let next = last.nextSibling;
-		if (!next)
-			break;
-		let heading = next.type.prop(headingProp);
-		if (heading != null && heading <= level)
-			break;
-		last = next;
-	}
-	return last.to;
-}
-// ============================================================================
-// Heading Folding Service
-// ============================================================================
-const headerIndent = language.foldService.of((state, start, end) => {
-	for (let node = language.syntaxTree(state).resolveInner(end, -1); node; node = node.parent) {
-		if (node.from < start)
-			break;
-		let heading = node.type.prop(headingProp);
-		if (heading == null)
-			continue;
-		let upto = findSectionEnd(node, heading);
-		if (upto > end)
-			return { from: end, to: upto };
-	}
-	return null;
-});
-// ============================================================================
-// Language Creation
-// ============================================================================
-function mkLang(parser) {
-	return new language.Language(data, parser, [], "tiddlywiki");
-}
-/// Language support für CommonMark-style TiddlyWiki (Basis-Syntax)
-const tiddlywikiBaseLanguage = mkLang(tiddlywikiBase);
-// Extended parser mit allen Erweiterungen
-const extended = tiddlywikiBase.configure([
-	...TiddlyWikiExtensions,
-	{
-		props: [
-			language.foldNodeProp.add({
-				Table: (tree, state) => ({ from: state.doc.lineAt(tree.from).to, to: tree.to }),
-				FencedCode: (tree, state) => ({ from: state.doc.lineAt(tree.from).to, to: tree.to }),
-				BlockQuote: (tree, state) => ({ from: state.doc.lineAt(tree.from).to, to: tree.to }),
-				MacroDefinition: (tree, state) => ({ from: state.doc.lineAt(tree.from).to, to: tree.to }),
-				ProcedureDefinition: (tree, state) => ({ from: state.doc.lineAt(tree.from).to, to: tree.to }),
-				FunctionDefinition: (tree, state) => ({ from: state.doc.lineAt(tree.from).to, to: tree.to }),
-				WidgetDefinition: (tree, state) => ({ from: state.doc.lineAt(tree.from).to, to: tree.to }),
-				TypedBlock: (tree, state) => ({ from: state.doc.lineAt(tree.from).to, to: tree.to })
-			})
-		]
-	}
+// Block-level types
+new Set([
+    Type.Document,
+    Type.Pragma,
+    Type.MacroDefinition,
+    Type.ProcedureDefinition,
+    Type.FunctionDefinition,
+    Type.WidgetDefinition,
+    Type.RulesPragma,
+    Type.ImportPragma,
+    Type.ParametersPragma,
+    Type.WhitespacePragma,
+    Type.Paragraph,
+    Type.Heading1, Type.Heading2, Type.Heading3, Type.Heading4, Type.Heading5, Type.Heading6,
+    Type.BulletList,
+    Type.OrderedList,
+    Type.DefinitionList,
+    Type.ListItem,
+    Type.DefinitionTerm,
+    Type.DefinitionDescription,
+    Type.BlockQuote,
+    Type.Table,
+    Type.TableHeader,
+    Type.TableBody,
+    Type.TableFooter,
+    Type.TableCaption,
+    Type.TableRow,
+    Type.FencedCode,
+    Type.TypedBlock,
+    Type.HorizontalRule,
+    Type.CommentBlock,
+    Type.HTMLBlock,
+    Type.Widget,
+    Type.TransclusionBlock,
+    Type.FilteredTransclusionBlock,
+    Type.MacroCallBlock,
 ]);
-/// Language support für TiddlyWiki5 mit allen Erweiterungen
-const tiddlywikiLanguage = mkLang(extended);
+// Composite block types (can contain other blocks)
+new Set([
+    Type.Document,
+    Type.MacroDefinition,
+    Type.ProcedureDefinition,
+    Type.FunctionDefinition,
+    Type.WidgetDefinition,
+    Type.BulletList,
+    Type.OrderedList,
+    Type.DefinitionList,
+    Type.BlockQuote,
+    Type.Table,
+    Type.TableHeader,
+    Type.TableBody,
+    Type.TableFooter,
+    Type.Widget,
+    Type.HTMLBlock,
+]);
+
+/**
+ * TiddlyWiki Parser - Core Classes
+ *
+ * Following the Lezer Markdown architecture with adaptations for TiddlyWiki.
+ */
+// Character codes for common characters
+var Ch;
+(function (Ch) {
+    Ch[Ch["Space"] = 32] = "Space";
+    Ch[Ch["Tab"] = 9] = "Tab";
+    Ch[Ch["Newline"] = 10] = "Newline";
+    Ch[Ch["CarriageReturn"] = 13] = "CarriageReturn";
+    Ch[Ch["Backslash"] = 92] = "Backslash";
+    Ch[Ch["Exclamation"] = 33] = "Exclamation";
+    Ch[Ch["Hash"] = 35] = "Hash";
+    Ch[Ch["Dollar"] = 36] = "Dollar";
+    Ch[Ch["Percent"] = 37] = "Percent";
+    Ch[Ch["Ampersand"] = 38] = "Ampersand";
+    Ch[Ch["Apostrophe"] = 39] = "Apostrophe";
+    Ch[Ch["LeftParen"] = 40] = "LeftParen";
+    Ch[Ch["RightParen"] = 41] = "RightParen";
+    Ch[Ch["Asterisk"] = 42] = "Asterisk";
+    Ch[Ch["Plus"] = 43] = "Plus";
+    Ch[Ch["Comma"] = 44] = "Comma";
+    Ch[Ch["Dash"] = 45] = "Dash";
+    Ch[Ch["Dot"] = 46] = "Dot";
+    Ch[Ch["Slash"] = 47] = "Slash";
+    Ch[Ch["Colon"] = 58] = "Colon";
+    Ch[Ch["Semicolon"] = 59] = "Semicolon";
+    Ch[Ch["LessThan"] = 60] = "LessThan";
+    Ch[Ch["Equals"] = 61] = "Equals";
+    Ch[Ch["GreaterThan"] = 62] = "GreaterThan";
+    Ch[Ch["Question"] = 63] = "Question";
+    Ch[Ch["At"] = 64] = "At";
+    Ch[Ch["LeftBracket"] = 91] = "LeftBracket";
+    Ch[Ch["RightBracket"] = 93] = "RightBracket";
+    Ch[Ch["Caret"] = 94] = "Caret";
+    Ch[Ch["Underscore"] = 95] = "Underscore";
+    Ch[Ch["Backtick"] = 96] = "Backtick";
+    Ch[Ch["LeftBrace"] = 123] = "LeftBrace";
+    Ch[Ch["Pipe"] = 124] = "Pipe";
+    Ch[Ch["RightBrace"] = 125] = "RightBrace";
+    Ch[Ch["Tilde"] = 126] = "Tilde";
+})(Ch || (Ch = {}));
+/**
+ * Check if a character code represents whitespace (space or tab)
+ */
+function space(ch) {
+    return ch === Ch.Space || ch === Ch.Tab;
+}
+/**
+ * Punctuation characters for flanking rules
+ */
+const Punctuation = /[!"#$%&'()*+,\-./:;<=>?@\[\]\\^_`{|}~\xA1\u2010-\u2027]/;
+/**
+ * Element represents a node in the parse tree
+ */
+class Element {
+    constructor(type, from, to, children = []) {
+        this.type = type;
+        this.from = from;
+        this.to = to;
+        this.children = children;
+    }
+}
+/**
+ * Create an Element more concisely
+ */
+function elt(type, from, to, children) {
+    return new Element(type, from, to, children);
+}
+/**
+ * Represents a line of text being parsed
+ */
+class Line {
+    constructor() {
+        /** The full text of the line */
+        this.text = "";
+        /** Base indent level (for nested blocks) */
+        this.baseIndent = 0;
+        /** Base position within line (after block markers) */
+        this.basePos = 0;
+        /** Nesting depth for composite blocks */
+        this.depth = 0;
+        /** Block markers found on this line */
+        this.markers = [];
+        /** Current parsing position within line */
+        this.pos = 0;
+        /** Indentation at current position */
+        this.indent = 0;
+        /** Character code at current position, or -1 at end */
+        this.next = -1;
+    }
+    /**
+     * Move forward past whitespace, updating pos, indent, and next
+     */
+    skipSpace(from) {
+        let pos = from;
+        while (pos < this.text.length) {
+            const ch = this.text.charCodeAt(pos);
+            if (!space(ch))
+                break;
+            pos++;
+        }
+        return pos;
+    }
+    /**
+     * Move the base position forward
+     */
+    moveBase(pos) {
+        this.basePos = pos;
+        this.baseIndent = this.countIndent(pos, this.text.length);
+    }
+    /**
+     * Move the base position forward past the given number of characters
+     */
+    moveBaseColumn(columns) {
+        this.moveBase(this.findColumn(columns));
+    }
+    /**
+     * Add a block marker for this line
+     */
+    addMarker(elt) {
+        this.markers.push(elt);
+    }
+    /**
+     * Count the indentation at a position
+     */
+    countIndent(to, from = 0, indent = 0) {
+        for (let i = from; i < to; i++) {
+            const ch = this.text.charCodeAt(i);
+            if (ch === Ch.Space)
+                indent++;
+            else if (ch === Ch.Tab)
+                indent += 4 - (indent % 4);
+            else
+                break;
+        }
+        return indent;
+    }
+    /**
+     * Find the position that corresponds to a given column
+     */
+    findColumn(goal) {
+        let i = 0, col = 0;
+        while (i < this.text.length && col < goal) {
+            const ch = this.text.charCodeAt(i);
+            if (ch === Ch.Tab)
+                col += 4 - (col % 4);
+            else
+                col++;
+            i++;
+        }
+        return i;
+    }
+    /**
+     * Reset line state for a new line
+     */
+    reset(text) {
+        this.text = text;
+        this.baseIndent = this.basePos = this.pos = this.indent = 0;
+        this.depth = 0;
+        this.markers = [];
+        this.next = text.length ? text.charCodeAt(0) : -1;
+    }
+    /**
+     * Scrub text, replacing leading block markers with spaces
+     */
+    scrub() {
+        if (!this.basePos)
+            return this.text;
+        let result = "";
+        for (const m of this.markers)
+            result += this.text.slice(result.length, m.from) + " ".repeat(m.to - m.from);
+        return result + this.text.slice(result.length);
+    }
+}
+/**
+ * Represents a composite block (one that can contain other blocks)
+ */
+class CompositeBlock {
+    /** Hash for incremental parsing */
+    static create(type, value, from, parentHash, end) {
+        const hash = (parentHash + (parentHash << 8) + type + (value << 4)) | 0;
+        return new CompositeBlock(type, value, from, hash, end, [], []);
+    }
+    constructor(type, value, from, hash, end, children, positions) {
+        this.type = type;
+        this.value = value;
+        this.from = from;
+        this.hash = hash;
+        this.end = end;
+        this.children = children;
+        this.positions = positions;
+    }
+    addChild(child, pos) {
+        if (child.prop(common.NodeProp.contextHash) !== this.hash)
+            child = new common.Tree(child.type, child.children, child.positions, child.length, [[common.NodeProp.contextHash, this.hash]]);
+        this.children.push(child);
+        this.positions.push(pos);
+    }
+    toTree(nodeSet, end = this.end) {
+        const last = this.children.length - 1;
+        if (last >= 0)
+            end = Math.max(end, this.positions[last] + this.children[last].length + this.from);
+        return new common.Tree(nodeSet.types[this.type], this.children, this.positions, end - this.from).balance({
+            makeTree: (children, positions, length) => new common.Tree(common.NodeType.none, children, positions, length, [[common.NodeProp.contextHash, this.hash]])
+        });
+    }
+}
+/**
+ * Inline delimiter for emphasis-style markers
+ */
+class InlineDelimiter {
+    constructor(type, from, to, side // 1 = open, 2 = close, 3 = both
+    ) {
+        this.type = type;
+        this.from = from;
+        this.to = to;
+        this.side = side;
+    }
+}
+
+/**
+ * TiddlyWiki Parser - Block Context
+ *
+ * Handles block-level parsing following the Lezer Markdown architecture.
+ */
+// Buffer for building parse tree
+class Buffer {
+    constructor() {
+        this.content = [];
+        this.nodes = [];
+    }
+    write(type, from, to, children = 0) {
+        this.content.push(type, from, to, 4 + children * 4);
+    }
+    writeElements(elts, offset = 0) {
+        for (const elt of elts)
+            this.writeElement(elt, offset);
+    }
+    writeElement(elt, offset = 0) {
+        const startOff = this.content.length;
+        this.writeElements(elt.children, offset);
+        this.content.push(elt.type, elt.from + offset, elt.to + offset, (this.content.length + 4 - startOff));
+    }
+    finish(type, length) {
+        return common.Tree.build({
+            buffer: this.content,
+            nodeSet: this.nodeSet, // Will be set by context
+            topID: type,
+            length
+        });
+    }
+}
+/**
+ * BlockContext manages block-level parsing state
+ */
+class BlockContext {
+    constructor(parser, input, fragments, ranges) {
+        this.parser = parser;
+        this.input = input;
+        this.ranges = ranges;
+        this.buf = new Buffer();
+        this.stack = [];
+        this.atEnd = false;
+        this.dontInject = new Set();
+        // Fragment parsing (for incremental updates)
+        this.fragments = null;
+        this.fragmentIndex = 0;
+        this.fragmentEnd = -1;
+        this.lineStart = 0;
+        this.lineEnd = 0;
+        this.stoppedAt = null;
+        this.to = ranges[ranges.length - 1].to;
+        this.fragments = fragments.length ? fragments : null;
+        this.buf.nodeSet = parser.nodeSet;
+        // Initialize the document composite block
+        const rootBlock = CompositeBlock.create(Type.Document, 0, ranges[0].from, 0, 0);
+        this.stack.push(rootBlock);
+        this._line = new Line();
+        this.lineStart = ranges[0].from;
+        this.lineEnd = this.lineStart;
+        this.moveToNextLine();
+    }
+    get line() { return this._line; }
+    get parsers() {
+        return this.parser.blockParsers;
+    }
+    get pragmaParsers() {
+        return this.parser.pragmaParsers;
+    }
+    /**
+     * The current block context
+     */
+    get block() {
+        return this.stack[this.stack.length - 1];
+    }
+    /**
+     * Get the end position of the previous line
+     */
+    prevLineEnd() {
+        return this.lineStart > 0 ? this.lineStart - 1 : 0;
+    }
+    /**
+     * Move to the next line
+     */
+    nextLine() {
+        this.lineStart = this.lineEnd;
+        if (this.lineStart >= this.to) {
+            this.atEnd = true;
+            return false;
+        }
+        this.lineEnd = this.findLineEnd();
+        this._line.reset(this.readLineText());
+        return true;
+    }
+    /**
+     * Peek at the next line without consuming it (without trailing newline)
+     */
+    peekLine() {
+        const start = this.lineEnd;
+        if (start >= this.to)
+            return null;
+        let end = this.findLineEnd(start);
+        // Strip trailing newline
+        if (end > start) {
+            const lastChar = this.input.read(end - 1, end).charCodeAt(0);
+            if (lastChar === Ch.Newline) {
+                end--;
+                if (end > start && this.input.read(end - 1, end).charCodeAt(0) === Ch.CarriageReturn) {
+                    end--;
+                }
+            }
+        }
+        return this.input.read(start, end);
+    }
+    /**
+     * Find the end of the line starting at pos (position after the newline)
+     * lineEnd points to after the newline, but line.text excludes the newline
+     */
+    findLineEnd(pos = this.lineEnd) {
+        let end = pos;
+        while (end < this.to) {
+            const ch = this.input.read(end, end + 1).charCodeAt(0);
+            if (ch === Ch.Newline) {
+                return end + 1; // Return position after newline
+            }
+            if (ch === Ch.CarriageReturn) {
+                end++;
+                if (end < this.to && this.input.read(end, end + 1).charCodeAt(0) === Ch.Newline)
+                    end++;
+                return end;
+            }
+            end++;
+        }
+        return end;
+    }
+    /**
+     * Read line text without the trailing newline
+     */
+    readLineText() {
+        let end = this.lineEnd;
+        // Strip trailing newline
+        if (end > this.lineStart) {
+            const lastChar = this.input.read(end - 1, end).charCodeAt(0);
+            if (lastChar === Ch.Newline) {
+                end--;
+                if (end > this.lineStart && this.input.read(end - 1, end).charCodeAt(0) === Ch.CarriageReturn) {
+                    end--;
+                }
+            }
+        }
+        return this.input.read(this.lineStart, end);
+    }
+    /**
+     * Move to the next line for parsing
+     */
+    moveToNextLine() {
+        if (!this.nextLine()) {
+            this._line.reset("");
+        }
+    }
+    /**
+     * Start a new composite block context
+     */
+    startContext(type, start, value = 0) {
+        const block = CompositeBlock.create(type, value, start, this.block.hash, start);
+        this.stack.push(block);
+        this.addNode(type, start);
+    }
+    /**
+     * Start a composite block without immediately adding it
+     */
+    startComposite(type, start, value = 0) {
+        const block = CompositeBlock.create(type, value, start, this.block.hash, start);
+        this.stack.push(block);
+    }
+    /**
+     * Add an element to the buffer
+     */
+    addElement(elt) {
+        this.buf.writeElement(elt, -this.block.from);
+    }
+    /**
+     * Add a node to the current composite block
+     */
+    addNode(block, from, to) {
+        if (typeof block === "number") {
+            this.buf.write(block, from - this.block.from, (to ?? from) - this.block.from, 0);
+        }
+        else {
+            this.block.addChild(block, from - this.block.from);
+        }
+    }
+    /**
+     * Add an element for a leaf block
+     */
+    addLeafElement(leaf, elt) {
+        this.addElement(this.elt(elt.type, elt.from, elt.to, [
+            ...leaf.marks.map(m => this.elt(m.type, m.from, m.to)),
+            ...elt.children
+        ]));
+    }
+    /**
+     * Finish the current composite block context
+     */
+    finishContext() {
+        const cx = this.stack.pop();
+        const tree = cx.toTree(this.parser.nodeSet);
+        if (!this.dontInject.has(tree)) {
+            this.block.addChild(tree, cx.from - this.block.from);
+        }
+    }
+    /**
+     * Create an element
+     */
+    elt(type, from, to, children) {
+        return new Element(type, from, to, children);
+    }
+    /**
+     * Main parsing loop - called to advance parsing
+     */
+    advance() {
+        if (this.stoppedAt !== null && this.lineStart > this.stoppedAt) {
+            return this.finishDocument();
+        }
+        // Parse pragmas at start of document
+        if (this.lineStart === this.ranges[0].from) {
+            this.parsePragmas();
+        }
+        // Parse blocks until we run out of input
+        while (!this.atEnd) {
+            this.parseBlock();
+        }
+        return this.finishDocument();
+    }
+    /**
+     * Parse pragmas at document start
+     */
+    parsePragmas() {
+        while (!this.atEnd) {
+            // Skip whitespace lines
+            const lineText = this._line.text;
+            const trimmed = lineText.trim();
+            if (trimmed === "") {
+                this.nextLine();
+                continue;
+            }
+            // Check if this line starts with a pragma
+            if (lineText.charCodeAt(this._line.skipSpace(0)) !== Ch.Backslash) {
+                break;
+            }
+            // Try each pragma parser
+            let matched = false;
+            for (const parser of this.pragmaParsers) {
+                const result = parser.parse(this, this._line);
+                if (result !== null) {
+                    for (const elt of result) {
+                        this.addElement(elt);
+                    }
+                    matched = true;
+                    break;
+                }
+            }
+            if (!matched)
+                break;
+        }
+    }
+    /**
+     * Parse a single block
+     */
+    parseBlock() {
+        // Skip empty lines
+        const lineText = this._line.text;
+        if (lineText.trim() === "") {
+            this.nextLine();
+            return;
+        }
+        // Try each block parser
+        for (const parser of this.parsers) {
+            const result = parser.parse(this, this._line);
+            if (result !== false) {
+                if (result === true) {
+                    // Leaf block consumed, move to next line
+                    this.nextLine();
+                }
+                // null means composite block started, continue on same line
+                return;
+            }
+        }
+        // Default: parse as paragraph
+        this.parseParagraph();
+    }
+    /**
+     * Parse a paragraph (default fallback)
+     */
+    parseParagraph() {
+        const start = this.lineStart;
+        const content = [this._line.text];
+        // Consume lines until we hit a blank line or block element
+        while (this.nextLine()) {
+            const text = this._line.text;
+            if (text.trim() === "")
+                break;
+            // Check if this line starts a new block
+            let startsBlock = false;
+            for (const parser of this.parsers) {
+                // Simple check - if any parser matches at position 0, it's a new block
+                const firstChar = text.charCodeAt(0);
+                if (this.isBlockStarter(text, firstChar)) {
+                    startsBlock = true;
+                    break;
+                }
+            }
+            if (startsBlock)
+                break;
+            content.push(text);
+        }
+        // Parse inline content
+        const fullContent = content.join("\n");
+        const inlineElements = this.parser.parseInline(fullContent, start);
+        // Create paragraph element
+        const paragraphElt = this.elt(Type.Paragraph, start, start + fullContent.length, inlineElements);
+        this.addElement(paragraphElt);
+    }
+    /**
+     * Quick check if a line starts a block element
+     */
+    isBlockStarter(text, firstChar) {
+        if (firstChar === Ch.Exclamation)
+            return true; // Heading
+        if (firstChar === Ch.Asterisk || firstChar === Ch.Hash ||
+            firstChar === Ch.Semicolon || firstChar === Ch.Colon ||
+            firstChar === Ch.GreaterThan)
+            return true; // List
+        if (firstChar === Ch.Pipe)
+            return true; // Table
+        if (firstChar === Ch.Backtick && text.startsWith("```"))
+            return true; // Code
+        if (firstChar === Ch.Dollar && text.startsWith("$$$"))
+            return true; // Typed block
+        if (firstChar === Ch.Dash && /^-{3,}$/.test(text.trim()))
+            return true; // HR
+        if (firstChar === Ch.LessThan)
+            return true; // HTML/Widget
+        if (firstChar === Ch.LeftBrace && text.startsWith("{{"))
+            return true; // Transclusion
+        if (firstChar === Ch.Backslash)
+            return true; // Pragma
+        return false;
+    }
+    /**
+     * Finish parsing and return the document tree
+     */
+    finishDocument() {
+        // Close any remaining open contexts
+        while (this.stack.length > 1) {
+            this.finishContext();
+        }
+        // Build tree from buffer content
+        const docBlock = this.stack[0];
+        const bufferContent = this.buf.content;
+        if (bufferContent.length > 0) {
+            // Use Tree.build to properly interpret the buffer
+            const tree = common.Tree.build({
+                buffer: bufferContent,
+                nodeSet: this.parser.nodeSet,
+                topID: Type.Document,
+                length: this.to - docBlock.from
+            });
+            return tree;
+        }
+        return docBlock.toTree(this.parser.nodeSet, this.to);
+    }
+    // PartialParse interface
+    get parsedPos() {
+        return this.lineStart;
+    }
+    stopAt(pos) {
+        this.stoppedAt = pos;
+    }
+}
+
+/**
+ * TiddlyWiki Parser - Inline Context
+ *
+ * Handles inline-level parsing following the Lezer Markdown architecture.
+ */
+// Flags for delimiter sides
+const Open = 1, Close = 2;
+/**
+ * InlineContext manages inline-level parsing state
+ */
+class InlineContext {
+    constructor(parser, text, offset) {
+        this.parser = parser;
+        this.text = text;
+        this.offset = offset;
+        /** Collected parts (elements and delimiters) */
+        this.parts = [];
+    }
+    /**
+     * End position of the text
+     */
+    get end() {
+        return this.offset + this.text.length;
+    }
+    /**
+     * Get character code at absolute position
+     */
+    char(pos) {
+        const rel = pos - this.offset;
+        if (rel < 0 || rel >= this.text.length)
+            return -1;
+        return this.text.charCodeAt(rel);
+    }
+    /**
+     * Get a slice of text (absolute positions)
+     */
+    slice(from, to) {
+        const relFrom = Math.max(0, from - this.offset);
+        const relTo = Math.min(this.text.length, to - this.offset);
+        return this.text.slice(relFrom, relTo);
+    }
+    /**
+     * Check if there's an open link (affects autolink parsing)
+     */
+    get hasOpenLink() {
+        for (let i = this.parts.length - 1; i >= 0; i--) {
+            const part = this.parts[i];
+            if (part instanceof InlineDelimiter && part.type.isLink)
+                return true;
+        }
+        return false;
+    }
+    /**
+     * Skip whitespace starting at position
+     */
+    skipSpace(from) {
+        let pos = from - this.offset;
+        while (pos < this.text.length && space(this.text.charCodeAt(pos)))
+            pos++;
+        return pos + this.offset;
+    }
+    /**
+     * Add an element directly
+     */
+    addElement(elt) {
+        this.parts.push(elt);
+        return elt.to;
+    }
+    /**
+     * Add a delimiter for later resolution
+     */
+    addDelimiter(type, from, to, open, close) {
+        const side = (open ? Open : 0) | (close ? Close : 0);
+        this.parts.push(new InlineDelimiter(type, from, to, side));
+        return to;
+    }
+    /**
+     * Append an element or delimiter
+     */
+    append(elt) {
+        this.parts.push(elt);
+        return elt.to;
+    }
+    /**
+     * Create an element
+     */
+    elt(type, from, to, children) {
+        return new Element(type, from, to, children);
+    }
+    /**
+     * Find an opening delimiter of the given type
+     */
+    findOpeningDelimiter(type) {
+        for (let i = this.parts.length - 1; i >= 0; i--) {
+            const part = this.parts[i];
+            if (part instanceof InlineDelimiter && part.type === type && (part.side & Open)) {
+                return i;
+            }
+        }
+        return null;
+    }
+    /**
+     * Take content from parts starting at an index
+     */
+    takeContent(startIndex) {
+        const content = [];
+        for (let i = startIndex; i < this.parts.length; i++) {
+            const part = this.parts[i];
+            if (part instanceof Element)
+                content.push(part);
+            else if (part instanceof InlineDelimiter) {
+                // Convert delimiter to plain text element
+                content.push(this.elt(Type.Text, part.from, part.to));
+            }
+            // null parts are skipped
+        }
+        // Remove taken items
+        this.parts.length = startIndex;
+        return content;
+    }
+    /**
+     * Resolve all collected delimiters into elements
+     */
+    resolveDelimiters() {
+        // Go through all delimiters and try to match them
+        for (let i = 0; i < this.parts.length; i++) {
+            const part = this.parts[i];
+            if (!(part instanceof InlineDelimiter) || !(part.side & Close))
+                continue;
+            const type = part.type;
+            if (!type.resolve)
+                continue;
+            // Look for matching opener
+            let opener = null;
+            for (let j = i - 1; j >= 0; j--) {
+                const p = this.parts[j];
+                if (p instanceof InlineDelimiter && p.type === type && (p.side & Open)) {
+                    opener = j;
+                    break;
+                }
+            }
+            if (opener === null)
+                continue;
+            // Collect content between opener and closer
+            const openDelim = this.parts[opener];
+            const content = [];
+            // Add opening mark
+            if (type.mark) {
+                content.push(this.elt(this.getMarkType(type.mark), openDelim.from, openDelim.to));
+            }
+            // Add content between
+            for (let j = opener + 1; j < i; j++) {
+                const p = this.parts[j];
+                if (p instanceof Element)
+                    content.push(p);
+                else if (p instanceof InlineDelimiter) {
+                    // Convert unmatched delimiter to text
+                    content.push(this.elt(Type.Text, p.from, p.to));
+                }
+                this.parts[j] = null;
+            }
+            // Add closing mark
+            if (type.mark) {
+                content.push(this.elt(this.getMarkType(type.mark), part.from, part.to));
+            }
+            // Create the resolved element
+            const resolvedType = this.getResolveType(type.resolve);
+            const element = this.elt(resolvedType, openDelim.from, part.to, content);
+            // Replace opener with element, remove closer
+            this.parts[opener] = element;
+            this.parts[i] = null;
+        }
+        // Collect remaining elements
+        const result = [];
+        for (const part of this.parts) {
+            if (part instanceof Element)
+                result.push(part);
+            else if (part instanceof InlineDelimiter) {
+                // Unmatched delimiter becomes text
+                result.push(this.elt(Type.Text, part.from, part.to));
+            }
+        }
+        return result;
+    }
+    /**
+     * Get the Type for a resolve name
+     */
+    getResolveType(name) {
+        const typeMap = {
+            "Bold": Type.Bold,
+            "Italic": Type.Italic,
+            "Underline": Type.Underline,
+            "Strikethrough": Type.Strikethrough,
+            "Superscript": Type.Superscript,
+            "Subscript": Type.Subscript,
+            "Highlight": Type.Highlight,
+            "InlineCode": Type.InlineCode,
+        };
+        return typeMap[name] || Type.Text;
+    }
+    /**
+     * Get the Type for a mark name
+     */
+    getMarkType(name) {
+        const typeMap = {
+            "BoldMark": Type.BoldMark,
+            "ItalicMark": Type.ItalicMark,
+            "UnderlineMark": Type.UnderlineMark,
+            "StrikethroughMark": Type.StrikethroughMark,
+            "SuperscriptMark": Type.SuperscriptMark,
+            "SubscriptMark": Type.SubscriptMark,
+            "HighlightMark": Type.HighlightMark,
+            "InlineCodeMark": Type.InlineCodeMark,
+        };
+        return typeMap[name] || Type.Mark;
+    }
+    /**
+     * Parse the text and return elements
+     */
+    parse() {
+        const parsers = this.parser.inlineParsers;
+        let pos = this.offset;
+        while (pos < this.end) {
+            const next = this.char(pos);
+            let matched = false;
+            // Try each inline parser
+            for (const parser of parsers) {
+                const result = parser.parse(this, next, pos);
+                if (result >= 0) {
+                    pos = result;
+                    matched = true;
+                    break;
+                }
+            }
+            if (!matched) {
+                // No parser matched, advance one character
+                pos++;
+            }
+        }
+        // Resolve delimiters and collect elements
+        return this.resolveDelimiters();
+    }
+}
+/**
+ * Parse inline content
+ */
+function parseInline(parser, text, offset) {
+    const cx = new InlineContext(parser, text, offset);
+    return cx.parse();
+}
+
+/**
+ * TiddlyWiki Parser - Pragma Parsers
+ *
+ * Pragmas are special directives at the start of tiddlers:
+ * - \define name(params) body
+ * - \procedure name(params) body
+ * - \function name(params) body
+ * - \widget $name(params) body
+ * - \rules only/except rulenames
+ * - \import filter
+ * - \parameters (params)
+ * - \whitespace trim/notrim
+ */
+/**
+ * Match pattern for \define pragma
+ * Single line: \define name(params) body
+ * Multiline: \define name(params)\n body \n\end
+ */
+const defineRe = /^\\define\s+([^(\s]+)\s*\(\s*([^)]*)\s*\)\s*(.*)$/;
+const defineMultilineRe = /^\\define\s+([^(\s]+)\s*\(\s*([^)]*)\s*\)\s*$/;
+/**
+ * Match pattern for \procedure/\function/\widget pragma
+ * Single line: \function name(params) body
+ * Multiline: \function name(params)\n body \n\end
+ */
+const fnprocRe = /^\\(function|procedure|widget)\s+([^(\s]+)\s*\(\s*([^)]*)\s*\)\s*(.*)$/;
+const fnprocMultilineRe = /^\\(function|procedure|widget)\s+([^(\s]+)\s*\(\s*([^)]*)\s*\)$/;
+/**
+ * Match pattern for \rules pragma
+ */
+const rulesRe = /^\\rules\s+(only|except)\s+(.*)$/;
+/**
+ * Match pattern for \import pragma
+ */
+const importRe = /^\\import\s+(.*)$/;
+/**
+ * Match pattern for \parameters pragma
+ */
+const parametersRe = /^\\parameters\s*\(\s*([^)]*)\s*\)$/;
+/**
+ * Match pattern for \whitespace pragma
+ */
+const whitespaceRe = /^\\whitespace\s+(trim|notrim)$/;
+/**
+ * Find the \end marker for a multi-line pragma
+ */
+function findEnd(cx, name) {
+    const endRe = new RegExp(`^\\s*\\\\end(?:\\s+${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})?\\s*$`);
+    let body = "";
+    cx.lineStart + cx.line.text.length;
+    while (cx.nextLine()) {
+        if (endRe.test(cx.line.text)) {
+            return { body, endPos: cx.lineStart + cx.line.text.length };
+        }
+        if (body)
+            body += "\n";
+        body += cx.line.text;
+    }
+    // No \end found, treat body as empty
+    return null;
+}
+/**
+ * Parse parameter definitions: name:default, name2:"default2"
+ */
+function parseParams(paramStr, basePos) {
+    const params = [];
+    if (!paramStr.trim())
+        return params;
+    const paramRe = /\s*([A-Za-z0-9\-_]+)(?:\s*:\s*(?:"""([\s\S]*?)"""|"([^"]*)"|'([^']*)'|\[\[([^\]]*)\]\]|([^,\s)]+)))?/g;
+    let match;
+    while ((match = paramRe.exec(paramStr)) !== null) {
+        const paramStart = basePos + match.index;
+        const paramEnd = paramStart + match[0].length;
+        params.push(elt(Type.PragmaParams, paramStart, paramEnd));
+    }
+    return params;
+}
+/**
+ * \define macro pragma
+ */
+const MacroDefPragma = {
+    name: "macrodef",
+    parse(cx, line) {
+        const text = line.text;
+        // Check for multiline vs single line
+        const multiMatch = defineMultilineRe.exec(text);
+        if (multiMatch) {
+            const pragmaStart = cx.lineStart;
+            const name = multiMatch[1];
+            const paramStr = multiMatch[2];
+            // Create elements for pragma mark, keyword, name, params
+            const children = [
+                elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
+                elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 7), // "define"
+                elt(Type.PragmaName, pragmaStart + text.indexOf(name), pragmaStart + text.indexOf(name) + name.length),
+            ];
+            // Parse parameters
+            if (paramStr) {
+                const paramStart = pragmaStart + text.indexOf("(") + 1;
+                children.push(...parseParams(paramStr, paramStart));
+            }
+            // Find body and \end
+            const endInfo = findEnd(cx, name);
+            if (endInfo) {
+                children.push(elt(Type.PragmaBody, cx.lineStart - endInfo.body.length - 1, cx.lineStart - 1));
+                children.push(elt(Type.PragmaEnd, cx.lineStart, cx.lineStart + cx.line.text.length));
+                cx.nextLine();
+                return [elt(Type.MacroDefinition, pragmaStart, cx.prevLineEnd(), children)];
+            }
+            // No \end, single line after all
+            cx.nextLine();
+            return [elt(Type.MacroDefinition, pragmaStart, cx.prevLineEnd(), children)];
+        }
+        // Single line define
+        const singleMatch = defineRe.exec(text);
+        if (singleMatch) {
+            const pragmaStart = cx.lineStart;
+            const name = singleMatch[1];
+            const paramStr = singleMatch[2];
+            const body = singleMatch[3];
+            const children = [
+                elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
+                elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 7),
+                elt(Type.PragmaName, pragmaStart + text.indexOf(name), pragmaStart + text.indexOf(name) + name.length),
+            ];
+            if (paramStr) {
+                const paramStart = pragmaStart + text.indexOf("(") + 1;
+                children.push(...parseParams(paramStr, paramStart));
+            }
+            // Add body if present
+            if (body) {
+                const bodyStart = pragmaStart + text.indexOf(")") + 1;
+                const bodyEnd = pragmaStart + text.length;
+                children.push(elt(Type.PragmaBody, bodyStart, bodyEnd));
+            }
+            cx.nextLine();
+            return [elt(Type.MacroDefinition, pragmaStart, cx.prevLineEnd(), children)];
+        }
+        return null;
+    }
+};
+/**
+ * \function/\procedure/\widget pragma
+ */
+const FnProcDefPragma = {
+    name: "fnprocdef",
+    parse(cx, line) {
+        const text = line.text;
+        // Check for multiline
+        const multiMatch = fnprocMultilineRe.exec(text);
+        if (multiMatch) {
+            const pragmaStart = cx.lineStart;
+            const keyword = multiMatch[1];
+            const name = multiMatch[2];
+            const paramStr = multiMatch[3];
+            let nodeType;
+            switch (keyword) {
+                case "function":
+                    nodeType = Type.FunctionDefinition;
+                    break;
+                case "procedure":
+                    nodeType = Type.ProcedureDefinition;
+                    break;
+                case "widget":
+                    nodeType = Type.WidgetDefinition;
+                    break;
+                default: return null;
+            }
+            const children = [
+                elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
+                elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 1 + keyword.length),
+                elt(Type.PragmaName, pragmaStart + text.indexOf(name), pragmaStart + text.indexOf(name) + name.length),
+            ];
+            if (paramStr) {
+                const paramStart = pragmaStart + text.indexOf("(") + 1;
+                children.push(...parseParams(paramStr, paramStart));
+            }
+            const endInfo = findEnd(cx, name);
+            if (endInfo) {
+                children.push(elt(Type.PragmaBody, cx.lineStart - endInfo.body.length - 1, cx.lineStart - 1));
+                children.push(elt(Type.PragmaEnd, cx.lineStart, cx.lineStart + cx.line.text.length));
+                cx.nextLine();
+                return [elt(nodeType, pragmaStart, cx.prevLineEnd(), children)];
+            }
+            cx.nextLine();
+            return [elt(nodeType, pragmaStart, cx.prevLineEnd(), children)];
+        }
+        // Single line function/procedure/widget
+        const singleMatch = fnprocRe.exec(text);
+        if (singleMatch) {
+            const pragmaStart = cx.lineStart;
+            const keyword = singleMatch[1];
+            const name = singleMatch[2];
+            const paramStr = singleMatch[3];
+            const body = singleMatch[4];
+            let nodeType;
+            switch (keyword) {
+                case "function":
+                    nodeType = Type.FunctionDefinition;
+                    break;
+                case "procedure":
+                    nodeType = Type.ProcedureDefinition;
+                    break;
+                case "widget":
+                    nodeType = Type.WidgetDefinition;
+                    break;
+                default: return null;
+            }
+            const children = [
+                elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
+                elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 1 + keyword.length),
+                elt(Type.PragmaName, pragmaStart + text.indexOf(name), pragmaStart + text.indexOf(name) + name.length),
+            ];
+            if (paramStr) {
+                const paramStart = pragmaStart + text.indexOf("(") + 1;
+                children.push(...parseParams(paramStr, paramStart));
+            }
+            // Add body if present
+            if (body) {
+                const bodyStart = pragmaStart + text.indexOf(")") + 1;
+                const bodyEnd = pragmaStart + text.length;
+                children.push(elt(Type.PragmaBody, bodyStart, bodyEnd));
+            }
+            cx.nextLine();
+            return [elt(nodeType, pragmaStart, cx.prevLineEnd(), children)];
+        }
+        return null;
+    }
+};
+/**
+ * \rules pragma
+ */
+const RulesPragma = {
+    name: "rules",
+    parse(cx, line) {
+        const match = rulesRe.exec(line.text);
+        if (!match)
+            return null;
+        const pragmaStart = cx.lineStart;
+        match[1];
+        match[2];
+        const children = [
+            elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
+            elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 6), // "rules"
+        ];
+        cx.nextLine();
+        return [elt(Type.RulesPragma, pragmaStart, cx.prevLineEnd(), children)];
+    }
+};
+/**
+ * \import pragma
+ */
+const ImportPragma = {
+    name: "import",
+    parse(cx, line) {
+        const match = importRe.exec(line.text);
+        if (!match)
+            return null;
+        const pragmaStart = cx.lineStart;
+        const filter = match[1];
+        const children = [
+            elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
+            elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 7), // "import"
+            elt(Type.FilterExpression, pragmaStart + 8, pragmaStart + 8 + filter.length),
+        ];
+        cx.nextLine();
+        return [elt(Type.ImportPragma, pragmaStart, cx.prevLineEnd(), children)];
+    }
+};
+/**
+ * \parameters pragma
+ */
+const ParametersPragma = {
+    name: "parameters",
+    parse(cx, line) {
+        const match = parametersRe.exec(line.text);
+        if (!match)
+            return null;
+        const pragmaStart = cx.lineStart;
+        const paramStr = match[1];
+        const children = [
+            elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
+            elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 11), // "parameters"
+        ];
+        if (paramStr) {
+            const paramStart = pragmaStart + line.text.indexOf("(") + 1;
+            children.push(...parseParams(paramStr, paramStart));
+        }
+        cx.nextLine();
+        return [elt(Type.ParametersPragma, pragmaStart, cx.prevLineEnd(), children)];
+    }
+};
+/**
+ * \whitespace pragma
+ */
+const WhitespacePragma = {
+    name: "whitespace",
+    parse(cx, line) {
+        const match = whitespaceRe.exec(line.text);
+        if (!match)
+            return null;
+        const pragmaStart = cx.lineStart;
+        const children = [
+            elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
+            elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 11), // "whitespace"
+        ];
+        cx.nextLine();
+        return [elt(Type.WhitespacePragma, pragmaStart, cx.prevLineEnd(), children)];
+    }
+};
+/**
+ * All pragma parsers
+ */
+const DefaultPragmaParsers = [
+    MacroDefPragma,
+    FnProcDefPragma,
+    RulesPragma,
+    ImportPragma,
+    ParametersPragma,
+    WhitespacePragma,
+];
+
+/**
+ * TiddlyWiki Parser - Block Parsers
+ *
+ * Block-level parsing rules following the Lezer Markdown architecture.
+ */
+// ============================================================================
+// Heading Parser (! to !!!!!!)
+// ============================================================================
+function isHeading$1(line) {
+    if (line.next !== Ch.Exclamation)
+        return -1;
+    let level = 1;
+    let pos = 1;
+    while (pos < line.text.length && line.text.charCodeAt(pos) === Ch.Exclamation && level < 6) {
+        level++;
+        pos++;
+    }
+    return level;
+}
+const Heading = {
+    name: "Heading",
+    parse(cx, line) {
+        const level = isHeading$1(line);
+        if (level < 0)
+            return false;
+        const start = cx.lineStart;
+        const markEnd = start + level;
+        const textStart = markEnd;
+        // Parse inline content after the !
+        const contentText = line.text.slice(level);
+        const inlineElements = cx.parser.parseInline(contentText, textStart);
+        // Determine heading type based on level
+        const headingType = [Type.Heading1, Type.Heading2, Type.Heading3, Type.Heading4, Type.Heading5, Type.Heading6][level - 1];
+        const children = [
+            elt(Type.HeadingMark, start, markEnd),
+            ...inlineElements
+        ];
+        cx.addElement(elt(headingType, start, start + line.text.length, children));
+        return true;
+    }
+};
+// ============================================================================
+// Horizontal Rule Parser (---)
+// ============================================================================
+const hrRe = /^-{3,}\s*$/;
+const HorizontalRule = {
+    name: "HorizontalRule",
+    parse(cx, line) {
+        if (!hrRe.test(line.text))
+            return false;
+        cx.addElement(elt(Type.HorizontalRule, cx.lineStart, cx.lineStart + line.text.length));
+        return true;
+    }
+};
+// ============================================================================
+// Fenced Code Block (```)
+// ============================================================================
+const codeStartRe = /^```(\w*)$/;
+const codeEndRe = /^```$/;
+const FencedCode = {
+    name: "FencedCode",
+    parse(cx, line) {
+        const match = codeStartRe.exec(line.text);
+        if (!match)
+            return false;
+        const start = cx.lineStart;
+        const lang = match[1];
+        const children = [
+            elt(Type.CodeMark, start, start + 3)
+        ];
+        if (lang) {
+            children.push(elt(Type.CodeInfo, start + 3, start + 3 + lang.length));
+        }
+        // Find closing ```
+        let codeContent = "";
+        let codeStart = cx.lineStart + line.text.length + 1;
+        let foundEnd = false;
+        while (cx.nextLine()) {
+            if (codeEndRe.test(cx.line.text)) {
+                children.push(elt(Type.CodeText, codeStart, cx.lineStart - 1));
+                children.push(elt(Type.CodeMark, cx.lineStart, cx.lineStart + 3));
+                foundEnd = true;
+                break;
+            }
+            if (codeContent)
+                codeContent += "\n";
+            codeContent += cx.line.text;
+        }
+        if (!foundEnd && codeContent) {
+            children.push(elt(Type.CodeText, codeStart, cx.lineStart - 1));
+        }
+        const end = foundEnd ? cx.lineStart + cx.line.text.length : cx.lineStart;
+        cx.addElement(elt(Type.FencedCode, start, end, children));
+        return true;
+    }
+};
+// ============================================================================
+// Typed Block ($$$)
+// ============================================================================
+const typedStartRe = /^\$\$\$([\w\/\-\.\+]*)$/;
+const typedEndRe = /^\$\$\$\s*$/;
+const TypedBlock = {
+    name: "TypedBlock",
+    parse(cx, line) {
+        const match = typedStartRe.exec(line.text);
+        if (!match)
+            return false;
+        const start = cx.lineStart;
+        const typeName = match[1];
+        const children = [
+            elt(Type.TypedBlockMark, start, start + 3)
+        ];
+        if (typeName) {
+            children.push(elt(Type.TypedBlockType, start + 3, start + 3 + typeName.length));
+        }
+        // Find closing $$$
+        let contentStart = cx.lineStart + line.text.length + 1;
+        let foundEnd = false;
+        while (cx.nextLine()) {
+            if (typedEndRe.test(cx.line.text)) {
+                children.push(elt(Type.CodeText, contentStart, cx.lineStart - 1));
+                children.push(elt(Type.TypedBlockMark, cx.lineStart, cx.lineStart + 3));
+                foundEnd = true;
+                break;
+            }
+        }
+        if (!foundEnd) {
+            children.push(elt(Type.CodeText, contentStart, cx.lineStart - 1));
+        }
+        const end = foundEnd ? cx.lineStart + cx.line.text.length : cx.lineStart;
+        cx.addElement(elt(Type.TypedBlock, start, end, children));
+        return true;
+    }
+};
+// ============================================================================
+// List Parser (* # ; : >)
+// ============================================================================
+const listMarkerRe = /^([*#;:>]+)/;
+const listTypeMap = {
+    "*": { list: Type.BulletList, item: Type.ListItem },
+    "#": { list: Type.OrderedList, item: Type.ListItem },
+    ";": { list: Type.DefinitionList, item: Type.DefinitionTerm },
+    ":": { list: Type.DefinitionList, item: Type.DefinitionDescription },
+    ">": { list: Type.BlockQuote, item: Type.ListItem },
+};
+/**
+ * Check if a marker character is compatible with continuing a list
+ * Definition lists allow both ; and : as compatible markers
+ */
+function isCompatibleMarker(firstMarker, currentMarker) {
+    if (firstMarker === currentMarker)
+        return true;
+    // Definition lists: ; (term) and : (description) are compatible
+    if ((firstMarker === ";" || firstMarker === ":") &&
+        (currentMarker === ";" || currentMarker === ":")) {
+        return true;
+    }
+    return false;
+}
+const List = {
+    name: "List",
+    parse(cx, line) {
+        const match = listMarkerRe.exec(line.text);
+        if (!match)
+            return false;
+        const markers = match[1];
+        const firstMarker = markers[0];
+        const listInfo = listTypeMap[firstMarker];
+        if (!listInfo)
+            return false;
+        const start = cx.lineStart;
+        const items = [];
+        // Parse list items
+        let currentLine = line;
+        while (true) {
+            const itemMatch = listMarkerRe.exec(currentLine.text);
+            if (!itemMatch || !isCompatibleMarker(firstMarker, itemMatch[1][0]))
+                break;
+            const itemMarkers = itemMatch[1];
+            const itemStart = cx.lineStart;
+            const markerEnd = itemStart + itemMarkers.length;
+            // Parse inline content
+            const contentText = currentLine.text.slice(itemMarkers.length);
+            const inlineElements = cx.parser.parseInline(contentText, markerEnd);
+            const itemChildren = [
+                elt(Type.ListMark, itemStart, markerEnd),
+                ...inlineElements
+            ];
+            const itemType = listTypeMap[itemMarkers[itemMarkers.length - 1]]?.item || Type.ListItem;
+            items.push(elt(itemType, itemStart, itemStart + currentLine.text.length, itemChildren));
+            if (!cx.nextLine())
+                break;
+            currentLine = cx.line;
+        }
+        cx.addElement(elt(listInfo.list, start, cx.prevLineEnd(), items));
+        return true;
+    }
+};
+// ============================================================================
+// Table Parser (|...|)
+// ============================================================================
+const tableRowRe = /^\|.*\|([fhck])?\s*$/;
+// Map row suffix markers to row types
+const tableRowTypeMap = {
+    "c": Type.TableCaption,
+    "k": Type.TableClass,
+    "h": Type.TableHeader,
+    "f": Type.TableFooter,
+};
+const Table = {
+    name: "Table",
+    parse(cx, line) {
+        if (!tableRowRe.test(line.text))
+            return false;
+        const start = cx.lineStart;
+        const rows = [];
+        while (true) {
+            const rowText = cx.line.text;
+            const match = tableRowRe.exec(rowText);
+            if (!match)
+                break;
+            const rowStart = cx.lineStart;
+            const marker = match[1]; // c, k, h, f, or undefined
+            const rowType = marker ? tableRowTypeMap[marker] : Type.TableRow;
+            const cells = parseTableRow(rowText, rowStart, cx, marker);
+            rows.push(elt(rowType, rowStart, rowStart + rowText.length, cells));
+            if (!cx.nextLine())
+                break;
+        }
+        cx.addElement(elt(Type.Table, start, cx.prevLineEnd(), rows));
+        return true;
+    }
+};
+function parseTableRow(text, offset, cx, marker) {
+    const cells = [];
+    let pos = 0;
+    let cellStart = -1;
+    // If there's a marker, we need to stop before it
+    const endPos = marker ? text.length - 1 : text.length;
+    while (pos < endPos) {
+        const ch = text.charCodeAt(pos);
+        if (ch === Ch.Pipe) {
+            if (cellStart >= 0) {
+                // End of cell content
+                const cellText = text.slice(cellStart, pos).trim();
+                const isHeader = cellText.startsWith("!");
+                const cellType = isHeader ? Type.TableHeaderCell : Type.TableCell;
+                // Parse inline content
+                const contentStart = isHeader ? cellStart + 1 : cellStart;
+                const contentText = isHeader ? cellText.slice(1) : cellText;
+                const inlineElements = cx.parser.parseInline(contentText, offset + contentStart);
+                cells.push(elt(cellType, offset + cellStart, offset + pos, inlineElements));
+            }
+            cells.push(elt(Type.TableDelimiter, offset + pos, offset + pos + 1));
+            cellStart = -1;
+            pos++;
+        }
+        else {
+            if (cellStart < 0)
+                cellStart = pos;
+            pos++;
+        }
+    }
+    // Add the row marker if present
+    if (marker) {
+        cells.push(elt(Type.TableMarker, offset + text.length - 1, offset + text.length));
+    }
+    return cells;
+}
+// ============================================================================
+// Comment Block (<!-- --> or /% %/)
+// ============================================================================
+const htmlCommentStartRe = /^<!--/;
+const htmlCommentEndRe = /-->$/;
+const twCommentStartRe = /^\/%/;
+const twCommentEndRe = /%\/$/;
+const CommentBlock = {
+    name: "CommentBlock",
+    parse(cx, line) {
+        const text = line.text.trim();
+        // HTML-style comment
+        if (htmlCommentStartRe.test(text)) {
+            const start = cx.lineStart;
+            // Single line comment?
+            if (htmlCommentEndRe.test(text)) {
+                cx.addElement(elt(Type.CommentBlock, start, start + line.text.length, [
+                    elt(Type.CommentMarker, start, start + 4),
+                    elt(Type.CommentMarker, start + line.text.length - 3, start + line.text.length),
+                ]));
+                return true;
+            }
+            // Multi-line comment
+            while (cx.nextLine()) {
+                if (htmlCommentEndRe.test(cx.line.text)) {
+                    cx.addElement(elt(Type.CommentBlock, start, cx.lineStart + cx.line.text.length));
+                    return true;
+                }
+            }
+            // Unclosed comment
+            cx.addElement(elt(Type.CommentBlock, start, cx.lineStart));
+            return true;
+        }
+        // TiddlyWiki-style comment
+        if (twCommentStartRe.test(text)) {
+            const start = cx.lineStart;
+            if (twCommentEndRe.test(text)) {
+                cx.addElement(elt(Type.CommentBlock, start, start + line.text.length));
+                return true;
+            }
+            while (cx.nextLine()) {
+                if (twCommentEndRe.test(cx.line.text)) {
+                    cx.addElement(elt(Type.CommentBlock, start, cx.lineStart + cx.line.text.length));
+                    return true;
+                }
+            }
+            cx.addElement(elt(Type.CommentBlock, start, cx.lineStart));
+            return true;
+        }
+        return false;
+    }
+};
+// ============================================================================
+// Block Transclusion ({{...}})
+// ============================================================================
+const transclusionBlockRe = /^\{\{([^{}|]*)(?:\|\|([^{}|]+))?(?:\|([^{}]+))?\}\}\s*$/;
+const TransclusionBlock = {
+    name: "TransclusionBlock",
+    parse(cx, line) {
+        const match = transclusionBlockRe.exec(line.text);
+        if (!match)
+            return false;
+        const start = cx.lineStart;
+        const target = match[1];
+        const template = match[2];
+        match[3];
+        const children = [
+            elt(Type.TransclusionMark, start, start + 2),
+            elt(Type.TransclusionTarget, start + 2, start + 2 + target.length),
+        ];
+        let pos = start + 2 + target.length;
+        if (template) {
+            children.push(elt(Type.TransclusionTemplate, pos + 2, pos + 2 + template.length));
+            pos += 2 + template.length;
+        }
+        children.push(elt(Type.TransclusionMark, start + line.text.length - 2, start + line.text.length));
+        cx.addElement(elt(Type.TransclusionBlock, start, start + line.text.length, children));
+        return true;
+    }
+};
+// ============================================================================
+// Filtered Transclusion Block ({{{...}}})
+// ============================================================================
+const filteredBlockRe = /^\{\{\{([^{}]*)\}\}\}(?:\|\|([^{}]+))?\s*$/;
+const FilteredTransclusionBlock = {
+    name: "FilteredTransclusionBlock",
+    parse(cx, line) {
+        const match = filteredBlockRe.exec(line.text);
+        if (!match)
+            return false;
+        const start = cx.lineStart;
+        const filter = match[1];
+        const template = match[2];
+        const children = [
+            elt(Type.FilteredTransclusionMark, start, start + 3),
+            elt(Type.FilterExpression, start + 3, start + 3 + filter.length),
+            elt(Type.FilteredTransclusionMark, start + 3 + filter.length, start + 6 + filter.length),
+        ];
+        if (template) {
+            children.push(elt(Type.TransclusionTemplate, start + 8 + filter.length, start + 8 + filter.length + template.length));
+        }
+        cx.addElement(elt(Type.FilteredTransclusionBlock, start, start + line.text.length, children));
+        return true;
+    }
+};
+// ============================================================================
+// Macro Call Block (<<...>>)
+// ============================================================================
+const macroBlockRe = /^<<([^\s>]+)([^>]*)>>\s*$/;
+const MacroCallBlock = {
+    name: "MacroCallBlock",
+    parse(cx, line) {
+        const match = macroBlockRe.exec(line.text);
+        if (!match)
+            return false;
+        const start = cx.lineStart;
+        const name = match[1];
+        const params = match[2];
+        const children = [
+            elt(Type.MacroCallMark, start, start + 2),
+            elt(Type.MacroName, start + 2, start + 2 + name.length),
+        ];
+        // TODO: Parse parameters properly
+        if (params.trim()) {
+            children.push(elt(Type.MacroParam, start + 2 + name.length, start + line.text.length - 2));
+        }
+        children.push(elt(Type.MacroCallMark, start + line.text.length - 2, start + line.text.length));
+        cx.addElement(elt(Type.MacroCallBlock, start, start + line.text.length, children));
+        return true;
+    }
+};
+// ============================================================================
+// HTML Block and Widget Block
+// ============================================================================
+// Opening tag: <tagname or <$widget
+const openTagRe = /^(\s*)<([a-zA-Z$][a-zA-Z0-9\-]*)([^>]*?)(\/?)>/;
+// Closing tag: </tagname> or </$widget>
+const closeTagRe = /^(\s*)<\/([a-zA-Z$][a-zA-Z0-9\-]*)>/;
+// Self-closing check
+const selfClosingRe = /\/>$/;
+const HTMLBlock = {
+    name: "HTMLBlock",
+    parse(cx, line) {
+        const text = line.text;
+        // Try closing tag first
+        const closeMatch = closeTagRe.exec(text);
+        if (closeMatch) {
+            const indent = closeMatch[1].length;
+            const tagName = closeMatch[2];
+            const isWidget = tagName.startsWith("$");
+            const start = cx.lineStart;
+            const children = [];
+            const tagStart = start + indent + 2; // After "</"
+            children.push(elt(isWidget ? Type.WidgetName : Type.TagName, tagStart, tagStart + tagName.length));
+            cx.addElement(elt(isWidget ? Type.WidgetEnd : Type.HTMLEndTag, start, start + text.length, children));
+            return true;
+        }
+        // Try opening tag
+        const openMatch = openTagRe.exec(text);
+        if (!openMatch)
+            return false;
+        const indent = openMatch[1].length;
+        const tagName = openMatch[2];
+        const attrs = openMatch[3];
+        const selfClose = openMatch[4] === "/";
+        const isWidget = tagName.startsWith("$");
+        const start = cx.lineStart;
+        const children = [];
+        const tagStart = start + indent + 1; // After "<"
+        children.push(elt(isWidget ? Type.WidgetName : Type.TagName, tagStart, tagStart + tagName.length));
+        // Parse attributes if present
+        if (attrs.trim()) {
+            const attrsStart = tagStart + tagName.length;
+            children.push(elt(Type.TagAttributes, attrsStart, attrsStart + attrs.length));
+        }
+        // Determine if this is a multi-line block
+        if (!selfClose && !selfClosingRe.test(text)) {
+            // Look for closing tag on same line
+            const closeOnSameLine = new RegExp(`</${tagName.replace(/\$/g, '\\$')}>`).exec(text);
+            if (!closeOnSameLine) {
+                // Multi-line: find the closing tag
+                const closeRe = new RegExp(`^\\s*</${tagName.replace(/\$/g, '\\$')}>`);
+                let blockEnd = start + text.length;
+                while (cx.nextLine()) {
+                    const lineText = cx.line.text;
+                    if (closeRe.test(lineText)) {
+                        // Add closing tag as child
+                        const closeIndent = lineText.match(/^\s*/)?.[0].length || 0;
+                        const closeTagStart = cx.lineStart + closeIndent + 2;
+                        children.push(elt(isWidget ? Type.WidgetName : Type.TagName, closeTagStart, closeTagStart + tagName.length));
+                        blockEnd = cx.lineStart + lineText.length;
+                        break;
+                    }
+                }
+                cx.addElement(elt(isWidget ? Type.Widget : Type.HTMLBlock, start, blockEnd, children));
+                return true;
+            }
+        }
+        // Single line or self-closing
+        cx.addElement(elt(isWidget ? Type.Widget : Type.HTMLBlock, start, start + text.length, children));
+        return true;
+    }
+};
+// ============================================================================
+// Export all default block parsers
+// ============================================================================
+const DefaultBlockParsers = [
+    Heading,
+    HorizontalRule,
+    FencedCode,
+    TypedBlock,
+    List,
+    Table,
+    CommentBlock,
+    TransclusionBlock,
+    FilteredTransclusionBlock,
+    MacroCallBlock,
+    HTMLBlock,
+];
+
+/**
+ * TiddlyWiki Parser - Inline Parsers
+ *
+ * Inline-level parsing rules following the Lezer Markdown architecture.
+ */
+// ============================================================================
+// Escape Parser (~WikiWord prevents linking)
+// ============================================================================
+const Escape = {
+    name: "Escape",
+    parse(cx, next, pos) {
+        if (next !== Ch.Tilde && next !== Ch.Backslash)
+            return -1;
+        const after = cx.char(pos + 1);
+        if (after < 0)
+            return -1;
+        // ~ before CamelCase word prevents linking
+        if (next === Ch.Tilde) {
+            // Check if followed by uppercase letter
+            if (after >= 65 && after <= 90) { // A-Z
+                return cx.addElement(cx.elt(Type.Escape, pos, pos + 1));
+            }
+            return -1;
+        }
+        // Backslash escape
+        return cx.addElement(cx.elt(Type.Escape, pos, pos + 2));
+    }
+};
+// ============================================================================
+// Entity Parser (&amp; etc)
+// ============================================================================
+const entityRe = /^&(?:#x[0-9a-fA-F]+|#[0-9]+|[a-zA-Z]+);/;
+const Entity = {
+    name: "Entity",
+    parse(cx, next, pos) {
+        if (next !== Ch.Ampersand)
+            return -1;
+        const text = cx.slice(pos, cx.end);
+        const match = entityRe.exec(text);
+        if (!match)
+            return -1;
+        return cx.addElement(cx.elt(Type.Entity, pos, pos + match[0].length));
+    }
+};
+// ============================================================================
+// Inline Code Parser (`code`)
+// ============================================================================
+const InlineCode = {
+    name: "InlineCode",
+    parse(cx, next, pos) {
+        if (next !== Ch.Backtick)
+            return -1;
+        // Find closing backtick
+        let end = pos + 1;
+        while (end < cx.end) {
+            if (cx.char(end) === Ch.Backtick) {
+                return cx.addElement(cx.elt(Type.InlineCode, pos, end + 1, [
+                    cx.elt(Type.InlineCodeMark, pos, pos + 1),
+                    cx.elt(Type.CodeText, pos + 1, end),
+                    cx.elt(Type.InlineCodeMark, end, end + 1),
+                ]));
+            }
+            end++;
+        }
+        return -1;
+    }
+};
+// ============================================================================
+// Bold Parser ('')
+// ============================================================================
+const BoldDelim = { resolve: "Bold", mark: "BoldMark" };
+const Bold = {
+    name: "Bold",
+    parse(cx, next, pos) {
+        if (next !== Ch.Apostrophe || cx.char(pos + 1) !== Ch.Apostrophe)
+            return -1;
+        // Check flanking
+        const before = cx.slice(pos - 1, pos);
+        const after = cx.slice(pos + 2, pos + 3);
+        const sBefore = /\s|^$/.test(before);
+        const sAfter = /\s|^$/.test(after);
+        const pBefore = Punctuation.test(before);
+        const pAfter = Punctuation.test(after);
+        const canOpen = !sAfter && (!pAfter || sBefore || pBefore);
+        const canClose = !sBefore && (!pBefore || sAfter || pAfter);
+        return cx.addDelimiter(BoldDelim, pos, pos + 2, canOpen, canClose);
+    }
+};
+// ============================================================================
+// Italic Parser (//)
+// ============================================================================
+const ItalicDelim = { resolve: "Italic", mark: "ItalicMark" };
+const Italic = {
+    name: "Italic",
+    parse(cx, next, pos) {
+        if (next !== Ch.Slash || cx.char(pos + 1) !== Ch.Slash)
+            return -1;
+        const before = cx.slice(pos - 1, pos);
+        const after = cx.slice(pos + 2, pos + 3);
+        const sBefore = /\s|^$/.test(before);
+        const sAfter = /\s|^$/.test(after);
+        return cx.addDelimiter(ItalicDelim, pos, pos + 2, !sAfter, !sBefore);
+    }
+};
+// ============================================================================
+// Underline Parser (__)
+// ============================================================================
+const UnderlineDelim = { resolve: "Underline", mark: "UnderlineMark" };
+const Underline = {
+    name: "Underline",
+    parse(cx, next, pos) {
+        if (next !== Ch.Underscore || cx.char(pos + 1) !== Ch.Underscore)
+            return -1;
+        const before = cx.slice(pos - 1, pos);
+        const after = cx.slice(pos + 2, pos + 3);
+        const sBefore = /\s|^$/.test(before);
+        const sAfter = /\s|^$/.test(after);
+        return cx.addDelimiter(UnderlineDelim, pos, pos + 2, !sAfter, !sBefore);
+    }
+};
+// ============================================================================
+// Strikethrough Parser (~~)
+// ============================================================================
+const StrikethroughDelim = { resolve: "Strikethrough", mark: "StrikethroughMark" };
+const Strikethrough = {
+    name: "Strikethrough",
+    parse(cx, next, pos) {
+        if (next !== Ch.Tilde || cx.char(pos + 1) !== Ch.Tilde)
+            return -1;
+        // Make sure it's not ~~~
+        if (cx.char(pos + 2) === Ch.Tilde)
+            return -1;
+        const before = cx.slice(pos - 1, pos);
+        const after = cx.slice(pos + 2, pos + 3);
+        const sBefore = /\s|^$/.test(before);
+        const sAfter = /\s|^$/.test(after);
+        return cx.addDelimiter(StrikethroughDelim, pos, pos + 2, !sAfter, !sBefore);
+    }
+};
+// ============================================================================
+// Superscript Parser (^^)
+// ============================================================================
+const SuperscriptDelim = { resolve: "Superscript", mark: "SuperscriptMark" };
+const Superscript = {
+    name: "Superscript",
+    parse(cx, next, pos) {
+        if (next !== Ch.Caret || cx.char(pos + 1) !== Ch.Caret)
+            return -1;
+        const before = cx.slice(pos - 1, pos);
+        const after = cx.slice(pos + 2, pos + 3);
+        const sBefore = /\s|^$/.test(before);
+        const sAfter = /\s|^$/.test(after);
+        return cx.addDelimiter(SuperscriptDelim, pos, pos + 2, !sAfter, !sBefore);
+    }
+};
+// ============================================================================
+// Subscript Parser (,,)
+// ============================================================================
+const SubscriptDelim = { resolve: "Subscript", mark: "SubscriptMark" };
+const Subscript = {
+    name: "Subscript",
+    parse(cx, next, pos) {
+        if (next !== Ch.Comma || cx.char(pos + 1) !== Ch.Comma)
+            return -1;
+        const before = cx.slice(pos - 1, pos);
+        const after = cx.slice(pos + 2, pos + 3);
+        const sBefore = /\s|^$/.test(before);
+        const sAfter = /\s|^$/.test(after);
+        return cx.addDelimiter(SubscriptDelim, pos, pos + 2, !sAfter, !sBefore);
+    }
+};
+// ============================================================================
+// Highlight Parser (@@)
+// ============================================================================
+const HighlightDelim = { resolve: "Highlight", mark: "HighlightMark" };
+const Highlight = {
+    name: "Highlight",
+    parse(cx, next, pos) {
+        if (next !== Ch.At || cx.char(pos + 1) !== Ch.At)
+            return -1;
+        const before = cx.slice(pos - 1, pos);
+        const after = cx.slice(pos + 2, pos + 3);
+        const sBefore = /\s|^$/.test(before);
+        const sAfter = /\s|^$/.test(after);
+        return cx.addDelimiter(HighlightDelim, pos, pos + 2, !sAfter, !sBefore);
+    }
+};
+// ============================================================================
+// WikiLink Parser ([[text|target]] or [[target]])
+// ============================================================================
+const wikiLinkRe = /^\[\[([^\]|]*?)(?:\|([^\]]*?))?\]\]/;
+const WikiLink = {
+    name: "WikiLink",
+    parse(cx, next, pos) {
+        if (next !== Ch.LeftBracket || cx.char(pos + 1) !== Ch.LeftBracket)
+            return -1;
+        const text = cx.slice(pos, cx.end);
+        const match = wikiLinkRe.exec(text);
+        if (!match)
+            return -1;
+        const end = pos + match[0].length;
+        const firstPart = match[1];
+        const secondPart = match[2];
+        const children = [
+            cx.elt(Type.WikiLinkMark, pos, pos + 2),
+        ];
+        if (secondPart !== undefined) {
+            // [[text|target]]
+            children.push(cx.elt(Type.LinkText, pos + 2, pos + 2 + firstPart.length));
+            children.push(cx.elt(Type.LinkSeparator, pos + 2 + firstPart.length, pos + 3 + firstPart.length));
+            children.push(cx.elt(Type.LinkTarget, pos + 3 + firstPart.length, end - 2));
+        }
+        else {
+            // [[target]]
+            children.push(cx.elt(Type.LinkTarget, pos + 2, end - 2));
+        }
+        children.push(cx.elt(Type.WikiLinkMark, end - 2, end));
+        return cx.addElement(cx.elt(Type.WikiLink, pos, end, children));
+    }
+};
+// ============================================================================
+// External Link Parser ([ext[text|url]] or [ext[url]])
+// ============================================================================
+const extLinkRe = /^\[ext\[([^\]|]*?)(?:\|([^\]]*?))?\]\]/;
+const ExternalLink = {
+    name: "ExternalLink",
+    parse(cx, next, pos) {
+        if (next !== Ch.LeftBracket)
+            return -1;
+        const text = cx.slice(pos, cx.end);
+        const match = extLinkRe.exec(text);
+        if (!match)
+            return -1;
+        const end = pos + match[0].length;
+        const firstPart = match[1];
+        const secondPart = match[2];
+        const children = [
+            cx.elt(Type.ExtLinkMark, pos, pos + 5), // [ext[
+        ];
+        if (secondPart !== undefined) {
+            children.push(cx.elt(Type.LinkText, pos + 5, pos + 5 + firstPart.length));
+            children.push(cx.elt(Type.LinkSeparator, pos + 5 + firstPart.length, pos + 6 + firstPart.length));
+            children.push(cx.elt(Type.URLLink, pos + 6 + firstPart.length, end - 2));
+        }
+        else {
+            children.push(cx.elt(Type.URLLink, pos + 5, end - 2));
+        }
+        children.push(cx.elt(Type.ExtLinkMark, end - 2, end));
+        return cx.addElement(cx.elt(Type.ExternalLink, pos, end, children));
+    }
+};
+// ============================================================================
+// Image Link Parser ([img[src]] or [img width=x height=y [alt|src]])
+// ============================================================================
+const imgLinkRe = /^\[img(?:\s+[^\[]+)?\[([^\]|]*?)(?:\|([^\]]*?))?\]\]/;
+const ImageLink = {
+    name: "ImageLink",
+    parse(cx, next, pos) {
+        if (next !== Ch.LeftBracket)
+            return -1;
+        const text = cx.slice(pos, cx.end);
+        const match = imgLinkRe.exec(text);
+        if (!match)
+            return -1;
+        const end = pos + match[0].length;
+        const children = [
+            cx.elt(Type.ImageMark, pos, pos + 4), // [img
+        ];
+        // TODO: Parse width/height/class attributes
+        children.push(cx.elt(Type.ImageMark, end - 2, end));
+        return cx.addElement(cx.elt(Type.ImageLink, pos, end, children));
+    }
+};
+// ============================================================================
+// Transclusion Parser ({{ref}} or {{ref!!field}} etc)
+// ============================================================================
+const transclusionRe = /^\{\{([^{}|]*?)(?:\|\|([^{}|]+?))?(?:\|([^{}]+?))?\}\}/;
+const Transclusion = {
+    name: "Transclusion",
+    parse(cx, next, pos) {
+        if (next !== Ch.LeftBrace || cx.char(pos + 1) !== Ch.LeftBrace)
+            return -1;
+        // Make sure it's not {{{
+        if (cx.char(pos + 2) === Ch.LeftBrace)
+            return -1;
+        const text = cx.slice(pos, cx.end);
+        const match = transclusionRe.exec(text);
+        if (!match)
+            return -1;
+        const end = pos + match[0].length;
+        const target = match[1];
+        const template = match[2];
+        const children = [
+            cx.elt(Type.TransclusionMark, pos, pos + 2),
+            cx.elt(Type.TransclusionTarget, pos + 2, pos + 2 + target.length),
+        ];
+        if (template) {
+            const templateStart = pos + 2 + target.length + 2;
+            children.push(cx.elt(Type.TransclusionTemplate, templateStart, templateStart + template.length));
+        }
+        children.push(cx.elt(Type.TransclusionMark, end - 2, end));
+        return cx.addElement(cx.elt(Type.Transclusion, pos, end, children));
+    }
+};
+// ============================================================================
+// Filtered Transclusion Parser ({{{filter}}})
+// ============================================================================
+const filteredRe = /^\{\{\{([^{}]*?)\}\}\}(?:\|\|([^{}]+?))?/;
+const FilteredTransclusion = {
+    name: "FilteredTransclusion",
+    parse(cx, next, pos) {
+        if (next !== Ch.LeftBrace || cx.char(pos + 1) !== Ch.LeftBrace || cx.char(pos + 2) !== Ch.LeftBrace)
+            return -1;
+        const text = cx.slice(pos, cx.end);
+        const match = filteredRe.exec(text);
+        if (!match)
+            return -1;
+        const end = pos + match[0].length;
+        const filter = match[1];
+        const template = match[2];
+        const children = [
+            cx.elt(Type.FilteredTransclusionMark, pos, pos + 3),
+            cx.elt(Type.FilterExpression, pos + 3, pos + 3 + filter.length),
+            cx.elt(Type.FilteredTransclusionMark, pos + 3 + filter.length, pos + 6 + filter.length),
+        ];
+        if (template) {
+            children.push(cx.elt(Type.TransclusionTemplate, pos + 8 + filter.length, end));
+        }
+        return cx.addElement(cx.elt(Type.FilteredTransclusion, pos, end, children));
+    }
+};
+// ============================================================================
+// Macro Call Parser (<<macro params>>)
+// ============================================================================
+const macroRe = /^<<([^\s>]+)([^>]*)>>/;
+const MacroCall = {
+    name: "MacroCall",
+    parse(cx, next, pos) {
+        if (next !== Ch.LessThan || cx.char(pos + 1) !== Ch.LessThan)
+            return -1;
+        const text = cx.slice(pos, cx.end);
+        const match = macroRe.exec(text);
+        if (!match)
+            return -1;
+        const end = pos + match[0].length;
+        const name = match[1];
+        const params = match[2];
+        const children = [
+            cx.elt(Type.MacroCallMark, pos, pos + 2),
+            cx.elt(Type.MacroName, pos + 2, pos + 2 + name.length),
+        ];
+        if (params.trim()) {
+            children.push(cx.elt(Type.MacroParam, pos + 2 + name.length, end - 2));
+        }
+        children.push(cx.elt(Type.MacroCallMark, end - 2, end));
+        return cx.addElement(cx.elt(Type.MacroCall, pos, end, children));
+    }
+};
+// ============================================================================
+// Widget Parser (<$widget/>)
+// ============================================================================
+const widgetRe = /^<(\$[a-zA-Z0-9\-\.]+)([^>]*?)(\/)?\s*>/;
+const Widget = {
+    name: "Widget",
+    parse(cx, next, pos) {
+        if (next !== Ch.LessThan)
+            return -1;
+        if (cx.char(pos + 1) !== Ch.Dollar)
+            return -1;
+        const text = cx.slice(pos, cx.end);
+        const match = widgetRe.exec(text);
+        if (!match)
+            return -1;
+        const end = pos + match[0].length;
+        const name = match[1];
+        match[2];
+        const selfClosing = match[3];
+        const children = [
+            cx.elt(Type.WidgetName, pos + 1, pos + 1 + name.length),
+        ];
+        // TODO: Parse attributes
+        if (selfClosing) {
+            children.push(cx.elt(Type.SelfClosingMarker, end - 2, end - 1));
+        }
+        return cx.addElement(cx.elt(Type.InlineWidget, pos, end, children));
+    }
+};
+// ============================================================================
+// HTML Tag Parser (<tag/>)
+// ============================================================================
+const htmlTagRe = /^<([a-zA-Z][a-zA-Z0-9\-]*)([^>]*?)(\/)?\s*>/;
+const HTMLTag = {
+    name: "HTMLTag",
+    parse(cx, next, pos) {
+        if (next !== Ch.LessThan)
+            return -1;
+        // Skip if it's a widget
+        if (cx.char(pos + 1) === Ch.Dollar)
+            return -1;
+        const text = cx.slice(pos, cx.end);
+        const match = htmlTagRe.exec(text);
+        if (!match)
+            return -1;
+        const end = pos + match[0].length;
+        const name = match[1];
+        const children = [
+            cx.elt(Type.TagName, pos + 1, pos + 1 + name.length),
+        ];
+        return cx.addElement(cx.elt(Type.HTMLTag, pos, end, children));
+    }
+};
+// ============================================================================
+// Dash Parser (-- or ---)
+// ============================================================================
+const Dash = {
+    name: "Dash",
+    parse(cx, next, pos) {
+        if (next !== Ch.Dash)
+            return -1;
+        let count = 1;
+        while (cx.char(pos + count) === Ch.Dash)
+            count++;
+        if (count === 2) {
+            return cx.addElement(cx.elt(Type.Dash, pos, pos + 2));
+        }
+        else if (count >= 3) {
+            return cx.addElement(cx.elt(Type.Dash, pos, pos + 3));
+        }
+        return -1;
+    }
+};
+// ============================================================================
+// CamelCase Link Parser
+// ============================================================================
+const camelCaseRe = /^[A-Z][a-z]+[A-Z][A-Za-z]*/;
+const CamelCaseLink = {
+    name: "CamelCaseLink",
+    parse(cx, next, pos) {
+        // Must start with uppercase
+        if (next < 65 || next > 90)
+            return -1;
+        const text = cx.slice(pos, cx.end);
+        const match = camelCaseRe.exec(text);
+        if (!match)
+            return -1;
+        // Check it's not escaped with ~
+        if (pos > cx.offset && cx.char(pos - 1) === Ch.Tilde)
+            return -1;
+        return cx.addElement(cx.elt(Type.CamelCaseLink, pos, pos + match[0].length));
+    }
+};
+// ============================================================================
+// System Link Parser ($:/...)
+// ============================================================================
+const sysLinkRe = /^\$:\/[^\s\[\]{}|]*/;
+const SystemLink = {
+    name: "SystemLink",
+    parse(cx, next, pos) {
+        if (next !== Ch.Dollar)
+            return -1;
+        const text = cx.slice(pos, cx.end);
+        const match = sysLinkRe.exec(text);
+        if (!match)
+            return -1;
+        return cx.addElement(cx.elt(Type.SystemLink, pos, pos + match[0].length));
+    }
+};
+// ============================================================================
+// URL Auto-Link Parser (http://...)
+// ============================================================================
+const urlRe = /^https?:\/\/[^\s\[\]{}|<>]*/;
+const URLAutoLink = {
+    name: "URLAutoLink",
+    parse(cx, next, pos) {
+        if (next !== 104)
+            return -1; // 'h'
+        const text = cx.slice(pos, cx.end);
+        const match = urlRe.exec(text);
+        if (!match)
+            return -1;
+        return cx.addElement(cx.elt(Type.URLLink, pos, pos + match[0].length));
+    }
+};
+// ============================================================================
+// Export all default inline parsers
+// ============================================================================
+const DefaultInlineParsers = [
+    Escape,
+    Entity,
+    InlineCode,
+    Bold,
+    Italic,
+    Underline,
+    Strikethrough,
+    Superscript,
+    Subscript,
+    Highlight,
+    WikiLink,
+    ExternalLink,
+    ImageLink,
+    FilteredTransclusion, // Must come before Transclusion
+    Transclusion,
+    MacroCall,
+    Widget,
+    HTMLTag,
+    Dash,
+    SystemLink,
+    CamelCaseLink,
+    URLAutoLink,
+];
+
+/**
+ * TiddlyWiki Parser - Main Parser Class
+ *
+ * The main parser that combines all the components following the Lezer architecture.
+ */
+/**
+ * TiddlyWiki-specific syntax highlighting tags
+ */
+({
+    twTransclusion: highlight.Tag.define(),
+    twMacro: highlight.Tag.define(),
+    twWidget: highlight.Tag.define(),
+    twFilter: highlight.Tag.define(),
+    twPragma: highlight.Tag.define(),
+    twVariable: highlight.Tag.define(),
+});
+/**
+ * Default style tags for TiddlyWiki syntax
+ */
+const defaultStyleTags = highlight.styleTags({
+    // Headings
+    "Heading1/...": highlight.tags.heading1,
+    "Heading2/...": highlight.tags.heading2,
+    "Heading3/...": highlight.tags.heading3,
+    "Heading4/...": highlight.tags.heading4,
+    "Heading5/...": highlight.tags.heading5,
+    "Heading6/...": highlight.tags.heading6,
+    HeadingMark: highlight.tags.processingInstruction,
+    // Emphasis
+    "Bold/...": highlight.tags.strong,
+    "Italic/...": highlight.tags.emphasis,
+    "Underline/...": highlight.tags.special(highlight.tags.emphasis),
+    "Strikethrough/...": highlight.tags.strikethrough,
+    "Superscript/...": highlight.tags.special(highlight.tags.content),
+    "Subscript/...": highlight.tags.special(highlight.tags.content),
+    "Highlight/...": highlight.tags.special(highlight.tags.content),
+    "BoldMark ItalicMark UnderlineMark StrikethroughMark SuperscriptMark SubscriptMark HighlightMark": highlight.tags.processingInstruction,
+    // Code
+    "InlineCode FencedCode TypedBlock CodeText": highlight.tags.monospace,
+    "CodeMark TypedBlockMark InlineCodeMark": highlight.tags.processingInstruction,
+    CodeInfo: highlight.tags.labelName,
+    TypedBlockType: highlight.tags.labelName,
+    // Links
+    "WikiLink ExternalLink CamelCaseLink": highlight.tags.link,
+    "WikiLinkMark ExtLinkMark": highlight.tags.processingInstruction,
+    LinkText: highlight.tags.string,
+    LinkTarget: highlight.tags.url,
+    LinkSeparator: highlight.tags.processingInstruction,
+    // Images
+    ImageLink: highlight.tags.link,
+    ImageMark: highlight.tags.processingInstruction,
+    ImageSource: highlight.tags.url,
+    // URLs
+    "URLLink SystemLink": highlight.tags.url,
+    // Transclusions
+    "Transclusion TransclusionBlock": highlight.tags.special(highlight.tags.link),
+    "TransclusionMark": highlight.tags.processingInstruction,
+    TransclusionTarget: highlight.tags.special(highlight.tags.string),
+    TransclusionTemplate: highlight.tags.special(highlight.tags.string),
+    TransclusionField: highlight.tags.propertyName,
+    TransclusionIndex: highlight.tags.propertyName,
+    // Filtered transclusions
+    "FilteredTransclusion FilteredTransclusionBlock": highlight.tags.special(highlight.tags.link),
+    "FilteredTransclusionMark": highlight.tags.processingInstruction,
+    FilterExpression: highlight.tags.special(highlight.tags.string),
+    // Macros
+    "MacroCall MacroCallBlock": highlight.tags.macroName,
+    MacroCallMark: highlight.tags.processingInstruction,
+    MacroName: highlight.tags.macroName,
+    MacroParam: highlight.tags.attributeValue,
+    MacroParamName: highlight.tags.attributeName,
+    MacroParamValue: highlight.tags.attributeValue,
+    // Widgets and HTML
+    "Widget InlineWidget HTMLBlock HTMLTag": highlight.tags.tagName,
+    WidgetName: highlight.tags.tagName,
+    TagName: highlight.tags.tagName,
+    Attribute: highlight.tags.attributeName,
+    AttributeName: highlight.tags.attributeName,
+    "AttributeValue AttributeString AttributeNumber": highlight.tags.attributeValue,
+    AttributeIndirect: highlight.tags.special(highlight.tags.attributeValue),
+    AttributeFiltered: highlight.tags.special(highlight.tags.attributeValue),
+    AttributeMacro: highlight.tags.special(highlight.tags.attributeValue),
+    AttributeSubstituted: highlight.tags.special(highlight.tags.attributeValue),
+    SelfClosingMarker: highlight.tags.processingInstruction,
+    // Lists
+    "BulletList OrderedList DefinitionList": highlight.tags.list,
+    "ListItem DefinitionTerm DefinitionDescription": highlight.tags.list,
+    ListMark: highlight.tags.processingInstruction,
+    // Block quotes
+    BlockQuote: highlight.tags.quote,
+    QuoteMark: highlight.tags.processingInstruction,
+    // Tables
+    "Table TableRow": highlight.tags.content,
+    "TableHeader TableHeaderCell": highlight.tags.heading,
+    TableCell: highlight.tags.content,
+    TableDelimiter: highlight.tags.processingInstruction,
+    // Horizontal rule
+    HorizontalRule: highlight.tags.contentSeparator,
+    // Comments
+    "CommentBlock CommentMarker": highlight.tags.comment,
+    // Pragmas
+    "MacroDefinition ProcedureDefinition FunctionDefinition WidgetDefinition": highlight.tags.definitionKeyword,
+    "RulesPragma ImportPragma ParametersPragma WhitespacePragma": highlight.tags.definitionKeyword,
+    PragmaMark: highlight.tags.processingInstruction,
+    PragmaKeyword: highlight.tags.keyword,
+    PragmaName: highlight.tags.definition(highlight.tags.macroName),
+    PragmaParams: highlight.tags.definition(highlight.tags.variableName),
+    PragmaBody: highlight.tags.content,
+    PragmaEnd: highlight.tags.keyword,
+    // Special
+    Escape: highlight.tags.escape,
+    Entity: highlight.tags.character,
+    Dash: highlight.tags.punctuation,
+    Variable: highlight.tags.variableName,
+    HardBreak: highlight.tags.processingInstruction,
+    // Generic
+    Paragraph: highlight.tags.content,
+    Text: highlight.tags.content,
+    Mark: highlight.tags.processingInstruction,
+    ProcessingInstruction: highlight.tags.processingInstruction,
+});
+/**
+ * Create the default node set for TiddlyWiki
+ */
+function createNodeSet() {
+    const nodeTypes = [];
+    // Create node types for each Type enum value
+    const typeNames = Object.keys(Type).filter(k => isNaN(Number(k)));
+    for (const name of typeNames) {
+        const id = Type[name];
+        if (typeof id !== "number")
+            continue;
+        // Ensure the array is large enough
+        while (nodeTypes.length <= id) {
+            nodeTypes.push(common.NodeType.none);
+        }
+        nodeTypes[id] = common.NodeType.define({
+            id,
+            name,
+            props: [],
+        });
+    }
+    return new common.NodeSet(nodeTypes).extend(defaultStyleTags);
+}
+/**
+ * The main TiddlyWiki parser class
+ */
+class TiddlyWikiParser extends common.Parser {
+    constructor(nodeSet, pragmaParsers, blockParsers, inlineParsers) {
+        super();
+        this.nodeSet = nodeSet || createNodeSet();
+        this.pragmaParsers = pragmaParsers || DefaultPragmaParsers;
+        this.blockParsers = blockParsers || DefaultBlockParsers;
+        this.inlineParsers = inlineParsers || DefaultInlineParsers;
+    }
+    /**
+     * Create a partial parse for incremental parsing
+     */
+    createParse(input, fragments, ranges) {
+        return new BlockContext(this, input, fragments, ranges);
+    }
+    /**
+     * Configure the parser with additional rules or modifications
+     */
+    configure(config) {
+        let nodeSet = this.nodeSet;
+        let pragmaParsers = [...this.pragmaParsers];
+        let blockParsers = [...this.blockParsers];
+        let inlineParsers = [...this.inlineParsers];
+        // Remove specified parsers
+        if (config.remove) {
+            const toRemove = new Set(config.remove);
+            pragmaParsers = pragmaParsers.filter(p => !toRemove.has(p.name));
+            blockParsers = blockParsers.filter(p => !toRemove.has(p.name));
+            inlineParsers = inlineParsers.filter(p => !toRemove.has(p.name));
+        }
+        // Add new parsers
+        if (config.parsePragma) {
+            for (const parser of config.parsePragma) {
+                pragmaParsers = insertParser(pragmaParsers, parser);
+            }
+        }
+        if (config.parseBlock) {
+            for (const parser of config.parseBlock) {
+                blockParsers = insertParser(blockParsers, parser);
+            }
+        }
+        if (config.parseInline) {
+            for (const parser of config.parseInline) {
+                inlineParsers = insertParser(inlineParsers, parser);
+            }
+        }
+        // Add new node types if needed
+        if (config.defineNodes) {
+            const types = [...nodeSet.types];
+            for (const spec of config.defineNodes) {
+                const name = typeof spec === "string" ? spec : spec.name;
+                const id = types.length;
+                types.push(common.NodeType.define({ id, name, props: [] }));
+            }
+            nodeSet = new common.NodeSet(types);
+            // Apply style props
+            if (config.props) {
+                for (const source of config.props) {
+                    nodeSet = nodeSet.extend(source);
+                }
+            }
+        }
+        return new TiddlyWikiParser(nodeSet, pragmaParsers, blockParsers, inlineParsers);
+    }
+    /**
+     * Parse inline content
+     */
+    parseInline(text, offset) {
+        return parseInline(this, text, offset);
+    }
+}
+/**
+ * Insert a parser in the correct position based on before/after
+ */
+function insertParser(parsers, parser) {
+    const result = [...parsers];
+    if (parser.before) {
+        const index = result.findIndex(p => p.name === parser.before);
+        if (index >= 0) {
+            result.splice(index, 0, parser);
+            return result;
+        }
+    }
+    if (parser.after) {
+        const index = result.findIndex(p => p.name === parser.after);
+        if (index >= 0) {
+            result.splice(index + 1, 0, parser);
+            return result;
+        }
+    }
+    result.push(parser);
+    return result;
+}
+/**
+ * The default TiddlyWiki parser instance
+ */
+const parser = new TiddlyWikiParser();
+
+/**
+ * TiddlyWiki Language Support - Core Language Definition
+ *
+ * Creates the TiddlyWiki Language for CodeMirror 6, similar to how
+ * lang-markdown creates the Markdown language.
+ */
+/**
+ * Language facet with TiddlyWiki-specific data
+ */
+const data = language.defineLanguageFacet({
+    commentTokens: {
+        block: { open: "<!--", close: "-->" },
+        // TiddlyWiki also supports /% %/ comments
+    }
+});
+/**
+ * Node prop for heading levels
+ */
+const headingProp = new common.NodeProp();
+/**
+ * Check if a node type is a heading and return its level
+ */
+function isHeading(type) {
+    const match = /^Heading(\d)$/.exec(type.name);
+    return match ? +match[1] : undefined;
+}
+/**
+ * Check if a node type is a list
+ */
+function isList(type) {
+    return type.name === "BulletList" || type.name === "OrderedList" || type.name === "DefinitionList";
+}
+/**
+ * Check if a node type is a block element
+ */
+function isBlock(type) {
+    // Check common block types
+    return /^(Paragraph|Heading\d|BulletList|OrderedList|DefinitionList|BlockQuote|Table|FencedCode|TypedBlock|Widget|HTMLBlock|TransclusionBlock|FilteredTransclusionBlock|MacroCallBlock|CommentBlock|HorizontalRule)$/.test(type.name);
+}
+/**
+ * Configure the base parser with CodeMirror-specific props
+ */
+const configured = parser.configure({
+    props: [
+        // Folding support
+        language.foldNodeProp.add(type => {
+            // Don't fold document, headings (they use section folding), or lists
+            if (!isBlock(type) || type.name === "Document" || isHeading(type) != null || isList(type)) {
+                return undefined;
+            }
+            // Fold from end of first line to end of block
+            return (tree, state) => ({
+                from: state.doc.lineAt(tree.from).to,
+                to: tree.to
+            });
+        }),
+        // Add heading level prop
+        headingProp.add(isHeading),
+        // Indentation
+        language.indentNodeProp.add({
+            Document: () => null
+        }),
+        // Language data
+        language.languageDataProp.add({
+            Document: data
+        })
+    ]
+});
+/**
+ * Find the end of a section (for heading folding)
+ */
+function findSectionEnd(headerNode, level) {
+    let last = headerNode;
+    for (;;) {
+        const next = last.nextSibling;
+        if (!next)
+            break;
+        const heading = isHeading(next.type);
+        if (heading != null && heading <= level)
+            break;
+        last = next;
+    }
+    return last.to;
+}
+/**
+ * Fold service for heading sections
+ * Allows folding from a heading to the next heading of same or higher level
+ */
+const headerIndent = language.foldService.of((state, start, end) => {
+    for (let node = language.syntaxTree(state).resolveInner(end, -1); node; node = node.parent) {
+        if (node.from < start)
+            break;
+        const heading = node.type.prop(headingProp);
+        if (heading == null)
+            continue;
+        const upto = findSectionEnd(node, heading);
+        if (upto > end)
+            return { from: end, to: upto };
+    }
+    return null;
+});
+/**
+ * Create a Language from a TiddlyWiki parser
+ */
+function mkLang(parser) {
+    return new language.Language(data, parser, [], "tiddlywiki");
+}
+/**
+ * The base TiddlyWiki language (without extensions)
+ */
+const tiddlywikiLanguage = mkLang(configured);
+
+/**
+ * TiddlyWiki Language Support - Main Entry Point
+ *
+ * Provides the tiddlywiki() function that creates a complete LanguageSupport
+ * for CodeMirror 6, similar to markdown() in @codemirror/lang-markdown.
+ */
+/**
+ * TiddlyWiki-specific highlight style mapping semantic tags to CSS classes
+ */
+const tiddlywikiHighlightStyle = language.HighlightStyle.define([
+    // Headings
+    { tag: highlight.tags.heading1, class: "cm-tw-heading1" },
+    { tag: highlight.tags.heading2, class: "cm-tw-heading2" },
+    { tag: highlight.tags.heading3, class: "cm-tw-heading3" },
+    { tag: highlight.tags.heading4, class: "cm-tw-heading4" },
+    { tag: highlight.tags.heading5, class: "cm-tw-heading5" },
+    { tag: highlight.tags.heading6, class: "cm-tw-heading6" },
+    { tag: highlight.tags.heading, class: "cm-tw-tableheader" },
+    // Text formatting
+    { tag: highlight.tags.strong, class: "cm-tw-bold" },
+    { tag: highlight.tags.emphasis, class: "cm-tw-italic" },
+    { tag: highlight.tags.strikethrough, class: "cm-tw-strikethrough" },
+    // Links
+    { tag: highlight.tags.link, class: "cm-tw-wikilink" },
+    { tag: highlight.tags.url, class: "cm-tw-url" },
+    { tag: highlight.tags.string, class: "cm-tw-linktext" },
+    // Transclusions and macros
+    { tag: highlight.tags.special(highlight.tags.link), class: "cm-tw-transclusion" },
+    { tag: highlight.tags.macroName, class: "cm-tw-macrocall" },
+    { tag: highlight.tags.variableName, class: "cm-tw-variable" },
+    // Widgets
+    { tag: highlight.tags.tagName, class: "cm-tw-widget" },
+    // Code
+    { tag: highlight.tags.monospace, class: "cm-tw-code" },
+    { tag: highlight.tags.labelName, class: "cm-tw-codeinfo" },
+    // Pragmas and definitions
+    { tag: highlight.tags.definitionKeyword, class: "cm-tw-pragma" },
+    { tag: highlight.tags.keyword, class: "cm-tw-pragma-keyword" },
+    // Lists
+    { tag: highlight.tags.list, class: "cm-tw-list" },
+    // Block elements
+    { tag: highlight.tags.quote, class: "cm-tw-blockquote" },
+    { tag: highlight.tags.contentSeparator, class: "cm-tw-hr" },
+    // Special characters
+    { tag: highlight.tags.comment, class: "cm-tw-comment" },
+    { tag: highlight.tags.escape, class: "cm-tw-escape" },
+    { tag: highlight.tags.character, class: "cm-tw-entity" },
+    // Processing marks
+    { tag: highlight.tags.processingInstruction, class: "cm-tw-mark" },
+    // Filters
+    { tag: highlight.tags.special(highlight.tags.string), class: "cm-tw-filter" },
+    // Attributes
+    { tag: highlight.tags.attributeValue, class: "cm-tw-attribute-value" },
+    { tag: highlight.tags.attributeName, class: "cm-tw-attribute" },
+    // Special emphasis (underline)
+    { tag: highlight.tags.special(highlight.tags.emphasis), class: "cm-tw-underline" },
+    // Special content (superscript, subscript, highlight)
+    { tag: highlight.tags.special(highlight.tags.content), class: "cm-tw-superscript" },
+]);
+/**
+ * Keymap with TiddlyWiki-specific bindings
+ */
+const tiddlywikiKeymap$1 = [
+// TODO: Add TiddlyWiki-specific keybindings
+// e.g., Enter to continue lists, Backspace to delete list markers
+];
+/**
+ * HTML language support without tag matching (for embedded HTML)
+ */
+const htmlNoMatch = langHtml.html({ matchClosingTags: false });
+/**
+ * Create TiddlyWiki language support for CodeMirror 6
+ *
+ * @example
+ * ```ts
+ * import { tiddlywiki } from "@anthropic/lang-tiddlywiki"
+ * import { javascript } from "@codemirror/lang-javascript"
+ *
+ * const extensions = [
+ *   tiddlywiki({
+ *     codeLanguages: [javascript()],
+ *     completeWidgets: true,
+ *     completeMacros: true,
+ *   })
+ * ]
+ * ```
+ */
+function tiddlywiki(config = {}) {
+    const { codeLanguages, defaultCodeLanguage, addKeymap = true, base: { parser } = tiddlywikiLanguage, completeHTMLTags = true, completeWidgets = true, completeMacros = true, completeTiddlers = true, getTiddlerTitles, getMacroNames, getWidgetNames, htmlTagLanguage = htmlNoMatch, } = config;
+    // Validate parser
+    if (!(parser instanceof TiddlyWikiParser)) {
+        throw new RangeError("Base parser provided to `tiddlywiki` should be a TiddlyWiki parser");
+    }
+    // Build extensions for the parser
+    const parserExtensions = config.extensions ? [config.extensions] : [];
+    // Build support extensions
+    const support = [
+        htmlTagLanguage.support,
+        headerIndent,
+        language.syntaxHighlighting(tiddlywikiHighlightStyle),
+    ];
+    if (defaultCodeLanguage instanceof language.LanguageSupport) {
+        support.push(defaultCodeLanguage.support);
+        defaultCodeLanguage.language;
+    }
+    // Add keymap if requested
+    if (addKeymap && tiddlywikiKeymap$1.length > 0) {
+        support.push(state.Prec.high(view.keymap.of(tiddlywikiKeymap$1)));
+    }
+    // Configure the parser with extensions
+    let configuredParser = parser;
+    if (parserExtensions.length > 0) {
+        for (const ext of parserExtensions) {
+            configuredParser = configuredParser.configure(ext);
+        }
+    }
+    // Create the language
+    const lang = mkLang(configuredParser);
+    // Add completions
+    if (completeWidgets) {
+        support.push(lang.data.of({
+            autocomplete: widgetCompletion(getWidgetNames)
+        }));
+    }
+    if (completeMacros) {
+        support.push(lang.data.of({
+            autocomplete: macroCompletion(getMacroNames)
+        }));
+    }
+    if (completeTiddlers) {
+        support.push(lang.data.of({
+            autocomplete: tiddlerCompletion(getTiddlerTitles)
+        }));
+    }
+    if (completeHTMLTags) {
+        support.push(lang.data.of({
+            autocomplete: htmlTagCompletion
+        }));
+    }
+    return new language.LanguageSupport(lang, support);
+}
+// TiddlyWiki Core Widgets (with $ prefix as stored)
+const coreWidgets = [
+    "$action-confirm", "$action-createtiddler", "$action-deletefield", "$action-deletetiddler",
+    "$action-listops", "$action-log", "$action-navigate", "$action-popup", "$action-sendmessage",
+    "$action-setfield", "$action-setmultiplefields", "$browse", "$button", "$checkbox",
+    "$codeblock", "$count", "$draggable", "$droppable", "$dropzone", "$edit", "$edit-bitmap",
+    "$edit-text", "$element", "$encrypt", "$eventcatcher", "$fieldmangler", "$fill",
+    "$genesis", "$image", "$importvariables", "$keyboard", "$let", "$link", "$linkcatcher",
+    "$list", "$log", "$macrocall", "$messagecatcher", "$navigator", "$password", "$qualify",
+    "$radio", "$range", "$raw", "$reveal", "$scrollable", "$select", "$set", "$setvariable",
+    "$slot", "$text", "$tiddler", "$transclude", "$type", "$vars", "$view", "$wikify"
+];
+/**
+ * Widget completion source (<$widget)
+ */
+function widgetCompletion(getWidgetNames) {
+    return (context) => {
+        const { state, pos } = context;
+        const m = /<\$[\w\-]*$/.exec(state.sliceDoc(pos - 30, pos));
+        if (!m)
+            return null;
+        // Don't complete inside code blocks or comments
+        const tree = language.syntaxTree(state).resolveInner(pos, -1);
+        let node = tree;
+        while (node && !node.type.isTop) {
+            if (node.name === "FencedCode" || node.name === "CodeBlock" ||
+                node.name === "TypedBlock" || node.name === "CommentBlock") {
+                return null;
+            }
+            node = node.parent;
+        }
+        const widgets = getWidgetNames ? getWidgetNames() : coreWidgets;
+        const options = widgets.map(w => ({
+            label: "<" + w,
+            type: "keyword",
+            detail: "widget",
+            apply: "<" + w + ">"
+        }));
+        return {
+            from: pos - m[0].length,
+            to: pos,
+            options,
+            validFor: /^<\$[\w\-]*$/
+        };
+    };
+}
+// Common TiddlyWiki Macros
+const commonMacros = [
+    "now", "tag", "tabs", "timeline", "toc", "toc-hierarchical", "toc-selective-expandable",
+    "list-links", "list-links-draggable", "list-tagged-draggable", "copy-to-clipboard",
+    "colour-picker", "image-picker", "keyboard-shortcut", "dumpvariables", "qualify",
+    "csvtiddlers", "jsontiddlers", "datauri", "makedatauri", "translink"
+];
+/**
+ * Macro completion source (<<macro)
+ */
+function macroCompletion(getMacroNames) {
+    return (context) => {
+        const { state, pos } = context;
+        const m = /<<[\w\-]*$/.exec(state.sliceDoc(pos - 30, pos));
+        if (!m)
+            return null;
+        // Don't complete inside code blocks or comments
+        const tree = language.syntaxTree(state).resolveInner(pos, -1);
+        let node = tree;
+        while (node && !node.type.isTop) {
+            if (node.name === "FencedCode" || node.name === "CodeBlock" ||
+                node.name === "TypedBlock" || node.name === "CommentBlock") {
+                return null;
+            }
+            node = node.parent;
+        }
+        const macros = getMacroNames ? getMacroNames() : commonMacros;
+        const options = macros.map(m => ({
+            label: "<<" + m,
+            type: "function",
+            detail: "macro",
+            apply: "<<" + m + ">>"
+        }));
+        return {
+            from: pos - m[0].length,
+            to: pos,
+            options,
+            validFor: /^<<[\w\-]*$/
+        };
+    };
+}
+/**
+ * Tiddler title completion source ([[link or {{transclusion)
+ */
+function tiddlerCompletion(getTiddlerTitles) {
+    return (context) => {
+        const { state, pos } = context;
+        // Match [[ for links
+        const linkMatch = /\[\[[^\]|]*$/.exec(state.sliceDoc(pos - 100, pos));
+        // Match {{ for transclusions
+        const transcludeMatch = /\{\{[^{}|]*$/.exec(state.sliceDoc(pos - 100, pos));
+        const match = linkMatch || transcludeMatch;
+        if (!match)
+            return null;
+        // Don't complete inside code blocks or comments
+        const tree = language.syntaxTree(state).resolveInner(pos, -1);
+        let node = tree;
+        while (node && !node.type.isTop) {
+            if (node.name === "FencedCode" || node.name === "CodeBlock" ||
+                node.name === "TypedBlock" || node.name === "CommentBlock") {
+                return null;
+            }
+            node = node.parent;
+        }
+        const titles = getTiddlerTitles ? getTiddlerTitles() : [];
+        if (titles.length === 0)
+            return null;
+        const prefix = linkMatch ? "[[" : "{{";
+        const suffix = linkMatch ? "]]" : "}}";
+        const options = titles.map(title => ({
+            label: prefix + title,
+            type: "variable",
+            detail: "tiddler",
+            apply: prefix + title + suffix
+        }));
+        return {
+            from: pos - match[0].length,
+            to: pos,
+            options,
+            validFor: linkMatch ? /^\[\[[^\]|]*$/ : /^\{\{[^{}|]*$/
+        };
+    };
+}
+// Cached HTML tag completions
+let _tagCompletions = null;
+function htmlTagCompletions() {
+    if (_tagCompletions)
+        return _tagCompletions;
+    const result = langHtml.htmlCompletionSource(new autocomplete.CompletionContext(state.EditorState.create({ extensions: htmlNoMatch }), 0, true));
+    return _tagCompletions = result ? result.options : [];
+}
+/**
+ * HTML tag completion source
+ */
+function htmlTagCompletion(context) {
+    const { state, pos } = context;
+    const m = /<[:\-\.\w\u00b7-\uffff]*$/.exec(state.sliceDoc(pos - 25, pos));
+    if (!m)
+        return null;
+    // Don't complete if it looks like a widget
+    if (m[0].startsWith("<$"))
+        return null;
+    // Check we're not in a code block, widget, or other non-completable context
+    const tree = language.syntaxTree(state).resolveInner(pos, -1);
+    let node = tree;
+    while (node && !node.type.isTop) {
+        if (node.name === "FencedCode" || node.name === "CodeBlock" ||
+            node.name === "TypedBlock" || node.name === "CommentBlock" ||
+            node.name === "Widget") {
+            return null;
+        }
+        node = node.parent;
+    }
+    return {
+        from: pos - m[0].length,
+        to: pos,
+        options: htmlTagCompletions(),
+        validFor: /^<[:\-\.\w\u00b7-\uffff]*$/
+    };
+}
 
 /**
  * @codemirror/lang-tiddlywiki - Commands
@@ -2355,189 +3097,189 @@ const tiddlywikiLanguage = mkLang(extended);
 // Context Class für List/Quote Continuation
 // ============================================================================
 class Context {
-	constructor(node, from, to, spaceBefore, spaceAfter, type, item) {
-		this.node = node;
-		this.from = from;
-		this.to = to;
-		this.spaceBefore = spaceBefore;
-		this.spaceAfter = spaceAfter;
-		this.type = type;
-		this.item = item;
-	}
-	blank(maxWidth, trailing = true) {
-		let result = this.spaceBefore;
-		if (this.node.name == "BlockQuote")
-			result += ">";
-		if (maxWidth != null) {
-			while (result.length < maxWidth)
-				result += " ";
-			return result;
-		}
-		else {
-			for (let i = this.to - this.from - result.length - this.spaceAfter.length; i > 0; i--)
-				result += " ";
-			return result + (trailing ? this.spaceAfter : "");
-		}
-	}
-	marker(doc, add) {
-		let marker = "";
-		if (this.node.name == "NumberedList") {
-			// Find current number and increment
-			let text = doc.sliceString(this.item.from, this.item.from + 10);
-			let match = /^(#+)/.exec(text);
-			if (match)
-				marker = match[1];
-		}
-		else if (this.node.name == "BulletList") {
-			let text = doc.sliceString(this.item.from, this.item.from + 10);
-			let match = /^(\*+)/.exec(text);
-			if (match)
-				marker = match[1];
-		}
-		else if (this.node.name == "DefinitionList") {
-			marker = this.type;
-		}
-		return this.spaceBefore + marker + this.spaceAfter;
-	}
+    constructor(node, from, to, spaceBefore, spaceAfter, type, item) {
+        this.node = node;
+        this.from = from;
+        this.to = to;
+        this.spaceBefore = spaceBefore;
+        this.spaceAfter = spaceAfter;
+        this.type = type;
+        this.item = item;
+    }
+    blank(maxWidth, trailing = true) {
+        let result = this.spaceBefore;
+        if (this.node.name == "BlockQuote")
+            result += ">";
+        if (maxWidth != null) {
+            while (result.length < maxWidth)
+                result += " ";
+            return result;
+        }
+        else {
+            for (let i = this.to - this.from - result.length - this.spaceAfter.length; i > 0; i--)
+                result += " ";
+            return result + (trailing ? this.spaceAfter : "");
+        }
+    }
+    marker(doc, add) {
+        let marker = "";
+        if (this.node.name == "NumberedList") {
+            // Find current number and increment
+            let text = doc.sliceString(this.item.from, this.item.from + 10);
+            let match = /^(#+)/.exec(text);
+            if (match)
+                marker = match[1];
+        }
+        else if (this.node.name == "BulletList") {
+            let text = doc.sliceString(this.item.from, this.item.from + 10);
+            let match = /^(\*+)/.exec(text);
+            if (match)
+                marker = match[1];
+        }
+        else if (this.node.name == "DefinitionList") {
+            marker = this.type;
+        }
+        return this.spaceBefore + marker + this.spaceAfter;
+    }
 }
 // ============================================================================
 // Context Detection
 // ============================================================================
 function getContext(node, doc) {
-	let nodes = [];
-	let context = [];
-	for (let cur = node; cur; cur = cur.parent) {
-		if (cur.name == "FencedCode" || cur.name == "CodeBlock")
-			return context;
-		if (cur.name == "ListItem" || cur.name == "BlockQuote" ||
-			cur.name == "DefinitionTerm" || cur.name == "DefinitionDescription") {
-			nodes.push(cur);
-		}
-	}
-	for (let i = nodes.length - 1; i >= 0; i--) {
-		let node = nodes[i];
-		let line = doc.lineAt(node.from);
-		let startPos = node.from - line.from;
-		let match;
-		if (node.name == "BlockQuote") {
-			match = /^(\s*)(<<<)(\s*)/.exec(line.text.slice(startPos));
-			if (match) {
-				context.push(new Context(node, startPos, startPos + match[0].length, match[1], match[3], "<<<", null));
-			}
-		}
-		else if (node.name == "ListItem" && node.parent?.name == "NumberedList") {
-			match = /^(\s*)(#+)(\s+)/.exec(line.text.slice(startPos));
-			if (match) {
-				context.push(new Context(node.parent, startPos, startPos + match[0].length, match[1], match[3], match[2], node));
-			}
-		}
-		else if (node.name == "ListItem" && node.parent?.name == "BulletList") {
-			match = /^(\s*)(\*+)(\s+)/.exec(line.text.slice(startPos));
-			if (match) {
-				context.push(new Context(node.parent, startPos, startPos + match[0].length, match[1], match[3], match[2], node));
-			}
-		}
-		else if (node.name == "DefinitionTerm") {
-			match = /^(\s*)(;)(\s*)/.exec(line.text.slice(startPos));
-			if (match) {
-				context.push(new Context(node.parent, startPos, startPos + match[0].length, match[1], match[3], ";", node));
-			}
-		}
-		else if (node.name == "DefinitionDescription") {
-			match = /^(\s*)(:)(\s*)/.exec(line.text.slice(startPos));
-			if (match) {
-				context.push(new Context(node.parent, startPos, startPos + match[0].length, match[1], match[3], ":", node));
-			}
-		}
-	}
-	return context;
+    let nodes = [];
+    let context = [];
+    for (let cur = node; cur; cur = cur.parent) {
+        if (cur.name == "FencedCode" || cur.name == "CodeBlock")
+            return context;
+        if (cur.name == "ListItem" || cur.name == "BlockQuote" ||
+            cur.name == "DefinitionTerm" || cur.name == "DefinitionDescription") {
+            nodes.push(cur);
+        }
+    }
+    for (let i = nodes.length - 1; i >= 0; i--) {
+        let node = nodes[i];
+        let line = doc.lineAt(node.from);
+        let startPos = node.from - line.from;
+        let match;
+        if (node.name == "BlockQuote") {
+            match = /^(\s*)(<<<)(\s*)/.exec(line.text.slice(startPos));
+            if (match) {
+                context.push(new Context(node, startPos, startPos + match[0].length, match[1], match[3], "<<<", null));
+            }
+        }
+        else if (node.name == "ListItem" && node.parent?.name == "NumberedList") {
+            match = /^(\s*)(#+)(\s+)/.exec(line.text.slice(startPos));
+            if (match) {
+                context.push(new Context(node.parent, startPos, startPos + match[0].length, match[1], match[3], match[2], node));
+            }
+        }
+        else if (node.name == "ListItem" && node.parent?.name == "BulletList") {
+            match = /^(\s*)(\*+)(\s+)/.exec(line.text.slice(startPos));
+            if (match) {
+                context.push(new Context(node.parent, startPos, startPos + match[0].length, match[1], match[3], match[2], node));
+            }
+        }
+        else if (node.name == "DefinitionTerm") {
+            match = /^(\s*)(;)(\s*)/.exec(line.text.slice(startPos));
+            if (match) {
+                context.push(new Context(node.parent, startPos, startPos + match[0].length, match[1], match[3], ";", node));
+            }
+        }
+        else if (node.name == "DefinitionDescription") {
+            match = /^(\s*)(:)(\s*)/.exec(line.text.slice(startPos));
+            if (match) {
+                context.push(new Context(node.parent, startPos, startPos + match[0].length, match[1], match[3], ":", node));
+            }
+        }
+    }
+    return context;
 }
 // ============================================================================
 // Normalize Indentation
 // ============================================================================
 function normalizeIndent(content, state$1) {
-	let blank = /^[ \t]*/.exec(content)[0].length;
-	if (!blank || state$1.facet(language.indentUnit) != "\t")
-		return content;
-	let col = state.countColumn(content, 4, blank);
-	let space = "";
-	for (let i = col; i > 0;) {
-		if (i >= 4) {
-			space += "\t";
-			i -= 4;
-		}
-		else {
-			space += " ";
-			i--;
-		}
-	}
-	return space + content.slice(blank);
+    let blank = /^[ \t]*/.exec(content)[0].length;
+    if (!blank || state$1.facet(language.indentUnit) != "\t")
+        return content;
+    let col = state.countColumn(content, 4, blank);
+    let space = "";
+    for (let i = col; i > 0;) {
+        if (i >= 4) {
+            space += "\t";
+            i -= 4;
+        }
+        else {
+            space += " ";
+            i--;
+        }
+    }
+    return space + content.slice(blank);
 }
 // ============================================================================
 // Insert Newline Continue Markup Command
 // ============================================================================
 /// Konfigurierbare Version des Continue-Markup Befehls
 const insertNewlineContinueMarkupCommand = (config = {}) => ({ state: state$1, dispatch }) => {
-	let tree = language.syntaxTree(state$1);
-	let { doc } = state$1;
-	let dont = null;
-	let changes = state$1.changeByRange(range => {
-		if (!range.empty || !tiddlywikiLanguage.isActiveAt(state$1, range.from, -1) &&
-			!tiddlywikiLanguage.isActiveAt(state$1, range.from, 1)) {
-			return dont = { range };
-		}
-		let pos = range.from;
-		let line = doc.lineAt(pos);
-		let context = getContext(tree.resolveInner(pos, -1), doc);
-		while (context.length && context[context.length - 1].from > pos - line.from) {
-			context.pop();
-		}
-		if (!context.length)
-			return dont = { range };
-		let inner = context[context.length - 1];
-		if (inner.to - inner.spaceAfter.length > pos - line.from)
-			return dont = { range };
-		let emptyLine = pos >= (inner.to - inner.spaceAfter.length) && !/\S/.test(line.text.slice(inner.to));
-		// Leere Zeile in Liste - Markup entfernen
-		if (inner.item && emptyLine) {
-			let first = inner.node.firstChild;
-			let second = inner.node.getChild("ListItem", "ListItem");
-			if (first.to >= pos || second && second.to < pos ||
-				line.from > 0 && !/[^\s>]/.test(doc.lineAt(line.from - 1).text) ||
-				config.nonTightLists === false) {
-				let next = context.length > 1 ? context[context.length - 2] : null;
-				let delTo, insert = "";
-				if (next && next.item) {
-					delTo = line.from + next.from;
-					insert = next.marker(doc, 1);
-				}
-				else {
-					delTo = line.from + (next ? next.to : 0);
-				}
-				let changes = [{ from: delTo, to: pos, insert }];
-				return { range: state.EditorSelection.cursor(delTo + insert.length), changes };
-			}
-		}
-		let changes = [];
-		let continued = inner.item && inner.item.from < line.from;
-		let insert = "";
-		if (!continued || /^[\s\*#;:>]*/.exec(line.text)[0].length >= inner.to) {
-			for (let i = 0, e = context.length - 1; i <= e; i++) {
-				insert += i == e && !continued ? context[i].marker(doc, 1)
-					: context[i].blank(i < e ? state.countColumn(line.text, 4, context[i + 1].from) - insert.length : null);
-			}
-		}
-		let from = pos;
-		while (from > line.from && /\s/.test(line.text.charAt(from - line.from - 1)))
-			from--;
-		insert = normalizeIndent(insert, state$1);
-		changes.push({ from, to: pos, insert: state$1.lineBreak + insert });
-		return { range: state.EditorSelection.cursor(from + insert.length + 1), changes };
-	});
-	if (dont)
-		return false;
-	dispatch(state$1.update(changes, { scrollIntoView: true, userEvent: "input" }));
-	return true;
+    let tree = language.syntaxTree(state$1);
+    let { doc } = state$1;
+    let dont = null;
+    let changes = state$1.changeByRange(range => {
+        if (!range.empty || !tiddlywikiLanguage.isActiveAt(state$1, range.from, -1) &&
+            !tiddlywikiLanguage.isActiveAt(state$1, range.from, 1)) {
+            return dont = { range };
+        }
+        let pos = range.from;
+        let line = doc.lineAt(pos);
+        let context = getContext(tree.resolveInner(pos, -1), doc);
+        while (context.length && context[context.length - 1].from > pos - line.from) {
+            context.pop();
+        }
+        if (!context.length)
+            return dont = { range };
+        let inner = context[context.length - 1];
+        if (inner.to - inner.spaceAfter.length > pos - line.from)
+            return dont = { range };
+        let emptyLine = pos >= (inner.to - inner.spaceAfter.length) && !/\S/.test(line.text.slice(inner.to));
+        // Leere Zeile in Liste - Markup entfernen
+        if (inner.item && emptyLine) {
+            let first = inner.node.firstChild;
+            let second = inner.node.getChild("ListItem", "ListItem");
+            if (first.to >= pos || second && second.to < pos ||
+                line.from > 0 && !/[^\s>]/.test(doc.lineAt(line.from - 1).text) ||
+                config.nonTightLists === false) {
+                let next = context.length > 1 ? context[context.length - 2] : null;
+                let delTo, insert = "";
+                if (next && next.item) {
+                    delTo = line.from + next.from;
+                    insert = next.marker(doc, 1);
+                }
+                else {
+                    delTo = line.from + (next ? next.to : 0);
+                }
+                let changes = [{ from: delTo, to: pos, insert }];
+                return { range: state.EditorSelection.cursor(delTo + insert.length), changes };
+            }
+        }
+        let changes = [];
+        let continued = inner.item && inner.item.from < line.from;
+        let insert = "";
+        if (!continued || /^[\s\*#;:>]*/.exec(line.text)[0].length >= inner.to) {
+            for (let i = 0, e = context.length - 1; i <= e; i++) {
+                insert += i == e && !continued ? context[i].marker(doc, 1)
+                    : context[i].blank(i < e ? state.countColumn(line.text, 4, context[i + 1].from) - insert.length : null);
+            }
+        }
+        let from = pos;
+        while (from > line.from && /\s/.test(line.text.charAt(from - line.from - 1)))
+            from--;
+        insert = normalizeIndent(insert, state$1);
+        changes.push({ from, to: pos, insert: state$1.lineBreak + insert });
+        return { range: state.EditorSelection.cursor(from + insert.length + 1), changes };
+    });
+    if (dont)
+        return false;
+    dispatch(state$1.update(changes, { scrollIntoView: true, userEvent: "input" }));
+    return true;
 };
 /// Standard Continue-Markup Befehl für TiddlyWiki
 const insertNewlineContinueMarkup = insertNewlineContinueMarkupCommand();
@@ -2545,199 +3287,199 @@ const insertNewlineContinueMarkup = insertNewlineContinueMarkupCommand();
 // Delete Markup Backward Command
 // ============================================================================
 function isMark(node) {
-	return node.name == "QuoteMark" || node.name == "ListMark" || node.name == "HeadingMark";
+    return node.name == "QuoteMark" || node.name == "ListMark" || node.name == "HeadingMark";
 }
 function contextNodeForDelete(tree, pos) {
-	let node = tree.resolveInner(pos, -1);
-	let scan = pos;
-	if (isMark(node)) {
-		scan = node.from;
-		node = node.parent;
-	}
-	for (let prev; prev = node.childBefore(scan);) {
-		if (isMark(prev)) {
-			scan = prev.from;
-		}
-		else if (prev.name == "NumberedList" || prev.name == "BulletList" || prev.name == "DefinitionList") {
-			node = prev.lastChild;
-			scan = node.to;
-		}
-		else {
-			break;
-		}
-	}
-	return node;
+    let node = tree.resolveInner(pos, -1);
+    let scan = pos;
+    if (isMark(node)) {
+        scan = node.from;
+        node = node.parent;
+    }
+    for (let prev; prev = node.childBefore(scan);) {
+        if (isMark(prev)) {
+            scan = prev.from;
+        }
+        else if (prev.name == "NumberedList" || prev.name == "BulletList" || prev.name == "DefinitionList") {
+            node = prev.lastChild;
+            scan = node.to;
+        }
+        else {
+            break;
+        }
+    }
+    return node;
 }
 /// Befehl zum Löschen von Markup rückwärts
 const deleteMarkupBackward = ({ state: state$1, dispatch }) => {
-	let tree = language.syntaxTree(state$1);
-	let dont = null;
-	let changes = state$1.changeByRange(range => {
-		let pos = range.from;
-		let { doc } = state$1;
-		if (range.empty && tiddlywikiLanguage.isActiveAt(state$1, range.from)) {
-			let line = doc.lineAt(pos);
-			let context = getContext(contextNodeForDelete(tree, pos), doc);
-			if (context.length) {
-				let inner = context[context.length - 1];
-				let spaceEnd = inner.to - inner.spaceAfter.length + (inner.spaceAfter ? 1 : 0);
-				// Lösche überschüssige Leerzeichen nach Markup
-				if (pos - line.from > spaceEnd && !/\S/.test(line.text.slice(spaceEnd, pos - line.from))) {
-					return {
-						range: state.EditorSelection.cursor(line.from + spaceEnd),
-						changes: { from: line.from + spaceEnd, to: pos }
-					};
-				}
-				if (pos - line.from == spaceEnd &&
-					(!inner.item || line.from <= inner.item.from || !/\S/.test(line.text.slice(0, inner.to)))) {
-					let start = line.from + inner.from;
-					// Ersetze List-Marker durch Leerzeichen
-					if (inner.item && inner.node.from < inner.item.from && /\S/.test(line.text.slice(inner.from, inner.to))) {
-						let insert = inner.blank(state.countColumn(line.text, 4, inner.to) - state.countColumn(line.text, 4, inner.from));
-						if (start == line.from)
-							insert = normalizeIndent(insert, state$1);
-						return {
-							range: state.EditorSelection.cursor(start + insert.length),
-							changes: { from: start, to: line.from + inner.to, insert }
-						};
-					}
-					// Lösche eine Ebene der Einrückung
-					if (start < pos) {
-						return { range: state.EditorSelection.cursor(start), changes: { from: start, to: pos } };
-					}
-				}
-			}
-		}
-		return dont = { range };
-	});
-	if (dont)
-		return false;
-	dispatch(state$1.update(changes, { scrollIntoView: true, userEvent: "delete" }));
-	return true;
+    let tree = language.syntaxTree(state$1);
+    let dont = null;
+    let changes = state$1.changeByRange(range => {
+        let pos = range.from;
+        let { doc } = state$1;
+        if (range.empty && tiddlywikiLanguage.isActiveAt(state$1, range.from)) {
+            let line = doc.lineAt(pos);
+            let context = getContext(contextNodeForDelete(tree, pos), doc);
+            if (context.length) {
+                let inner = context[context.length - 1];
+                let spaceEnd = inner.to - inner.spaceAfter.length + (inner.spaceAfter ? 1 : 0);
+                // Lösche überschüssige Leerzeichen nach Markup
+                if (pos - line.from > spaceEnd && !/\S/.test(line.text.slice(spaceEnd, pos - line.from))) {
+                    return {
+                        range: state.EditorSelection.cursor(line.from + spaceEnd),
+                        changes: { from: line.from + spaceEnd, to: pos }
+                    };
+                }
+                if (pos - line.from == spaceEnd &&
+                    (!inner.item || line.from <= inner.item.from || !/\S/.test(line.text.slice(0, inner.to)))) {
+                    let start = line.from + inner.from;
+                    // Ersetze List-Marker durch Leerzeichen
+                    if (inner.item && inner.node.from < inner.item.from && /\S/.test(line.text.slice(inner.from, inner.to))) {
+                        let insert = inner.blank(state.countColumn(line.text, 4, inner.to) - state.countColumn(line.text, 4, inner.from));
+                        if (start == line.from)
+                            insert = normalizeIndent(insert, state$1);
+                        return {
+                            range: state.EditorSelection.cursor(start + insert.length),
+                            changes: { from: start, to: line.from + inner.to, insert }
+                        };
+                    }
+                    // Lösche eine Ebene der Einrückung
+                    if (start < pos) {
+                        return { range: state.EditorSelection.cursor(start), changes: { from: start, to: pos } };
+                    }
+                }
+            }
+        }
+        return dont = { range };
+    });
+    if (dont)
+        return false;
+    dispatch(state$1.update(changes, { scrollIntoView: true, userEvent: "delete" }));
+    return true;
 };
 // ============================================================================
 // Toggle Formatting Commands
 // ============================================================================
 function toggleInlineFormat(state, dispatch, marker) {
-	let changes = [];
-	for (let range of state.selection.ranges) {
-		if (range.empty) {
-			// Bei leerer Selektion: Marker einfügen und Cursor dazwischen
-			changes.push({ from: range.from, insert: marker + marker });
-		}
-		else {
-			let text = state.doc.sliceString(range.from, range.to);
-			// Prüfen ob bereits formatiert
-			if (text.startsWith(marker) && text.endsWith(marker) && text.length >= marker.length * 2) {
-				// Format entfernen
-				changes.push({ from: range.from, to: range.to, insert: text.slice(marker.length, -marker.length) });
-			}
-			else {
-				// Format hinzufügen
-				changes.push({ from: range.from, insert: marker });
-				changes.push({ from: range.to, insert: marker });
-			}
-		}
-	}
-	dispatch(state.update({ changes, scrollIntoView: true, userEvent: "input" }));
-	return true;
+    let changes = [];
+    for (let range of state.selection.ranges) {
+        if (range.empty) {
+            // Bei leerer Selektion: Marker einfügen und Cursor dazwischen
+            changes.push({ from: range.from, insert: marker + marker });
+        }
+        else {
+            let text = state.doc.sliceString(range.from, range.to);
+            // Prüfen ob bereits formatiert
+            if (text.startsWith(marker) && text.endsWith(marker) && text.length >= marker.length * 2) {
+                // Format entfernen
+                changes.push({ from: range.from, to: range.to, insert: text.slice(marker.length, -marker.length) });
+            }
+            else {
+                // Format hinzufügen
+                changes.push({ from: range.from, insert: marker });
+                changes.push({ from: range.to, insert: marker });
+            }
+        }
+    }
+    dispatch(state.update({ changes, scrollIntoView: true, userEvent: "input" }));
+    return true;
 }
 /// Toggle Bold formatierung ('' '')
 const toggleBold = ({ state, dispatch }) => {
-	return toggleInlineFormat(state, dispatch, "''");
+    return toggleInlineFormat(state, dispatch, "''");
 };
 /// Toggle Italic formatierung (// //)
 const toggleItalic = ({ state, dispatch }) => {
-	return toggleInlineFormat(state, dispatch, "//");
+    return toggleInlineFormat(state, dispatch, "//");
 };
 /// Toggle Underline formatierung (__ __)
 const toggleUnderline = ({ state, dispatch }) => {
-	return toggleInlineFormat(state, dispatch, "__");
+    return toggleInlineFormat(state, dispatch, "__");
 };
 /// Toggle Strikethrough formatierung (~~ ~~)
 const toggleStrikethrough = ({ state, dispatch }) => {
-	return toggleInlineFormat(state, dispatch, "~~");
+    return toggleInlineFormat(state, dispatch, "~~");
 };
 /// Toggle Superscript formatierung (^^ ^^)
 const toggleSuperscript = ({ state, dispatch }) => {
-	return toggleInlineFormat(state, dispatch, "^^");
+    return toggleInlineFormat(state, dispatch, "^^");
 };
 /// Toggle Subscript formatierung (,, ,,)
 const toggleSubscript = ({ state, dispatch }) => {
-	return toggleInlineFormat(state, dispatch, ",,");
+    return toggleInlineFormat(state, dispatch, ",,");
 };
 /// Toggle Inline Code formatierung (` `)
 const toggleInlineCode = ({ state, dispatch }) => {
-	return toggleInlineFormat(state, dispatch, "`");
+    return toggleInlineFormat(state, dispatch, "`");
 };
 // ============================================================================
 // Insert Link Command
 // ============================================================================
 /// Fügt einen WikiLink ein
 const insertWikiLink = ({ state, dispatch }) => {
-	let changes = [];
-	let selection = state.selection;
-	for (let range of selection.ranges) {
-		if (range.empty) {
-			changes.push({ from: range.from, insert: "[[]]" });
-		}
-		else {
-			let text = state.doc.sliceString(range.from, range.to);
-			changes.push({ from: range.from, to: range.to, insert: `[[${text}]]` });
-		}
-	}
-	dispatch(state.update({ changes, scrollIntoView: true, userEvent: "input" }));
-	return true;
+    let changes = [];
+    let selection = state.selection;
+    for (let range of selection.ranges) {
+        if (range.empty) {
+            changes.push({ from: range.from, insert: "[[]]" });
+        }
+        else {
+            let text = state.doc.sliceString(range.from, range.to);
+            changes.push({ from: range.from, to: range.to, insert: `[[${text}]]` });
+        }
+    }
+    dispatch(state.update({ changes, scrollIntoView: true, userEvent: "input" }));
+    return true;
 };
 /// Fügt eine Transclusion ein
 const insertTransclusion = ({ state, dispatch }) => {
-	let changes = [];
-	for (let range of state.selection.ranges) {
-		if (range.empty) {
-			changes.push({ from: range.from, insert: "{{}}" });
-		}
-		else {
-			let text = state.doc.sliceString(range.from, range.to);
-			changes.push({ from: range.from, to: range.to, insert: `{{${text}}}` });
-		}
-	}
-	dispatch(state.update({ changes, scrollIntoView: true, userEvent: "input" }));
-	return true;
+    let changes = [];
+    for (let range of state.selection.ranges) {
+        if (range.empty) {
+            changes.push({ from: range.from, insert: "{{}}" });
+        }
+        else {
+            let text = state.doc.sliceString(range.from, range.to);
+            changes.push({ from: range.from, to: range.to, insert: `{{${text}}}` });
+        }
+    }
+    dispatch(state.update({ changes, scrollIntoView: true, userEvent: "input" }));
+    return true;
 };
 /// Fügt einen Macro-Aufruf ein
 const insertMacroCall = ({ state, dispatch }) => {
-	let changes = [];
-	for (let range of state.selection.ranges) {
-		if (range.empty) {
-			changes.push({ from: range.from, insert: "<<>>" });
-		}
-		else {
-			let text = state.doc.sliceString(range.from, range.to);
-			changes.push({ from: range.from, to: range.to, insert: `<<${text}>>` });
-		}
-	}
-	dispatch(state.update({ changes, scrollIntoView: true, userEvent: "input" }));
-	return true;
+    let changes = [];
+    for (let range of state.selection.ranges) {
+        if (range.empty) {
+            changes.push({ from: range.from, insert: "<<>>" });
+        }
+        else {
+            let text = state.doc.sliceString(range.from, range.to);
+            changes.push({ from: range.from, to: range.to, insert: `<<${text}>>` });
+        }
+    }
+    dispatch(state.update({ changes, scrollIntoView: true, userEvent: "input" }));
+    return true;
 };
 // ============================================================================
 // Heading Commands
 // ============================================================================
 function setHeadingLevel(state, dispatch, level) {
-	let changes = [];
-	let { doc } = state;
-	for (let range of state.selection.ranges) {
-		let line = doc.lineAt(range.from);
-		let text = line.text;
-		// Entferne existierende Heading-Marker
-		let match = /^(!+)\s*/.exec(text);
-		let contentStart = match ? match[0].length : 0;
-		text.slice(contentStart);
-		// Neuen Heading-Level setzen (0 = kein Heading)
-		let newPrefix = level > 0 ? "!".repeat(level) + " " : "";
-		changes.push({ from: line.from, to: line.from + contentStart, insert: newPrefix });
-	}
-	dispatch(state.update({ changes, scrollIntoView: true, userEvent: "input" }));
-	return true;
+    let changes = [];
+    let { doc } = state;
+    for (let range of state.selection.ranges) {
+        let line = doc.lineAt(range.from);
+        let text = line.text;
+        // Entferne existierende Heading-Marker
+        let match = /^(!+)\s*/.exec(text);
+        let contentStart = match ? match[0].length : 0;
+        text.slice(contentStart);
+        // Neuen Heading-Level setzen (0 = kein Heading)
+        let newPrefix = level > 0 ? "!".repeat(level) + " " : "";
+        changes.push({ from: line.from, to: line.from + contentStart, insert: newPrefix });
+    }
+    dispatch(state.update({ changes, scrollIntoView: true, userEvent: "input" }));
+    return true;
 }
 /// Setzt Heading Level 1
 const setHeading1 = ({ state, dispatch }) => setHeadingLevel(state, dispatch, 1);
@@ -2757,328 +3499,71 @@ const removeHeading = ({ state, dispatch }) => setHeadingLevel(state, dispatch, 
 // List Commands
 // ============================================================================
 function toggleListMarker(state, dispatch, marker) {
-	let changes = [];
-	let { doc } = state;
-	for (let range of state.selection.ranges) {
-		let line = doc.lineAt(range.from);
-		let text = line.text;
-		// Prüfe ob Zeile bereits mit diesem Marker beginnt
-		let markerMatch = new RegExp(`^(${marker.replace(/[*#]/g, "\\$&")}+)\\s*`).exec(text);
-		if (markerMatch) {
-			// Marker entfernen
-			changes.push({ from: line.from, to: line.from + markerMatch[0].length, insert: "" });
-		}
-		else {
-			// Anderen Marker entfernen falls vorhanden
-			let otherMatch = /^([*#;:]+)\s*/.exec(text);
-			if (otherMatch) {
-				changes.push({ from: line.from, to: line.from + otherMatch[0].length, insert: marker + " " });
-			}
-			else {
-				// Marker hinzufügen
-				changes.push({ from: line.from, insert: marker + " " });
-			}
-		}
-	}
-	dispatch(state.update({ changes, scrollIntoView: true, userEvent: "input" }));
-	return true;
+    let changes = [];
+    let { doc } = state;
+    for (let range of state.selection.ranges) {
+        let line = doc.lineAt(range.from);
+        let text = line.text;
+        // Prüfe ob Zeile bereits mit diesem Marker beginnt
+        let markerMatch = new RegExp(`^(${marker.replace(/[*#]/g, "\\$&")}+)\\s*`).exec(text);
+        if (markerMatch) {
+            // Marker entfernen
+            changes.push({ from: line.from, to: line.from + markerMatch[0].length, insert: "" });
+        }
+        else {
+            // Anderen Marker entfernen falls vorhanden
+            let otherMatch = /^([*#;:]+)\s*/.exec(text);
+            if (otherMatch) {
+                changes.push({ from: line.from, to: line.from + otherMatch[0].length, insert: marker + " " });
+            }
+            else {
+                // Marker hinzufügen
+                changes.push({ from: line.from, insert: marker + " " });
+            }
+        }
+    }
+    dispatch(state.update({ changes, scrollIntoView: true, userEvent: "input" }));
+    return true;
 }
 /// Toggle Bullet List (* )
 const toggleBulletList = ({ state, dispatch }) => {
-	return toggleListMarker(state, dispatch, "*");
+    return toggleListMarker(state, dispatch, "*");
 };
 /// Toggle Numbered List (# )
 const toggleNumberedList = ({ state, dispatch }) => {
-	return toggleListMarker(state, dispatch, "#");
+    return toggleListMarker(state, dispatch, "#");
 };
 // ============================================================================
 // Code Block Command
 // ============================================================================
 /// Fügt einen Code-Block ein oder wickelt Selektion in Code-Block
 const insertCodeBlock = ({ state, dispatch }) => {
-	let changes = [];
-	for (let range of state.selection.ranges) {
-		if (range.empty) {
-			let line = state.doc.lineAt(range.from);
-			// Füge Code-Block mit leerer Zeile ein
-			let insert = "```\n\n```";
-			changes.push({ from: line.from, insert: insert + "\n" });
-		}
-		else {
-			let text = state.doc.sliceString(range.from, range.to);
-			changes.push({ from: range.from, to: range.to, insert: "```\n" + text + "\n```" });
-		}
-	}
-	dispatch(state.update({ changes, scrollIntoView: true, userEvent: "input" }));
-	return true;
+    let changes = [];
+    for (let range of state.selection.ranges) {
+        if (range.empty) {
+            let line = state.doc.lineAt(range.from);
+            // Füge Code-Block mit leerer Zeile ein
+            let insert = "```\n\n```";
+            changes.push({ from: line.from, insert: insert + "\n" });
+        }
+        else {
+            let text = state.doc.sliceString(range.from, range.to);
+            changes.push({ from: range.from, to: range.to, insert: "```\n" + text + "\n```" });
+        }
+    }
+    dispatch(state.update({ changes, scrollIntoView: true, userEvent: "input" }));
+    return true;
 };
 /// Fügt eine horizontale Linie ein
 const insertHorizontalRule = ({ state, dispatch }) => {
-	let line = state.doc.lineAt(state.selection.main.from);
-	dispatch(state.update({
-		changes: { from: line.to, insert: "\n---\n" },
-		scrollIntoView: true,
-		userEvent: "input"
-	}));
-	return true;
+    let line = state.doc.lineAt(state.selection.main.from);
+    dispatch(state.update({
+        changes: { from: line.to, insert: "\n---\n" },
+        scrollIntoView: true,
+        userEvent: "input"
+    }));
+    return true;
 };
-
-/**
- * @codemirror/lang-tiddlywiki - Main Entry Point
- *
- * CodeMirror 6 Language Support für TiddlyWiki5 Wikitext.
- */
-// ============================================================================
-// Keymap
-// ============================================================================
-/// Standard-Keymap für TiddlyWiki mit häufig verwendeten Tastenkombinationen
-const tiddlywikiKeymap$1 = [
-	{ key: "Enter", run: insertNewlineContinueMarkup },
-	{ key: "Backspace", run: deleteMarkupBackward },
-	{ key: "Mod-b", run: toggleBold },
-	{ key: "Mod-i", run: toggleItalic },
-	{ key: "Mod-u", run: toggleUnderline },
-	{ key: "Mod-`", run: toggleInlineCode },
-	{ key: "Mod-k", run: insertWikiLink },
-	{ key: "Mod-Shift-k", run: insertTransclusion },
-	{ key: "Mod-1", run: setHeading1 },
-	{ key: "Mod-2", run: setHeading2 },
-	{ key: "Mod-3", run: setHeading3 },
-	{ key: "Mod-4", run: setHeading4 },
-	{ key: "Mod-5", run: setHeading5 },
-	{ key: "Mod-6", run: setHeading6 },
-	{ key: "Mod-0", run: removeHeading },
-	{ key: "Mod-Shift-8", run: toggleBulletList },
-	{ key: "Mod-Shift-7", run: toggleNumberedList },
-	{ key: "Mod-Shift-c", run: insertCodeBlock },
-];
-// HTML Support ohne Tag-Matching (für eingebettetes HTML)
-const htmlNoMatch = langHtml.html({ matchClosingTags: false });
-// ============================================================================
-// Syntax Highlighting Style
-// ============================================================================
-/// TiddlyWiki-specific highlight style that maps semantic tags to .cm-tw-* CSS classes
-const tiddlywikiHighlightStyle = language.HighlightStyle.define([
-	// Headings
-	{ tag: highlight.tags.heading1, class: "cm-tw-heading1" },
-	{ tag: highlight.tags.heading2, class: "cm-tw-heading2" },
-	{ tag: highlight.tags.heading3, class: "cm-tw-heading3" },
-	{ tag: highlight.tags.heading4, class: "cm-tw-heading4" },
-	{ tag: highlight.tags.heading5, class: "cm-tw-heading5" },
-	{ tag: highlight.tags.heading6, class: "cm-tw-heading6" },
-	{ tag: highlight.tags.heading, class: "cm-tw-tableheader" },
-	// Text formatting
-	{ tag: highlight.tags.strong, class: "cm-tw-bold" },
-	{ tag: highlight.tags.emphasis, class: "cm-tw-italic" },
-	{ tag: highlight.tags.strikethrough, class: "cm-tw-strikethrough" },
-	// Links
-	{ tag: highlight.tags.link, class: "cm-tw-wikilink" },
-	{ tag: highlight.tags.url, class: "cm-tw-url" },
-	{ tag: highlight.tags.string, class: "cm-tw-linktext" },
-	// Transclusions and macros
-	{ tag: highlight.tags.special(highlight.tags.link), class: "cm-tw-transclusion" },
-	{ tag: highlight.tags.macroName, class: "cm-tw-macrocall" },
-	{ tag: highlight.tags.variableName, class: "cm-tw-variable" },
-	// Widgets
-	{ tag: highlight.tags.tagName, class: "cm-tw-widget" },
-	// Code
-	{ tag: highlight.tags.monospace, class: "cm-tw-code" },
-	{ tag: highlight.tags.labelName, class: "cm-tw-codeinfo" },
-	// Pragmas and definitions
-	{ tag: highlight.tags.definitionKeyword, class: "cm-tw-pragma" },
-	{ tag: highlight.tags.keyword, class: "cm-tw-pragma-keyword" },
-	// Lists
-	{ tag: highlight.tags.list, class: "cm-tw-list" },
-	// Block elements
-	{ tag: highlight.tags.quote, class: "cm-tw-blockquote" },
-	{ tag: highlight.tags.contentSeparator, class: "cm-tw-hr" },
-	// Special characters
-	{ tag: highlight.tags.comment, class: "cm-tw-comment" },
-	{ tag: highlight.tags.escape, class: "cm-tw-escape" },
-	{ tag: highlight.tags.character, class: "cm-tw-entity" },
-	// Processing marks
-	{ tag: highlight.tags.processingInstruction, class: "cm-tw-mark" },
-	// Filters
-	{ tag: highlight.tags.special(highlight.tags.string), class: "cm-tw-filter" },
-	// Attributes
-	{ tag: highlight.tags.attributeValue, class: "cm-tw-attribute-value" },
-	// Special emphasis (underline)
-	{ tag: highlight.tags.special(highlight.tags.emphasis), class: "cm-tw-underline" },
-	// Special content (superscript, subscript, highlight)
-	{ tag: highlight.tags.special(highlight.tags.content), class: "cm-tw-superscript" },
-]);
-// ============================================================================
-// Main Language Support Function
-// ============================================================================
-/// TiddlyWiki Language Support mit Konfiguration
-function tiddlywiki(config = {}) {
-	let { codeLanguages, defaultCodeLanguage, addKeymap = true, base: { parser } = tiddlywikiBaseLanguage, completeHTMLTags = true, completeWidgets = true, completeMacros = true, htmlTagLanguage = htmlNoMatch } = config;
-	if (!(parser instanceof TiddlyWikiParser)) {
-		throw new RangeError("Base parser provided to `tiddlywiki` should be a TiddlyWiki parser");
-	}
-	let extensions = config.extensions ? [config.extensions] : [];
-	let support = [htmlTagLanguage.support, headerIndent, language.syntaxHighlighting(tiddlywikiHighlightStyle)];
-	if (defaultCodeLanguage instanceof language.LanguageSupport) {
-		support.push(defaultCodeLanguage.support);
-		defaultCodeLanguage.language;
-	}
-	// Keymap hinzufügen
-	if (addKeymap) {
-		support.push(state.Prec.high(view.keymap.of(tiddlywikiKeymap$1)));
-	}
-	let lang = mkLang(parser.configure(extensions));
-	// Autocompletion
-	if (completeHTMLTags) {
-		support.push(lang.data.of({ autocomplete: htmlTagCompletion }));
-	}
-	if (completeWidgets) {
-		support.push(lang.data.of({ autocomplete: widgetCompletion }));
-	}
-	if (completeMacros) {
-		support.push(lang.data.of({ autocomplete: macroCompletion }));
-	}
-	return new language.LanguageSupport(lang, support);
-}
-// ============================================================================
-// Autocompletion Functions
-// ============================================================================
-function htmlTagCompletion(context) {
-	let { state, pos } = context;
-	let m = /<[:\-\.\w\u00b7-\uffff]*$/.exec(state.sliceDoc(pos - 25, pos));
-	if (!m)
-		return null;
-	let tree = language.syntaxTree(state).resolveInner(pos, -1);
-	while (tree && !tree.type.isTop) {
-		if (tree.name == "FencedCode" || tree.name == "CodeBlock" ||
-			tree.name == "CommentBlock" || tree.name == "Widget") {
-			return null;
-		}
-		tree = tree.parent;
-	}
-	return {
-		from: pos - m[0].length,
-		to: pos,
-		options: htmlTagCompletions(),
-		validFor: /^<[:\-\.\w\u00b7-\uffff]*$/
-	};
-}
-let _tagCompletions = null;
-function htmlTagCompletions() {
-	if (_tagCompletions)
-		return _tagCompletions;
-	let result = langHtml.htmlCompletionSource(new autocomplete.CompletionContext(state.EditorState.create({ extensions: htmlNoMatch }), 0, true));
-	return _tagCompletions = result ? result.options : [];
-}
-// TiddlyWiki Core Widgets
-const coreWidgets = [
-	"$action-confirm", "$action-createtiddler", "$action-deletefield", "$action-deletetiddler",
-	"$action-listops", "$action-log", "$action-navigate", "$action-popup", "$action-sendmessage",
-	"$action-setfield", "$action-setmultiplefields", "$browse", "$button", "$checkbox",
-	"$codeblock", "$count", "$draggable", "$droppable", "$dropzone", "$edit", "$edit-bitmap",
-	"$edit-text", "$element", "$encrypt", "$eventcatcher", "$fieldmangler", "$fill",
-	"$genesis", "$image", "$importvariables", "$keyboard", "$let", "$link", "$linkcatcher",
-	"$list", "$log", "$macrocall", "$messagecatcher", "$navigator", "$password", "$qualify",
-	"$radio", "$range", "$raw", "$reveal", "$scrollable", "$select", "$set", "$setvariable",
-	"$slot", "$text", "$tiddler", "$transclude", "$type", "$vars", "$view", "$wikify"
-];
-function widgetCompletion(context) {
-	let { state, pos } = context;
-	let m = /<\$[\w\-]*$/.exec(state.sliceDoc(pos - 30, pos));
-	if (!m)
-		return null;
-	let tree = language.syntaxTree(state).resolveInner(pos, -1);
-	while (tree && !tree.type.isTop) {
-		if (tree.name == "FencedCode" || tree.name == "CodeBlock" || tree.name == "CommentBlock") {
-			return null;
-		}
-		tree = tree.parent;
-	}
-	return {
-		from: pos - m[0].length,
-		to: pos,
-		options: coreWidgets.map(w => ({
-			label: "<" + w,
-			type: "keyword",
-			detail: "widget",
-			apply: "<" + w + ">"
-		})),
-		validFor: /^<\$[\w\-]*$/
-	};
-}
-// Common TiddlyWiki Macros
-const commonMacros = [
-	"now", "tag", "tabs", "timeline", "toc", "toc-hierarchical", "toc-selective-expandable",
-	"list-links", "list-links-draggable", "list-tagged-draggable", "copy-to-clipboard",
-	"colour-picker", "image-picker", "keyboard-shortcut", "dumpvariables", "qualify",
-	"csvtiddlers", "jsontiddlers", "datauri", "makedatauri", "translink"
-];
-function macroCompletion(context) {
-	let { state, pos } = context;
-	let m = /<<[\w\-]*$/.exec(state.sliceDoc(pos - 30, pos));
-	if (!m)
-		return null;
-	let tree = language.syntaxTree(state).resolveInner(pos, -1);
-	while (tree && !tree.type.isTop) {
-		if (tree.name == "FencedCode" || tree.name == "CodeBlock" || tree.name == "CommentBlock") {
-			return null;
-		}
-		tree = tree.parent;
-	}
-	return {
-		from: pos - m[0].length,
-		to: pos,
-		options: commonMacros.map(m => ({
-			label: "<<" + m,
-			type: "function",
-			detail: "macro",
-			apply: "<<" + m + ">>"
-		})),
-		validFor: /^<<[\w\-]*$/
-	};
-}
-// ============================================================================
-// Paste URL as Link Extension
-// ============================================================================
-const nonPlainText = /code|horizontalrule|html|link|comment|transclusion|macro|widget|escape|entity|image|mark|url/i;
-/// Extension die URLs beim Einfügen automatisch als WikiLinks formatiert
-view.EditorView.domEventHandlers({
-	paste: (event, view) => {
-		let { main } = view.state.selection;
-		if (main.empty)
-			return false;
-		let link = event.clipboardData?.getData("text/plain");
-		if (!link || !/^(https?:\/\/|mailto:|xmpp:|www\.)/.test(link))
-			return false;
-		if (/^www\./.test(link))
-			link = "https://" + link;
-		if (!tiddlywikiLanguage.isActiveAt(view.state, main.from, 1))
-			return false;
-		let tree = language.syntaxTree(view.state);
-		let crossesNode = false;
-		tree.iterate({
-			from: main.from,
-			to: main.to,
-			enter: node => {
-				if (node.from > main.from || nonPlainText.test(node.name))
-					crossesNode = true;
-			},
-			leave: node => {
-				if (node.to < main.to)
-					crossesNode = true;
-			}
-		});
-		if (crossesNode)
-			return false;
-		// TiddlyWiki external link format
-		let text = view.state.doc.sliceString(main.from, main.to);
-		view.dispatch({
-			changes: [{ from: main.from, to: main.to, insert: `[ext[${text}|${link}]]` }],
-			userEvent: "input.paste",
-			scrollIntoView: true
-		});
-		return true;
-	}
-});
 
 /**
  * TiddlyWiki5 CodeMirror 6 Plugin Entry Point
@@ -3088,6 +3573,8 @@ view.EditorView.domEventHandlers({
  *
  * module-type: codemirror6-plugin
  */
+// Backwards compatibility alias
+const tiddlywikiBaseLanguage = tiddlywikiLanguage;
 // Alias for backwards compatibility with existing engines
 const TiddlyWikiLanguage = tiddlywikiLanguage;
 // ============================================================================
@@ -3101,9 +3588,9 @@ let _core = null;
  * TiddlyWiki content types that activate this plugin
  */
 const TW_TYPES = [
-	"", // Empty = default wikitext
-	"text/vnd.tiddlywiki",
-	"text/x-tiddlywiki"
+    "", // Empty = default wikitext
+    "text/vnd.tiddlywiki",
+    "text/x-tiddlywiki"
 ];
 /**
  * Compartment name for this plugin
@@ -3116,24 +3603,24 @@ const COMPARTMENT_NAME = "tiddlywikiLanguage";
  * Standard TiddlyWiki keymap
  */
 const tiddlywikiKeymap = view.keymap.of([
-	{ key: "Enter", run: insertNewlineContinueMarkup },
-	{ key: "Backspace", run: deleteMarkupBackward },
-	{ key: "Mod-b", run: toggleBold },
-	{ key: "Mod-i", run: toggleItalic },
-	{ key: "Mod-u", run: toggleUnderline },
-	{ key: "Mod-`", run: toggleInlineCode },
-	{ key: "Mod-k", run: insertWikiLink },
-	{ key: "Mod-Shift-k", run: insertTransclusion },
-	{ key: "Mod-1", run: setHeading1 },
-	{ key: "Mod-2", run: setHeading2 },
-	{ key: "Mod-3", run: setHeading3 },
-	{ key: "Mod-4", run: setHeading4 },
-	{ key: "Mod-5", run: setHeading5 },
-	{ key: "Mod-6", run: setHeading6 },
-	{ key: "Mod-0", run: removeHeading },
-	{ key: "Mod-Shift-8", run: toggleBulletList },
-	{ key: "Mod-Shift-7", run: toggleNumberedList },
-	{ key: "Mod-Shift-c", run: insertCodeBlock },
+    { key: "Enter", run: insertNewlineContinueMarkup },
+    { key: "Backspace", run: deleteMarkupBackward },
+    { key: "Mod-b", run: toggleBold },
+    { key: "Mod-i", run: toggleItalic },
+    { key: "Mod-u", run: toggleUnderline },
+    { key: "Mod-`", run: toggleInlineCode },
+    { key: "Mod-k", run: insertWikiLink },
+    { key: "Mod-Shift-k", run: insertTransclusion },
+    { key: "Mod-1", run: setHeading1 },
+    { key: "Mod-2", run: setHeading2 },
+    { key: "Mod-3", run: setHeading3 },
+    { key: "Mod-4", run: setHeading4 },
+    { key: "Mod-5", run: setHeading5 },
+    { key: "Mod-6", run: setHeading6 },
+    { key: "Mod-0", run: removeHeading },
+    { key: "Mod-Shift-8", run: toggleBulletList },
+    { key: "Mod-Shift-7", run: toggleNumberedList },
+    { key: "Mod-Shift-c", run: insertCodeBlock },
 ]);
 // ============================================================================
 // Helper Functions
@@ -3142,22 +3629,93 @@ const tiddlywikiKeymap = view.keymap.of([
  * Create command target from EditorView
  */
 function getCommandTarget(view) {
-	return {
-		state: view.state,
-		dispatch: view.dispatch.bind(view)
-	};
+    return {
+        state: view.state,
+        dispatch: view.dispatch.bind(view)
+    };
+}
+/**
+ * Get tiddler titles for autocompletion
+ */
+function getTiddlerTitles() {
+    if (typeof $tw === "undefined" || !$tw.wiki)
+        return [];
+    try {
+        // Get non-system tiddlers for link completion
+        return $tw.wiki.filterTiddlers("[!is[system]sort[title]]") || [];
+    }
+    catch (e) {
+        return [];
+    }
+}
+/**
+ * Get macro names for autocompletion
+ */
+function getMacroNames() {
+    if (typeof $tw === "undefined")
+        return [];
+    try {
+        const names = [];
+        // Get built-in macros
+        if ($tw.macros) {
+            names.push(...Object.keys($tw.macros));
+        }
+        // Get macro tiddlers
+        if ($tw.wiki) {
+            const macroTiddlers = $tw.wiki.filterTiddlers("[all[tiddlers+shadows]tag[$:/tags/Macro]]") || [];
+            for (const title of macroTiddlers) {
+                // Extract macro name from tiddler (usually in the title or defined with \define)
+                const tiddler = $tw.wiki.getTiddler(title);
+                if (tiddler) {
+                    const text = tiddler.fields.text || "";
+                    const defineMatch = text.match(/\\define\s+([^\s(]+)/);
+                    if (defineMatch) {
+                        names.push(defineMatch[1]);
+                    }
+                }
+            }
+        }
+        return [...new Set(names)]; // deduplicate
+    }
+    catch (e) {
+        return [];
+    }
+}
+/**
+ * Get widget names for autocompletion
+ */
+function getWidgetNames() {
+    if (typeof $tw === "undefined")
+        return [];
+    try {
+        const names = [];
+        // Get widget names from $tw.widgets (they don't have $ prefix in the registry)
+        if ($tw.widgets) {
+            for (const name of Object.keys($tw.widgets)) {
+                names.push("$" + name);
+            }
+        }
+        return names;
+    }
+    catch (e) {
+        return [];
+    }
 }
 /**
  * Build language support with options from context
  */
 function buildLanguageSupport(context) {
-	const options = context.options || {};
-	return tiddlywiki({
-		addKeymap: false, // We add our own keymap separately
-		completeHTMLTags: options.completeHTMLTags !== false,
-		completeWidgets: options.completeWidgets !== false,
-		completeMacros: options.completeMacros !== false
-	});
+    const options = context.options || {};
+    return tiddlywiki({
+        addKeymap: false, // We add our own keymap separately
+        completeHTMLTags: options.completeHTMLTags !== false,
+        completeWidgets: options.completeWidgets !== false,
+        completeMacros: options.completeMacros !== false,
+        completeTiddlers: options.completeTiddlers !== false,
+        getTiddlerTitles,
+        getMacroNames,
+        getWidgetNames
+    });
 }
 // ============================================================================
 // Plugin Definition
@@ -3166,238 +3724,238 @@ function buildLanguageSupport(context) {
  * The plugin definition - implements the engine's plugin interface
  */
 const plugin = {
-	name: "tiddlywiki-syntax",
-	description: "TiddlyWiki5 Wikitext syntax highlighting and editing support",
-	priority: 100,
-	/**
-	 * Initialize with CM6 core reference
-	 * Called once when plugin is discovered
-	 */
-	init(cm6Core) {
-		_core = cm6Core;
-	},
-	/**
-	 * Condition for activation
-	 * Only activate for TiddlyWiki content types
-	 */
-	condition(context) {
-		const type = context.tiddlerType;
-		return TW_TYPES.includes(type || "");
-	},
-	/**
-	 * Register compartments
-	 * ALWAYS called, even if condition is false (for later reconfiguration)
-	 */
-	registerCompartments() {
-		if (!_core)
-			return {};
-		const Compartment = _core.state.Compartment;
-		return {
-			[COMPARTMENT_NAME]: new Compartment()
-		};
-	},
-	/**
-	 * Get CodeMirror extensions
-	 * Called when condition is true (initial setup)
-	 * Must wrap content in compartment.of() ourselves
-	 */
-	getExtensions(context) {
-		const extensions = [];
-		const engine = context.engine;
-		const compartments = engine?._compartments;
-		// Language support via compartment
-		const langSupport = buildLanguageSupport(context);
-		if (compartments?.[COMPARTMENT_NAME]) {
-			// Wrap in compartment for later reconfiguration
-			extensions.push(compartments[COMPARTMENT_NAME].of(langSupport));
-		}
-		else {
-			// No compartment available, add directly
-			extensions.push(langSupport);
-		}
-		// Header folding support
-		extensions.push(headerIndent);
-		// Keymap (unless read-only)
-		if (!context.readOnly) {
-			extensions.push(tiddlywikiKeymap);
-		}
-		return extensions;
-	},
-	/**
-	 * Get compartment content for dynamic reconfiguration
-	 * Called by engine.setType() when switching content types
-	 * Returns RAW content (without compartment.of wrapper)
-	 */
-	getCompartmentContent(context) {
-		const langSupport = buildLanguageSupport(context);
-		// Return array of extensions (engine wraps in compartment.reconfigure)
-		return [langSupport, headerIndent];
-	},
-	/**
-	 * Extend engine API with TiddlyWiki-specific methods
-	 * Methods are bound to engine instance by the engine
-	 */
-	extendAPI(engine, _context) {
-		return {
-			// ================================================================
-			// Formatting Commands
-			// ================================================================
-			toggleBold() {
-				if (engine._destroyed || !engine.view)
-					return false;
-				return toggleBold(getCommandTarget(engine.view));
-			},
-			toggleItalic() {
-				if (engine._destroyed || !engine.view)
-					return false;
-				return toggleItalic(getCommandTarget(engine.view));
-			},
-			toggleUnderline() {
-				if (engine._destroyed || !engine.view)
-					return false;
-				return toggleUnderline(getCommandTarget(engine.view));
-			},
-			toggleStrikethrough() {
-				if (engine._destroyed || !engine.view)
-					return false;
-				return toggleStrikethrough(getCommandTarget(engine.view));
-			},
-			toggleSuperscript() {
-				if (engine._destroyed || !engine.view)
-					return false;
-				return toggleSuperscript(getCommandTarget(engine.view));
-			},
-			toggleSubscript() {
-				if (engine._destroyed || !engine.view)
-					return false;
-				return toggleSubscript(getCommandTarget(engine.view));
-			},
-			toggleInlineCode() {
-				if (engine._destroyed || !engine.view)
-					return false;
-				return toggleInlineCode(getCommandTarget(engine.view));
-			},
-			// ================================================================
-			// Link/Transclusion Commands
-			// ================================================================
-			insertWikiLink() {
-				if (engine._destroyed || !engine.view)
-					return false;
-				return insertWikiLink(getCommandTarget(engine.view));
-			},
-			insertTransclusion() {
-				if (engine._destroyed || !engine.view)
-					return false;
-				return insertTransclusion(getCommandTarget(engine.view));
-			},
-			// ================================================================
-			// Heading Commands
-			// ================================================================
-			setHeading(level) {
-				if (engine._destroyed || !engine.view)
-					return false;
-				const commands = [null, setHeading1, setHeading2, setHeading3, setHeading4, setHeading5, setHeading6];
-				const cmd = commands[level];
-				if (!cmd)
-					return false;
-				return cmd(getCommandTarget(engine.view));
-			},
-			removeHeading() {
-				if (engine._destroyed || !engine.view)
-					return false;
-				return removeHeading(getCommandTarget(engine.view));
-			},
-			// ================================================================
-			// List Commands
-			// ================================================================
-			toggleBulletList() {
-				if (engine._destroyed || !engine.view)
-					return false;
-				return toggleBulletList(getCommandTarget(engine.view));
-			},
-			toggleNumberedList() {
-				if (engine._destroyed || !engine.view)
-					return false;
-				return toggleNumberedList(getCommandTarget(engine.view));
-			},
-			// ================================================================
-			// Block Commands
-			// ================================================================
-			insertCodeBlock() {
-				if (engine._destroyed || !engine.view)
-					return false;
-				return insertCodeBlock(getCommandTarget(engine.view));
-			}
-		};
-	},
-	/**
-	 * Register event handlers
-	 * Handlers are bound to engine instance by the engine
-	 */
-	registerEvents(engine, _context) {
-		return {
-			/**
-			 * Handle TiddlyWiki-specific text operations
-			 * Called when engine._triggerEvent("textOperation", operation) is invoked
-			 */
-			textOperation(operation) {
-				if (!operation || engine._destroyed)
-					return;
-				switch (operation.type) {
-					case "toggle-bold":
-						engine.toggleBold?.();
-						break;
-					case "toggle-italic":
-						engine.toggleItalic?.();
-						break;
-					case "toggle-underline":
-						engine.toggleUnderline?.();
-						break;
-					case "toggle-strikethrough":
-						engine.toggleStrikethrough?.();
-						break;
-					case "toggle-superscript":
-						engine.toggleSuperscript?.();
-						break;
-					case "toggle-subscript":
-						engine.toggleSubscript?.();
-						break;
-					case "toggle-code":
-						engine.toggleInlineCode?.();
-						break;
-					case "insert-link":
-						engine.insertWikiLink?.();
-						break;
-					case "insert-transclusion":
-						engine.insertTransclusion?.();
-						break;
-					case "set-heading":
-						if (typeof operation.level === "number") {
-							engine.setHeading?.(operation.level);
-						}
-						break;
-					case "remove-heading":
-						engine.removeHeading?.();
-						break;
-					case "toggle-bullet-list":
-						engine.toggleBulletList?.();
-						break;
-					case "toggle-numbered-list":
-						engine.toggleNumberedList?.();
-						break;
-					case "insert-code-block":
-						engine.insertCodeBlock?.();
-						break;
-				}
-			}
-		};
-	},
-	/**
-	 * Cleanup when engine is destroyed
-	 */
-	destroy(_engine) {
-		// Nothing to clean up for this plugin
-	}
+    name: "tiddlywiki-syntax",
+    description: "TiddlyWiki5 Wikitext syntax highlighting and editing support",
+    priority: 100,
+    /**
+     * Initialize with CM6 core reference
+     * Called once when plugin is discovered
+     */
+    init(cm6Core) {
+        _core = cm6Core;
+    },
+    /**
+     * Condition for activation
+     * Only activate for TiddlyWiki content types
+     */
+    condition(context) {
+        const type = context.tiddlerType;
+        return TW_TYPES.includes(type || "");
+    },
+    /**
+     * Register compartments
+     * ALWAYS called, even if condition is false (for later reconfiguration)
+     */
+    registerCompartments() {
+        if (!_core)
+            return {};
+        const Compartment = _core.state.Compartment;
+        return {
+            [COMPARTMENT_NAME]: new Compartment()
+        };
+    },
+    /**
+     * Get CodeMirror extensions
+     * Called when condition is true (initial setup)
+     * Must wrap content in compartment.of() ourselves
+     */
+    getExtensions(context) {
+        const extensions = [];
+        const engine = context.engine;
+        const compartments = engine?._compartments;
+        // Language support via compartment
+        const langSupport = buildLanguageSupport(context);
+        if (compartments?.[COMPARTMENT_NAME]) {
+            // Wrap in compartment for later reconfiguration
+            extensions.push(compartments[COMPARTMENT_NAME].of(langSupport));
+        }
+        else {
+            // No compartment available, add directly
+            extensions.push(langSupport);
+        }
+        // Header folding support
+        extensions.push(headerIndent);
+        // Keymap (unless read-only)
+        if (!context.readOnly) {
+            extensions.push(tiddlywikiKeymap);
+        }
+        return extensions;
+    },
+    /**
+     * Get compartment content for dynamic reconfiguration
+     * Called by engine.setType() when switching content types
+     * Returns RAW content (without compartment.of wrapper)
+     */
+    getCompartmentContent(context) {
+        const langSupport = buildLanguageSupport(context);
+        // Return array of extensions (engine wraps in compartment.reconfigure)
+        return [langSupport, headerIndent];
+    },
+    /**
+     * Extend engine API with TiddlyWiki-specific methods
+     * Methods are bound to engine instance by the engine
+     */
+    extendAPI(engine, _context) {
+        return {
+            // ================================================================
+            // Formatting Commands
+            // ================================================================
+            toggleBold() {
+                if (engine._destroyed || !engine.view)
+                    return false;
+                return toggleBold(getCommandTarget(engine.view));
+            },
+            toggleItalic() {
+                if (engine._destroyed || !engine.view)
+                    return false;
+                return toggleItalic(getCommandTarget(engine.view));
+            },
+            toggleUnderline() {
+                if (engine._destroyed || !engine.view)
+                    return false;
+                return toggleUnderline(getCommandTarget(engine.view));
+            },
+            toggleStrikethrough() {
+                if (engine._destroyed || !engine.view)
+                    return false;
+                return toggleStrikethrough(getCommandTarget(engine.view));
+            },
+            toggleSuperscript() {
+                if (engine._destroyed || !engine.view)
+                    return false;
+                return toggleSuperscript(getCommandTarget(engine.view));
+            },
+            toggleSubscript() {
+                if (engine._destroyed || !engine.view)
+                    return false;
+                return toggleSubscript(getCommandTarget(engine.view));
+            },
+            toggleInlineCode() {
+                if (engine._destroyed || !engine.view)
+                    return false;
+                return toggleInlineCode(getCommandTarget(engine.view));
+            },
+            // ================================================================
+            // Link/Transclusion Commands
+            // ================================================================
+            insertWikiLink() {
+                if (engine._destroyed || !engine.view)
+                    return false;
+                return insertWikiLink(getCommandTarget(engine.view));
+            },
+            insertTransclusion() {
+                if (engine._destroyed || !engine.view)
+                    return false;
+                return insertTransclusion(getCommandTarget(engine.view));
+            },
+            // ================================================================
+            // Heading Commands
+            // ================================================================
+            setHeading(level) {
+                if (engine._destroyed || !engine.view)
+                    return false;
+                const commands = [null, setHeading1, setHeading2, setHeading3, setHeading4, setHeading5, setHeading6];
+                const cmd = commands[level];
+                if (!cmd)
+                    return false;
+                return cmd(getCommandTarget(engine.view));
+            },
+            removeHeading() {
+                if (engine._destroyed || !engine.view)
+                    return false;
+                return removeHeading(getCommandTarget(engine.view));
+            },
+            // ================================================================
+            // List Commands
+            // ================================================================
+            toggleBulletList() {
+                if (engine._destroyed || !engine.view)
+                    return false;
+                return toggleBulletList(getCommandTarget(engine.view));
+            },
+            toggleNumberedList() {
+                if (engine._destroyed || !engine.view)
+                    return false;
+                return toggleNumberedList(getCommandTarget(engine.view));
+            },
+            // ================================================================
+            // Block Commands
+            // ================================================================
+            insertCodeBlock() {
+                if (engine._destroyed || !engine.view)
+                    return false;
+                return insertCodeBlock(getCommandTarget(engine.view));
+            }
+        };
+    },
+    /**
+     * Register event handlers
+     * Handlers are bound to engine instance by the engine
+     */
+    registerEvents(engine, _context) {
+        return {
+            /**
+             * Handle TiddlyWiki-specific text operations
+             * Called when engine._triggerEvent("textOperation", operation) is invoked
+             */
+            textOperation(operation) {
+                if (!operation || engine._destroyed)
+                    return;
+                switch (operation.type) {
+                    case "toggle-bold":
+                        engine.toggleBold?.();
+                        break;
+                    case "toggle-italic":
+                        engine.toggleItalic?.();
+                        break;
+                    case "toggle-underline":
+                        engine.toggleUnderline?.();
+                        break;
+                    case "toggle-strikethrough":
+                        engine.toggleStrikethrough?.();
+                        break;
+                    case "toggle-superscript":
+                        engine.toggleSuperscript?.();
+                        break;
+                    case "toggle-subscript":
+                        engine.toggleSubscript?.();
+                        break;
+                    case "toggle-code":
+                        engine.toggleInlineCode?.();
+                        break;
+                    case "insert-link":
+                        engine.insertWikiLink?.();
+                        break;
+                    case "insert-transclusion":
+                        engine.insertTransclusion?.();
+                        break;
+                    case "set-heading":
+                        if (typeof operation.level === "number") {
+                            engine.setHeading?.(operation.level);
+                        }
+                        break;
+                    case "remove-heading":
+                        engine.removeHeading?.();
+                        break;
+                    case "toggle-bullet-list":
+                        engine.toggleBulletList?.();
+                        break;
+                    case "toggle-numbered-list":
+                        engine.toggleNumberedList?.();
+                        break;
+                    case "insert-code-block":
+                        engine.insertCodeBlock?.();
+                        break;
+                }
+            }
+        };
+    },
+    /**
+     * Cleanup when engine is destroyed
+     */
+    destroy(_engine) {
+        // Nothing to clean up for this plugin
+    }
 };
 
 exports.TiddlyWikiLanguage = TiddlyWikiLanguage;

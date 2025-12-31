@@ -144,17 +144,88 @@ function getCommandTarget(view: EditorView) {
   }
 }
 
+// Declare $tw global (provided by TiddlyWiki)
+declare const $tw: any
+
+/**
+ * Get tiddler titles for autocompletion
+ */
+function getTiddlerTitles(): string[] {
+  if (typeof $tw === "undefined" || !$tw.wiki) return []
+  try {
+    // Get non-system tiddlers for link completion
+    return $tw.wiki.filterTiddlers("[!is[system]sort[title]]") || []
+  } catch (e) {
+    return []
+  }
+}
+
+/**
+ * Get macro names for autocompletion
+ */
+function getMacroNames(): string[] {
+  if (typeof $tw === "undefined") return []
+  try {
+    const names: string[] = []
+    // Get built-in macros
+    if ($tw.macros) {
+      names.push(...Object.keys($tw.macros))
+    }
+    // Get macro tiddlers
+    if ($tw.wiki) {
+      const macroTiddlers = $tw.wiki.filterTiddlers("[all[tiddlers+shadows]tag[$:/tags/Macro]]") || []
+      for (const title of macroTiddlers) {
+        // Extract macro name from tiddler (usually in the title or defined with \define)
+        const tiddler = $tw.wiki.getTiddler(title)
+        if (tiddler) {
+          const text = tiddler.fields.text || ""
+          const defineMatch = text.match(/\\define\s+([^\s(]+)/)
+          if (defineMatch) {
+            names.push(defineMatch[1])
+          }
+        }
+      }
+    }
+    return [...new Set(names)] // deduplicate
+  } catch (e) {
+    return []
+  }
+}
+
+/**
+ * Get widget names for autocompletion
+ */
+function getWidgetNames(): string[] {
+  if (typeof $tw === "undefined") return []
+  try {
+    const names: string[] = []
+    // Get widget names from $tw.widgets (they don't have $ prefix in the registry)
+    if ($tw.widgets) {
+      for (const name of Object.keys($tw.widgets)) {
+        names.push("$" + name)
+      }
+    }
+    return names
+  } catch (e) {
+    return []
+  }
+}
+
 /**
  * Build language support with options from context
  */
 function buildLanguageSupport(context: CM6PluginContext): Extension {
   const options = context.options || {}
-  
+
   return tiddlywiki({
     addKeymap: false, // We add our own keymap separately
     completeHTMLTags: options.completeHTMLTags !== false,
     completeWidgets: options.completeWidgets !== false,
-    completeMacros: options.completeMacros !== false
+    completeMacros: options.completeMacros !== false,
+    completeTiddlers: options.completeTiddlers !== false,
+    getTiddlerTitles,
+    getMacroNames,
+    getWidgetNames
   })
 }
 
