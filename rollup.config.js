@@ -1,24 +1,29 @@
-import resolve from '@rollup/plugin-node-resolve';
-import typescript from '@rollup/plugin-typescript';
-import dts from 'rollup-plugin-dts';
+import resolve from "@rollup/plugin-node-resolve";
+import commonjs from "@rollup/plugin-commonjs";
+import typescript from "@rollup/plugin-typescript";
+import dts from "rollup-plugin-dts";
 
-// External dependencies that should not be bundled
+// Don't bundle these (they should be deps/peers of the consumer)
 const external = [
-  '@lezer/common',
-  '@lezer/highlight',
-  '@codemirror/state',
-  '@codemirror/view',
-  '@codemirror/language',
-  '@codemirror/commands',
-  '@codemirror/autocomplete',
-  '@codemirror/lang-html'
+  "@lezer/common",
+  "@lezer/highlight",
+  "@codemirror/state",
+  "@codemirror/view",
+  "@codemirror/language",
+  "@codemirror/commands",
+  "@codemirror/autocomplete",
+  "@codemirror/lang-html"
 ];
 
-// Common plugins
-const plugins = [
-  resolve(),
+// Shared JS build plugins
+const jsPlugins = [
+  resolve({
+    extensions: [".mjs", ".js", ".json", ".ts"]
+  }),
+  commonjs(),
   typescript({
-    tsconfig: './tsconfig.json',
+    tsconfig: "./tsconfig.json",
+    // Important: don't emit declarations here; dts() handles it separately
     declaration: false,
     declarationMap: false
   })
@@ -27,63 +32,63 @@ const plugins = [
 export default [
   // Parser only (Lezer-style parser without CodeMirror integration)
   {
-    input: 'src/index.ts',
+    input: "src/index.ts",
+    external,
+    plugins: jsPlugins,
     output: [
       {
-        file: 'dist/parser.js',
-        format: 'es',
+        file: "dist/parser.js",
+        format: "es",
         sourcemap: true
       },
       {
-        file: 'dist/parser.cjs',
-        format: 'cjs',
+        file: "dist/parser.cjs",
+        format: "cjs",
         sourcemap: true,
-        exports: 'named'
+        exports: "named"
       }
-    ],
-    external,
-    plugins
+    ]
   },
 
   // Full CodeMirror integration
   {
-    input: 'src/codemirror-index.ts',
+    input: "src/codemirror-index.ts",
+    external,
+    plugins: jsPlugins,
     output: [
       {
-        file: 'dist/index.js',
-        format: 'es',
+        file: "dist/index.js",
+        format: "es",
         sourcemap: true
       },
       {
-        file: 'dist/index.cjs',
-        format: 'cjs',
+        file: "dist/index.cjs",
+        format: "cjs",
         sourcemap: true,
-        exports: 'named'
+        exports: "named"
       }
-    ],
-    external,
-    plugins
+    ]
   },
 
-  // Type definitions for parser
+  // Type definitions for parser entry
   {
-    input: 'src/index.ts',
-    output: {
-      file: 'dist/parser.d.ts',
-      format: 'es'
-    },
+    input: "src/index.ts",
     external,
-    plugins: [dts()]
+    plugins: [dts()],
+    output: {
+      file: "dist/parser.d.ts",
+      format: "es"
+    }
   },
 
-  // Type definitions for full package
+  // Type definitions for full package entry
   {
-    input: 'src/codemirror-index.ts',
-    output: {
-      file: 'dist/index.d.ts',
-      format: 'es'
-    },
+    input: "src/codemirror-index.ts",
     external,
-    plugins: [dts()]
+    plugins: [dts()],
+    output: {
+      file: "dist/index.d.ts",
+      format: "es"
+    }
   }
 ];
