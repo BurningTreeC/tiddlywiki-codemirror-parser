@@ -1,5 +1,5 @@
 /*\
-title: $:/plugins/BTC/tiddlywiki-codemirror-6/lib/core.js
+title: $:/plugins/BurningTreeC/tiddlywiki-codemirror-6/lib/core.js
 type: application/javascript
 module-type: library
 

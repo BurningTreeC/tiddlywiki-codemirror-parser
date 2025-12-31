@@ -1,61 +1,7 @@
 title: $:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/lang-tiddlywiki/styles
 tags: $:/tags/Stylesheet
 
-/* CodeMirror 6 TiddlyWiki Editor - Comprehensive Styles */
-
-/* ============================================================================
-   Base Editor
-   ============================================================================ */
-
-.tc-editor-codemirror6 {
-    border: 1px solid <<colour tiddler-editor-border>>;
-    border-radius: 3px;
-    background: <<colour tiddler-editor-background>>;
-}
-
-.tc-editor-codemirror6 .cm-editor {
-    height: 100%;
-    font-family: {{$:/themes/tiddlywiki/vanilla/settings/editorfontfamily}};
-    font-size: {{$:/themes/tiddlywiki/vanilla/metrics/bodyfontsize}};
-}
-
-.tc-editor-codemirror6 .cm-content {
-    padding: 8px;
-    caret-color: <<colour foreground>>;
-}
-
-.tc-editor-codemirror6 .cm-focused {
-    outline: none;
-}
-
-.tc-editor-codemirror6 .cm-scroller {
-    overflow: auto;
-}
-
-/* Line numbers */
-.tc-editor-codemirror6 .cm-gutters {
-    background: <<colour page-background>>;
-    border-right: 1px solid <<colour tiddler-editor-border>>;
-    color: <<colour muted-foreground>>;
-}
-
-/* Active line */
-.tc-editor-codemirror6 .cm-activeLine {
-    background: rgba(128, 128, 128, 0.08);
-}
-
-.tc-editor-codemirror6 .cm-activeLineGutter {
-    background: rgba(128, 128, 128, 0.12);
-}
-
-/* Selection */
-.tc-editor-codemirror6 .cm-selectionBackground {
-    background: <<colour selection-background>> !important;
-}
-
-.tc-editor-codemirror6 .cm-focused .cm-selectionBackground {
-    background: <<colour selection-background>> !important;
-}
+/* CodeMirror 6 TiddlyWiki Syntax Highlighting */
 
 /* ============================================================================
    TiddlyWiki Syntax Highlighting
@@ -98,7 +44,7 @@ tags: $:/tags/Stylesheet
 .cm-tw-attribute-value { color: #aa4400; }
 
 /* Code */
-.cm-tw-code { 
+.cm-tw-code {
     font-family: {{$:/themes/tiddlywiki/vanilla/settings/codefontfamily}};
     background: <<colour code-background>>;
     border-radius: 3px;
@@ -130,8 +76,8 @@ tags: $:/tags/Stylesheet
 .cm-tw-tablecell { }
 
 /* Block quotes */
-.cm-tw-blockquote { 
-    color: <<colour blockquote-bar>>; 
+.cm-tw-blockquote {
+    color: <<colour blockquote-bar>>;
     border-left: 3px solid <<colour blockquote-bar>>;
     padding-left: 0.5em;
     font-style: italic;
@@ -163,62 +109,6 @@ tags: $:/tags/Stylesheet
 /* Typed blocks */
 .cm-tw-typedblock { background: rgba(0, 100, 100, 0.05); }
 .cm-tw-typedblock-type { color: #008080; font-style: italic; }
-
-/* ============================================================================
-   Autocomplete Popup
-   ============================================================================ */
-
-.cm-tooltip-autocomplete {
-    background: <<colour dropdown-background>> !important;
-    border: 1px solid <<colour dropdown-border>> !important;
-    border-radius: 4px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-    z-index: 10000;
-}
-
-.cm-tooltip-autocomplete ul {
-    font-family: {{$:/themes/tiddlywiki/vanilla/settings/fontfamily}};
-    font-size: 13px;
-    max-height: 300px;
-    overflow-y: auto;
-}
-
-.cm-tooltip-autocomplete li {
-    padding: 4px 8px;
-    display: flex;
-    align-items: center;
-}
-
-.cm-tooltip-autocomplete li[aria-selected] {
-    background: <<colour primary>> !important;
-    color: <<colour background>> !important;
-}
-
-.cm-tooltip-autocomplete .cm-completionLabel {
-    flex: 1;
-}
-
-.cm-tooltip-autocomplete .cm-completionDetail {
-    font-size: 0.85em;
-    color: <<colour muted-foreground>>;
-    margin-left: 8px;
-}
-
-/* Completion icons */
-.cm-tooltip-autocomplete .cm-completionIcon {
-    width: 1.5em;
-    text-align: center;
-    padding-right: 4px;
-}
-
-.cm-tooltip-autocomplete .cm-completionIcon-variable::after { content: "T"; color: #4078f2; font-weight: bold; }
-.cm-tooltip-autocomplete .cm-completionIcon-function::after { content: "M"; color: #a626a4; font-weight: bold; }
-.cm-tooltip-autocomplete .cm-completionIcon-keyword::after { content: "W"; color: #c18401; font-weight: bold; }
-.cm-tooltip-autocomplete .cm-completionIcon-property::after { content: "F"; color: #50a14f; font-weight: bold; }
-.cm-tooltip-autocomplete .cm-completionIcon-constant::after { content: "#"; color: #986801; font-weight: bold; }
-.cm-tooltip-autocomplete .cm-completionIcon-method::after { content: "⧫"; color: #e45649; }
-.cm-tooltip-autocomplete .cm-completionIcon-snippet::after { content: "⌘"; color: #9e9e9e; }
-.cm-tooltip-autocomplete .cm-completionIcon-text::after { content: ""; }
 
 /* ============================================================================
    Link Preview Tooltip
@@ -364,116 +254,17 @@ tags: $:/tags/Stylesheet
 }
 
 /* ============================================================================
-   Search Panel
+   Completion Icons (TiddlyWiki specific)
    ============================================================================ */
 
-.cm-search {
-    padding: 8px;
-    background: <<colour page-background>>;
-    border-bottom: 1px solid <<colour tiddler-editor-border>>;
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 4px;
-}
-
-.cm-search input,
-.cm-search select {
-    padding: 4px 8px;
-    border: 1px solid <<colour tiddler-editor-border>>;
-    border-radius: 3px;
-    font-size: 13px;
-    background: <<colour background>>;
-    color: <<colour foreground>>;
-}
-
-.cm-search input:focus {
-    outline: none;
-    border-color: <<colour primary>>;
-}
-
-.cm-search button {
-    padding: 4px 12px;
-    background: <<colour button-background>>;
-    border: 1px solid <<colour button-border>>;
-    border-radius: 3px;
-    cursor: pointer;
-    font-size: 13px;
-}
-
-.cm-search button:hover {
-    background: <<colour button-background>>-hover;
-}
-
-.cm-search button[name="close"] {
-    background: transparent;
-    border: none;
-    font-size: 16px;
-    cursor: pointer;
-    padding: 2px 6px;
-}
-
-.cm-search label {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    font-size: 13px;
-}
-
-/* Search matches highlight */
-.cm-searchMatch {
-    background: rgba(255, 200, 0, 0.4);
-}
-
-.cm-searchMatch-selected {
-    background: rgba(255, 150, 0, 0.6);
-}
-
-/* ============================================================================
-   Fold Gutter
-   ============================================================================ */
-
-.cm-foldGutter {
-    width: 1.2em;
-}
-
-.cm-foldGutter span {
-    cursor: pointer;
-    color: <<colour muted-foreground>>;
-    font-size: 0.9em;
-}
-
-.cm-foldGutter span:hover {
-    color: <<colour foreground>>;
-}
-
-.cm-foldPlaceholder {
-    background: <<colour code-background>>;
-    border: 1px solid <<colour tiddler-editor-border>>;
-    border-radius: 3px;
-    padding: 0 4px;
-    cursor: pointer;
-    font-size: 0.8em;
-    color: <<colour muted-foreground>>;
-}
-
-.cm-foldPlaceholder:hover {
-    background: <<colour tab-background>>;
-}
-
-/* ============================================================================
-   Bracket Matching
-   ============================================================================ */
-
-.cm-matchingBracket {
-    background: rgba(100, 200, 100, 0.3);
-    outline: 1px solid rgba(100, 200, 100, 0.5);
-}
-
-.cm-nonmatchingBracket {
-    background: rgba(200, 100, 100, 0.3);
-    outline: 1px solid rgba(200, 100, 100, 0.5);
-}
+.cm-tooltip-autocomplete .cm-completionIcon-variable::after { content: "T"; color: #4078f2; font-weight: bold; }
+.cm-tooltip-autocomplete .cm-completionIcon-function::after { content: "M"; color: #a626a4; font-weight: bold; }
+.cm-tooltip-autocomplete .cm-completionIcon-keyword::after { content: "W"; color: #c18401; font-weight: bold; }
+.cm-tooltip-autocomplete .cm-completionIcon-property::after { content: "F"; color: #50a14f; font-weight: bold; }
+.cm-tooltip-autocomplete .cm-completionIcon-constant::after { content: "#"; color: #986801; font-weight: bold; }
+.cm-tooltip-autocomplete .cm-completionIcon-method::after { content: "⧫"; color: #e45649; }
+.cm-tooltip-autocomplete .cm-completionIcon-snippet::after { content: "⌘"; color: #9e9e9e; }
+.cm-tooltip-autocomplete .cm-completionIcon-text::after { content: ""; }
 
 /* ============================================================================
    Dark Mode
@@ -487,32 +278,32 @@ tags: $:/tags/Stylesheet
     .cm-tw-heading4,
     .cm-tw-heading5,
     .cm-tw-heading6 { color: #61afef; }
-    
+
     /* Links */
     .cm-tw-wikilink { color: #98c379; }
     .cm-tw-extlink { color: #88aaff; }
-    
+
     /* Code */
     .cm-tw-code { background: rgba(255, 255, 255, 0.08); }
     .cm-tw-codeblock { background: rgba(255, 255, 255, 0.08); }
-    
+
     /* Macros/Widgets */
     .cm-tw-macrocall { color: #98c379; }
     .cm-tw-widget { color: #61afef; }
     .cm-tw-transclusion { color: #c678dd; background: rgba(198, 120, 221, 0.1); }
-    
+
     /* Pragmas */
     .cm-tw-pragma { color: #c678dd; }
-    
+
     /* Tables */
     .cm-tw-tableheader { background: rgba(255, 255, 255, 0.05); }
-    
+
     /* Block quotes */
-    .cm-tw-blockquote { 
-        color: #abb2bf; 
+    .cm-tw-blockquote {
+        color: #abb2bf;
         border-left-color: #5c6370;
     }
-    
+
     /* Completion icons */
     .cm-tooltip-autocomplete .cm-completionIcon-variable::after { color: #61afef; }
     .cm-tooltip-autocomplete .cm-completionIcon-function::after { color: #c678dd; }
