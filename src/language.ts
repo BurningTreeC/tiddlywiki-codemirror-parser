@@ -9,7 +9,8 @@
 
 import {Language, defineLanguageFacet, languageDataProp, foldNodeProp, indentNodeProp, foldService,
         syntaxTree, LanguageDescription, ParseContext} from "@codemirror/language"
-import {parser as baseParser, TiddlyWikiParser, TiddlyWikiExtensions} from "./tiddlywiki"
+import {parser as baseParser, TiddlyWikiParser} from "./tiddlywiki"
+import {TiddlyWikiExtensions} from "./extension"
 import {SyntaxNode, NodeType, NodeProp} from "@lezer/common"
 
 // ============================================================================
