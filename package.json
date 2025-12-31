@@ -30,6 +30,7 @@
     "typecheck": "tsc -p tsconfig.ci.json --noEmit",
     "build": "rollup -c rollup.config.js",
     "build:tiddlywiki": "rollup -c rollup.config.tiddlywiki.js",
+    "build:cm6-libs": "rollup -c rollup.config.cm6-libs.js",
     "prepublishOnly": "npm run clean && npm run typecheck && npm run build",
     "test": "echo \"No tests yet\" && exit 0"
   },
