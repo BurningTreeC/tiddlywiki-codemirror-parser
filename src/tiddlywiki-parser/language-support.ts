@@ -506,7 +506,17 @@ function macroCompletion(getMacroNames?: () => string[]) {
         label: prefix + name,
         type: "function",
         detail: "variable",
-        apply: prefix + name + ">]"
+        apply: (view, _completion, from, to) => {
+          const textAfter = view.state.sliceDoc(to, to + 2)
+          // Don't add ] if there's already a ] after cursor
+          const suffix = textAfter.startsWith(">")
+            ? (textAfter[1] === "]" ? "" : "]")
+            : (textAfter.startsWith("]") ? ">" : ">]")
+          view.dispatch({
+            changes: { from, to, insert: prefix + name + suffix },
+            selection: { anchor: from + prefix.length + name.length + suffix.length }
+          })
+        }
       }))
 
       return {
@@ -580,15 +590,66 @@ function tiddlerCompletion(getTiddlerTitles?: () => string[]) {
     if (filterTextRefMatch) {
       // Text reference inside filter: [operator{tiddler}] or [{tiddler}] or ]operator{tiddler}]
       prefix = match[0].slice(0, match[0].lastIndexOf('{') + 1)
-      suffix = "}]"
       validFor = /^[\[\]][\w\-:!]*\{[^}]*$/
       detail = "text reference"
+
+      // Use dynamic apply to check for existing closing brackets
+      const options: Completion[] = titles.map(title => ({
+        label: prefix + title,
+        type: "variable",
+        detail,
+        apply: (view, _completion, from, to) => {
+          const textAfter = view.state.sliceDoc(to, to + 2)
+          // Don't add ] if there's already a ] after the }
+          const closeSuffix = textAfter.startsWith("}")
+            ? (textAfter[1] === "]" ? "" : "]")
+            : (textAfter.startsWith("]") ? "}" : "}]")
+          view.dispatch({
+            changes: { from, to, insert: prefix + title + closeSuffix },
+            selection: { anchor: from + prefix.length + title.length + closeSuffix.length }
+          })
+        }
+      }))
+
+      return {
+        from: pos - match[0].length,
+        to: pos,
+        options,
+        validFor
+      }
     } else if (filterOperandMatch) {
       // Filter operand: [operator[value]] or [[value]] or ]operator[value]]
       prefix = match[0].slice(0, match[0].lastIndexOf('[') + 1)
-      suffix = "]]"
       validFor = /^[\[\]][\w\-:!]*\[[^\]]*$/
       detail = "filter operand"
+
+      // Use dynamic apply to check for existing closing brackets
+      const options: Completion[] = titles.map(title => ({
+        label: prefix + title,
+        type: "variable",
+        detail,
+        apply: (view, _completion, from, to) => {
+          const textAfter = view.state.sliceDoc(to, to + 2)
+          // Don't add ]] if there are already ]] after cursor
+          let closeSuffix = "]]"
+          if (textAfter === "]]") {
+            closeSuffix = ""
+          } else if (textAfter.startsWith("]")) {
+            closeSuffix = "]"
+          }
+          view.dispatch({
+            changes: { from, to, insert: prefix + title + closeSuffix },
+            selection: { anchor: from + prefix.length + title.length + closeSuffix.length }
+          })
+        }
+      }))
+
+      return {
+        from: pos - match[0].length,
+        to: pos,
+        options,
+        validFor
+      }
     } else if (linkMatch) {
       prefix = "[["
       suffix = "]]"
