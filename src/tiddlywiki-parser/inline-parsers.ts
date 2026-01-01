@@ -356,10 +356,10 @@ export const ExternalLink: InlineParser = {
 }
 
 // ============================================================================
-// Image Link Parser ([img[src]] or [img width=x height=y [alt|src]])
+// Image Link Parser ([img[src]] or [img width=x height=y [tooltip|src]])
 // ============================================================================
 
-const imgLinkRe = /^\[img(?:\s+[^\[]+)?\[([^\]|]*?)(?:\|([^\]]*?))?\]\]/
+const imgLinkRe = /^\[img(\s+[^\[]+)?\[([^\]|]*?)(?:\|([^\]]*?))?\]\]/
 
 export const ImageLink: InlineParser = {
   name: "ImageLink",
@@ -371,14 +371,52 @@ export const ImageLink: InlineParser = {
     if (!match) return -1
 
     const end = pos + match[0].length
+    const attrs = match[1] // attributes like " width=100 class=thumb"
+    const tooltipOrSource = match[2] // tooltip if | present, otherwise source
+    const source = match[3] // source after |
 
     const children: Element[] = [
       cx.elt(Type.ImageMark, pos, pos + 4), // [img
     ]
 
-    // TODO: Parse width/height/class attributes
+    let attrEnd = pos + 4
 
-    children.push(cx.elt(Type.ImageMark, end - 2, end))
+    // Parse attributes if present
+    if (attrs) {
+      const attrStart = pos + 4
+      attrEnd = attrStart + attrs.length
+      // Parse individual attributes
+      const attrElements = parseInlineAttributes(cx, attrs.trim(), attrStart + (attrs.length - attrs.trimStart().length))
+      children.push(...attrElements)
+    }
+
+    // Add the opening [ of the source bracket
+    const sourceBracketStart = attrEnd
+    children.push(cx.elt(Type.ImageMark, sourceBracketStart, sourceBracketStart + 1)) // [
+
+    // Parse tooltip and source
+    const innerStart = sourceBracketStart + 1
+    if (source !== undefined) {
+      // Has tooltip|source format
+      const tooltipEnd = innerStart + tooltipOrSource.length
+      if (tooltipOrSource) {
+        children.push(cx.elt(Type.ImageTooltip, innerStart, tooltipEnd))
+      }
+      children.push(cx.elt(Type.LinkSeparator, tooltipEnd, tooltipEnd + 1)) // |
+      const sourceStart = tooltipEnd + 1
+      const sourceEnd = sourceStart + source.length
+      if (source) {
+        children.push(cx.elt(Type.ImageSource, sourceStart, sourceEnd))
+      }
+    } else {
+      // Just source, no tooltip
+      const sourceEnd = innerStart + tooltipOrSource.length
+      if (tooltipOrSource) {
+        children.push(cx.elt(Type.ImageSource, innerStart, sourceEnd))
+      }
+    }
+
+    children.push(cx.elt(Type.ImageMark, end - 2, end)) // ]]
 
     return cx.addElement(cx.elt(Type.ImageLink, pos, end, children))
   }

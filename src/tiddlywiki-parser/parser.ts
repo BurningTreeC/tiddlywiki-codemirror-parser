@@ -72,6 +72,7 @@ const defaultStyleTags = styleTags({
   ImageLink: t.link,
   ImageMark: t.processingInstruction,
   ImageSource: t.url,
+  ImageTooltip: t.string,
 
   // URLs
   "URLLink SystemLink": t.url,

@@ -469,18 +469,21 @@ function macroCompletion(getMacroNames?: () => string[]) {
 }
 
 /**
- * Tiddler title completion source ([[link or {{transclusion)
+ * Tiddler title completion source ([[link, {{transclusion, or [img[source)
  */
 function tiddlerCompletion(getTiddlerTitles?: () => string[]) {
   return (context: CompletionContext): CompletionResult | null => {
     const { state, pos } = context
+    const textBefore = state.sliceDoc(pos - 100, pos)
 
     // Match [[ for links
-    const linkMatch = /\[\[[^\]|]*$/.exec(state.sliceDoc(pos - 100, pos))
+    const linkMatch = /\[\[[^\]|]*$/.exec(textBefore)
     // Match {{ for transclusions
-    const transcludeMatch = /\{\{[^{}|]*$/.exec(state.sliceDoc(pos - 100, pos))
+    const transcludeMatch = /\{\{[^{}|]*$/.exec(textBefore)
+    // Match [img[ or [img ...attrs[ for images (source is inside the last [)
+    const imageMatch = /\[img(?:\s+[^\[]*)?\[[^\]|]*$/.exec(textBefore)
 
-    const match = linkMatch || transcludeMatch
+    const match = linkMatch || transcludeMatch || imageMatch
     if (!match) return null
 
     // Don't complete inside code blocks or comments
@@ -497,13 +500,31 @@ function tiddlerCompletion(getTiddlerTitles?: () => string[]) {
     const titles = getTiddlerTitles ? getTiddlerTitles() : []
     if (titles.length === 0) return null
 
-    const prefix = linkMatch ? "[[" : "{{"
-    const suffix = linkMatch ? "]]" : "}}"
+    // Determine prefix and suffix based on match type
+    let prefix: string
+    let suffix: string
+    let validFor: RegExp
+
+    if (linkMatch) {
+      prefix = "[["
+      suffix = "]]"
+      validFor = /^\[\[[^\]|]*$/
+    } else if (transcludeMatch) {
+      prefix = "{{"
+      suffix = "}}"
+      validFor = /^\{\{[^{}|]*$/
+    } else {
+      // Image match - we need to find where the [ starts for the source
+      const bracketPos = match[0].lastIndexOf('[')
+      prefix = match[0].slice(0, bracketPos + 1)
+      suffix = "]]"
+      validFor = /^\[img(?:\s+[^\[]*)?\[[^\]|]*$/
+    }
 
     const options: Completion[] = titles.map(title => ({
       label: prefix + title,
       type: "variable",
-      detail: "tiddler",
+      detail: imageMatch ? "image" : "tiddler",
       apply: prefix + title + suffix
     }))
 
@@ -511,7 +532,7 @@ function tiddlerCompletion(getTiddlerTitles?: () => string[]) {
       from: pos - match[0].length,
       to: pos,
       options,
-      validFor: linkMatch ? /^\[\[[^\]|]*$/ : /^\{\{[^{}|]*$/
+      validFor
     }
   }
 }
