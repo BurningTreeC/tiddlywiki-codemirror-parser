@@ -939,15 +939,34 @@ CodeMirrorEngine.prototype.updateDomNodeText = function(text) {
 CodeMirrorEngine.prototype.createTextOperation = function(type) {
 	if (this._destroyed) return null;
 
-	var sel = this.view.state.selection.main;
+	var state = this.view.state;
+	var sel = state.selection.main;
+	var doc = state.doc;
+
+	// Build selections array for all cursors
+	var selections = [];
+	for (var i = 0; i < state.selection.ranges.length; i++) {
+		var range = state.selection.ranges[i];
+		selections.push({
+			from: range.from,
+			to: range.to,
+			text: doc.sliceString(range.from, range.to)
+		});
+	}
 
 	return {
 		type: type,
-		text: this.getText(),
+		text: doc.toString(),
+		// Primary selection (backwards compatibility)
 		selStart: sel.from,
 		selEnd: sel.to,
-		selection: this.view.state.doc.sliceString(sel.from, sel.to),
+		selection: doc.sliceString(sel.from, sel.to),
+		// Multi-cursor: all selections
+		selections: selections,
+		// Output fields
 		replacement: null,
+		cutStart: null,
+		cutEnd: null,
 		newSelStart: null,
 		newSelEnd: null
 	};
@@ -956,24 +975,12 @@ CodeMirrorEngine.prototype.createTextOperation = function(type) {
 CodeMirrorEngine.prototype.executeTextOperation = function(operation) {
 	if (this._destroyed || !operation) return this.getText();
 
+	var self = this;
 	var type = operation.type;
-	var from = isNumber(operation.selStart) ? operation.selStart : this.view.state.selection.main.from;
-	var to = isNumber(operation.selEnd) ? operation.selEnd : from;
 
 	switch (type) {
 		case "focus-editor":
 			this.focus();
-			break;
-
-		case "insert-text":
-		case "replace-selection":
-			if (operation.replacement !== null && operation.replacement !== undefined) {
-				var insert = String(operation.replacement);
-				this.view.dispatch({
-					changes: { from: from, to: to, insert: insert },
-					selection: { anchor: from + insert.length }
-				});
-			}
 			break;
 
 		case "replace-all":
@@ -1008,26 +1015,120 @@ CodeMirrorEngine.prototype.executeTextOperation = function(operation) {
 			break;
 
 		default:
+			// TiddlyWiki operations set cutStart/cutEnd for the range to replace,
+			// and replacement for the new text. Fall back to selStart/selEnd if not set.
 			if (operation.replacement !== null && operation.replacement !== undefined) {
-				var insertText = String(operation.replacement);
+				this._applyTextOperation(operation);
+			} else if (isNumber(operation.newSelStart)) {
+				// No replacement but new selection requested
+				var docLen = this.view.state.doc.length;
 				this.view.dispatch({
-					changes: { from: from, to: to, insert: insertText },
-					selection: { anchor: from + insertText.length }
+					selection: {
+						anchor: clamp(operation.newSelStart, 0, docLen),
+						head: clamp(isNumber(operation.newSelEnd) ? operation.newSelEnd : operation.newSelStart, 0, docLen)
+					}
 				});
 			}
 			this._triggerEvent("textOperation", operation);
 	}
 
-	if (isNumber(operation.newSelStart)) {
-		var newAnchor = operation.newSelStart;
-		var newHead = isNumber(operation.newSelEnd) ? operation.newSelEnd : newAnchor;
-		var docLen = this.view.state.doc.length;
-		this.view.dispatch({
-			selection: { anchor: clamp(newAnchor, 0, docLen), head: clamp(newHead, 0, docLen) }
-		});
-	}
+	// Always restore focus after text operation
+	this.focus();
 
 	return this.getText();
+};
+
+/**
+ * Apply text operation with multi-cursor support
+ * Extracts the transformation pattern from the main selection and applies to all cursors
+ */
+CodeMirrorEngine.prototype._applyTextOperation = function(operation) {
+	var state = this.view.state;
+	var EditorSelection = this.cm.state.EditorSelection;
+
+	// Get the operation parameters from main selection
+	var mainCutStart = isNumber(operation.cutStart) ? operation.cutStart :
+	                   isNumber(operation.selStart) ? operation.selStart :
+	                   state.selection.main.from;
+	var mainCutEnd = isNumber(operation.cutEnd) ? operation.cutEnd :
+	                 isNumber(operation.selEnd) ? operation.selEnd :
+	                 mainCutStart;
+	var mainSelStart = isNumber(operation.selStart) ? operation.selStart : mainCutStart;
+	var mainSelEnd = isNumber(operation.selEnd) ? operation.selEnd : mainCutEnd;
+	var replacement = String(operation.replacement);
+	var mainNewSelStart = isNumber(operation.newSelStart) ? operation.newSelStart : mainCutStart + replacement.length;
+	var mainNewSelEnd = isNumber(operation.newSelEnd) ? operation.newSelEnd : mainNewSelStart;
+
+	// Check if this is a simple wrap-style operation (cut range equals selection range)
+	// In this case we can extract prefix/suffix and apply to all cursors
+	var isWrapStyle = (mainCutStart === mainSelStart && mainCutEnd === mainSelEnd);
+
+	// For single cursor or complex operations, use simple dispatch
+	if (state.selection.ranges.length === 1 || !isWrapStyle) {
+		var transaction = {
+			changes: { from: mainCutStart, to: mainCutEnd, insert: replacement }
+		};
+		transaction.selection = { anchor: mainNewSelStart, head: mainNewSelEnd };
+		this.view.dispatch(transaction);
+		return;
+	}
+
+	// Multi-cursor wrap-style operation:
+	// Extract prefix/suffix from the main selection's transformation
+	// replacement = prefix + transformedContent + suffix
+	var prefixLen = mainNewSelStart - mainCutStart;
+	var suffixLen = (mainCutStart + replacement.length) - mainNewSelEnd;
+	var prefix = replacement.substring(0, prefixLen);
+	var suffix = replacement.substring(replacement.length - suffixLen);
+
+	// The content between prefix and suffix in the replacement
+	var mainContent = replacement.substring(prefixLen, replacement.length - suffixLen);
+	var mainOriginalContent = operation.selection || "";
+
+	// Check if content was preserved (wrap) or transformed (e.g., toggled off)
+	var contentPreserved = (mainContent === mainOriginalContent);
+
+	// Use changeByRange to apply to all selections
+	var self = this;
+	this.view.dispatch(
+		state.changeByRange(function(range) {
+			var selText = state.doc.sliceString(range.from, range.to);
+			var newContent;
+
+			if (contentPreserved) {
+				// Simple wrap: prefix + original selection + suffix
+				newContent = prefix + selText + suffix;
+			} else {
+				// Content was transformed (e.g., toggle removed markup)
+				// Check if this selection has the same markup to remove
+				if (selText.length >= prefix.length + suffix.length &&
+				    selText.substring(0, prefix.length) === prefix &&
+				    selText.substring(selText.length - suffix.length) === suffix) {
+					// Has markup - remove it (toggle off)
+					newContent = selText.substring(prefix.length, selText.length - suffix.length);
+				} else {
+					// No markup - add it (toggle on)
+					newContent = prefix + selText + suffix;
+				}
+			}
+
+			var newFrom = range.from;
+			var newTo = range.from + newContent.length;
+			var newSelFrom = newFrom + prefix.length;
+			var newSelTo = newTo - suffix.length;
+
+			// Handle case where content was unwrapped (prefix/suffix removed)
+			if (!contentPreserved && newContent === selText.substring(prefix.length, selText.length - suffix.length)) {
+				newSelFrom = newFrom;
+				newSelTo = newTo;
+			}
+
+			return {
+				changes: { from: range.from, to: range.to, insert: newContent },
+				range: EditorSelection.range(newSelFrom, newSelTo)
+			};
+		})
+	);
 };
 
 CodeMirrorEngine.prototype.fixHeight = function() {};

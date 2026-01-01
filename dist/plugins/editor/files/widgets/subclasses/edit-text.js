@@ -212,28 +212,27 @@ exports.prototype.updateShortcutLists = function (tiddlerList) {
 /**
  * Handle an edit text operation message from the toolbar.
  *
- * New behavior:
- * - DO NOT call core `texteditoroperation` handlers (textarea model)
- * - Route directly through CM6 engine:
- *   - engine.executeTextOperation() handles known ops
- *   - unknown ops are emitted as plugin event "textOperation"
- * - Save via engine.getText() (engine is source of truth)
+ * Calls the core texteditoroperation handlers to modify the operation object,
+ * then executes via the CM6 engine.
  */
 exports.prototype.handleEditTextOperationMessage = function (event) {
 	if (!this.engine || (this.engine.isDestroyed && this.engine.isDestroyed())) return;
 
-	var opType = event && event.param ? event.param : null;
-	if (!opType) return;
+	// Prepare information about the operation
+	var operation = this.engine.createTextOperation();
 
-	var operation = this.engine.createTextOperation(opType);
-	this.engine.executeTextOperation(operation);
-
-	this.engine.fixHeight();
-
-	// Avoid writing back for pure focus operations
-	if (opType !== "focus-editor") {
-		this.saveChanges(this.engine.getText());
+	// Invoke the handler for the selected operation (e.g., wrap-selection, prefix-lines)
+	var handler = this.editorOperations[event.param];
+	if (handler) {
+		handler.call(this, event, operation);
 	}
+
+	// Execute the operation via the engine
+	var newText = this.engine.executeTextOperation(operation);
+
+	// Fix height and save changes
+	this.engine.fixHeight();
+	this.saveChanges(newText);
 };
 
 // ============================================================================

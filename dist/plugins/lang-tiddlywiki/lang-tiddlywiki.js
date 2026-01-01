@@ -2384,10 +2384,13 @@ function parseAttributes(attrString, offset, isWidget) {
                     pos += 3;
                 valueEnd = pos;
                 valueType = Type.AttributeFiltered;
+                // Parse filter expression children for proper highlighting
+                const filterContent = attrString.slice(filterStart, filterEnd);
+                const filterChildren = parseFilterExpressionBlock(filterContent, offset + filterStart);
                 // Create child elements for filtered transclusion
                 const valueChildren = [
                     elt(Type.FilteredTransclusionMark, offset + openMarkStart, offset + openMarkStart + 3),
-                    elt(Type.FilterExpression, offset + filterStart, offset + filterEnd),
+                    elt(Type.FilterExpression, offset + filterStart, offset + filterEnd, filterChildren),
                     elt(Type.FilteredTransclusionMark, offset + filterEnd, offset + valueEnd)
                 ];
                 const attrChildren = [
@@ -2409,10 +2412,13 @@ function parseAttributes(attrString, offset, isWidget) {
                     pos += 2;
                 valueEnd = pos;
                 valueType = Type.AttributeIndirect;
+                // Parse transclusion target details (tiddler!!field or tiddler##index)
+                const targetContent = attrString.slice(targetStart, targetEnd);
+                const targetChildren = parseTransclusionTargetBlock(targetContent, offset + targetStart);
                 // Create child elements for transclusion
                 const valueChildren = [
                     elt(Type.TransclusionMark, offset + openMarkStart, offset + openMarkStart + 2),
-                    elt(Type.TransclusionTarget, offset + targetStart, offset + targetEnd),
+                    ...targetChildren,
                     elt(Type.TransclusionMark, offset + targetEnd, offset + valueEnd)
                 ];
                 const attrChildren = [
@@ -3934,10 +3940,13 @@ function parseInlineAttributes(cx, attrString, offset) {
                     pos += 3;
                 valueEnd = pos;
                 valueType = Type.AttributeFiltered;
+                // Parse filter expression children for proper highlighting
+                const filterContent = attrString.slice(filterStart, filterEnd);
+                const filterChildren = parseFilterExpression(cx, filterContent, offset + filterStart);
                 // Create child elements for filtered transclusion
                 const valueChildren = [
                     cx.elt(Type.FilteredTransclusionMark, offset + openMarkStart, offset + openMarkStart + 3),
-                    cx.elt(Type.FilterExpression, offset + filterStart, offset + filterEnd),
+                    cx.elt(Type.FilterExpression, offset + filterStart, offset + filterEnd, filterChildren),
                     cx.elt(Type.FilteredTransclusionMark, offset + filterEnd, offset + valueEnd)
                 ];
                 const attrChildren = [
@@ -3959,10 +3968,13 @@ function parseInlineAttributes(cx, attrString, offset) {
                     pos += 2;
                 valueEnd = pos;
                 valueType = Type.AttributeIndirect;
+                // Parse transclusion target details (tiddler!!field or tiddler##index)
+                const targetContent = attrString.slice(targetStart, targetEnd);
+                const targetChildren = parseTransclusionTarget(cx, targetContent, offset + targetStart);
                 // Create child elements for transclusion
                 const valueChildren = [
                     cx.elt(Type.TransclusionMark, offset + openMarkStart, offset + openMarkStart + 2),
-                    cx.elt(Type.TransclusionTarget, offset + targetStart, offset + targetEnd),
+                    ...targetChildren,
                     cx.elt(Type.TransclusionMark, offset + targetEnd, offset + valueEnd)
                 ];
                 const attrChildren = [
