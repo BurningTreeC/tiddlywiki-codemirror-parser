@@ -23,12 +23,31 @@ exports.plugin = {
 	description: "SQL syntax highlighting",
 	priority: 50,
 
+	init: function(cm6Core) {
+		this._core = cm6Core;
+	},
+
+	registerCompartments: function() {
+		var Compartment = this._core.state.Compartment;
+		return {
+			sqlLanguage: new Compartment()
+		};
+	},
+
 	condition: function(context) {
 		var type = context.tiddlerType;
 		return SQL_TYPES.indexOf(type) !== -1;
 	},
 
-	getExtensions: function(context) {
+	getCompartmentContent: function(context) {
 		return [langSql.sql()];
+	},
+
+	getExtensions: function(context) {
+		var compartments = context.engine._compartments;
+		if (compartments.sqlLanguage) {
+			return [compartments.sqlLanguage.of(this.getCompartmentContent(context))];
+		}
+		return this.getCompartmentContent(context);
 	}
 };

@@ -42,17 +42,16 @@ The editor uses `module-type: codemirror6-plugin` for all extensions. Each plugi
 !!! TiddlyWiki Plugins
 
 |!Plugin |!Priority |!Description |
-|`tw-autocomplete` |550 |Tiddler names, macros, widgets, fields, tags, filter operators |
+|`lang-tiddlywiki` |900 |TiddlyWiki wikitext parsing, highlighting, and autocompletion |
 |`tw-snippets` |540 |Code templates with Tab expansion |
 |`tw-click-navigate` |450 |Ctrl+Click to open tiddlers |
 |`tw-link-preview` |400 |Hover preview for links and transclusions |
 |`tw-lint` |300 |Wikitext validation and error checking |
 |`tw-toolbar` |200 |TiddlyWiki editor toolbar integration |
-|`tiddlywiki-syntax` |100 |Wikitext parsing and syntax highlighting |
 
 !! TiddlyWiki Autocomplete
 
-The `tw-autocomplete` plugin provides intelligent completions:
+The `lang-tiddlywiki` language support provides intelligent completions:
 
 |!Trigger |!Completions |
 |`[[` |Tiddler titles |

@@ -24,12 +24,31 @@ exports.plugin = {
 	description: "XML syntax highlighting",
 	priority: 50,
 
+	init: function(cm6Core) {
+		this._core = cm6Core;
+	},
+
+	registerCompartments: function() {
+		var Compartment = this._core.state.Compartment;
+		return {
+			xmlLanguage: new Compartment()
+		};
+	},
+
 	condition: function(context) {
 		var type = context.tiddlerType;
 		return XML_TYPES.indexOf(type) !== -1;
 	},
 
-	getExtensions: function(context) {
+	getCompartmentContent: function(context) {
 		return [langXml.xml()];
+	},
+
+	getExtensions: function(context) {
+		var compartments = context.engine._compartments;
+		if (compartments.xmlLanguage) {
+			return [compartments.xmlLanguage.of(this.getCompartmentContent(context))];
+		}
+		return this.getCompartmentContent(context);
 	}
 };

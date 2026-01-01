@@ -24,12 +24,31 @@ exports.plugin = {
 	description: "HTML syntax highlighting",
 	priority: 50,
 
+	init: function(cm6Core) {
+		this._core = cm6Core;
+	},
+
+	registerCompartments: function() {
+		var Compartment = this._core.state.Compartment;
+		return {
+			htmlLanguage: new Compartment()
+		};
+	},
+
 	condition: function(context) {
 		var type = context.tiddlerType;
 		return HTML_TYPES.indexOf(type) !== -1;
 	},
 
-	getExtensions: function(context) {
+	getCompartmentContent: function(context) {
 		return [langHtml.html()];
+	},
+
+	getExtensions: function(context) {
+		var compartments = context.engine._compartments;
+		if (compartments.htmlLanguage) {
+			return [compartments.htmlLanguage.of(this.getCompartmentContent(context))];
+		}
+		return this.getCompartmentContent(context);
 	}
 };

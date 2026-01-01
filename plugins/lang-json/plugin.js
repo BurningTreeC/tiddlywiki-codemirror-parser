@@ -23,12 +23,31 @@ exports.plugin = {
 	description: "JSON syntax highlighting",
 	priority: 50,
 
+	init: function(cm6Core) {
+		this._core = cm6Core;
+	},
+
+	registerCompartments: function() {
+		var Compartment = this._core.state.Compartment;
+		return {
+			jsonLanguage: new Compartment()
+		};
+	},
+
 	condition: function(context) {
 		var type = context.tiddlerType;
 		return JSON_TYPES.indexOf(type) !== -1;
 	},
 
-	getExtensions: function(context) {
+	getCompartmentContent: function(context) {
 		return [langJson.json()];
+	},
+
+	getExtensions: function(context) {
+		var compartments = context.engine._compartments;
+		if (compartments.jsonLanguage) {
+			return [compartments.jsonLanguage.of(this.getCompartmentContent(context))];
+		}
+		return this.getCompartmentContent(context);
 	}
 };

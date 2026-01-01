@@ -168,11 +168,41 @@ export const insertNewlineContinueMarkupCommand = (config: {
     // No list/quote context - fall back to language indentation
     if (!context.length) {
       // Get the indentation for the next line from the language
-      const indent = getIndentation(state, pos)
-      if (indent != null) {
+      let indent = getIndentation(state, pos)
+
+      // Fallback: if indentation is null/0, check line text for patterns that need indentation
+      if (indent == null || indent === 0) {
+        const lineText = line.text
+        const unit = state.facet(indentUnit)
+        const unitSize = unit === "\t" ? state.tabSize : unit.length
+
+        // Get base indent of current line
+        let baseIndent = 0
+        for (let i = 0; i < lineText.length; i++) {
+          const ch = lineText.charCodeAt(i)
+          if (ch === 32) baseIndent++ // space
+          else if (ch === 9) baseIndent += state.tabSize // tab
+          else break
+        }
+
+        // Check for patterns that need indentation on next line
+        const trimmed = lineText.trim()
+        if (/<%\s*(if|elseif)\s+.+%>\s*$/.test(trimmed) || /<%\s*else\s*%>\s*$/.test(trimmed)) {
+          // Conditional opener - indent next line
+          indent = baseIndent + unitSize
+        } else if (/<[$a-zA-Z][^>]*>\s*$/.test(trimmed) && !/<\//.test(trimmed) && !trimmed.endsWith("/>")) {
+          // Opening widget/HTML tag - indent next line
+          indent = baseIndent + unitSize
+        } else if (/<%\s*endif\s*%>\s*$/.test(trimmed) || /<\/[$a-zA-Z][^>]*>\s*$/.test(trimmed)) {
+          // Closing tag - keep same indent as current line
+          indent = baseIndent
+        }
+      }
+
+      let indentStr = ""
+      if (indent != null && indent > 0) {
         // Build the indentation string
         const unit = state.facet(indentUnit)
-        let indentStr = ""
         if (unit === "\t") {
           // Tab indentation
           indentStr = "\t".repeat(Math.floor(indent / state.tabSize))
@@ -182,13 +212,13 @@ export const insertNewlineContinueMarkupCommand = (config: {
           // Space indentation
           indentStr = " ".repeat(indent)
         }
-        const insert = state.lineBreak + indentStr
-        return {
-          range: EditorSelection.cursor(pos + insert.length),
-          changes: {from: pos, insert}
-        }
       }
-      return dont = {range}
+      // Always insert a newline, even if indentation is null/zero
+      const insert = state.lineBreak + indentStr
+      return {
+        range: EditorSelection.cursor(pos + insert.length),
+        changes: {from: pos, insert}
+      }
     }
     
     let inner = context[context.length - 1]

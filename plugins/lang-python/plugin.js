@@ -23,12 +23,31 @@ exports.plugin = {
 	description: "Python syntax highlighting",
 	priority: 50,
 
+	init: function(cm6Core) {
+		this._core = cm6Core;
+	},
+
+	registerCompartments: function() {
+		var Compartment = this._core.state.Compartment;
+		return {
+			pythonLanguage: new Compartment()
+		};
+	},
+
 	condition: function(context) {
 		var type = context.tiddlerType;
 		return PYTHON_TYPES.indexOf(type) !== -1;
 	},
 
-	getExtensions: function(context) {
+	getCompartmentContent: function(context) {
 		return [langPython.python()];
+	},
+
+	getExtensions: function(context) {
+		var compartments = context.engine._compartments;
+		if (compartments.pythonLanguage) {
+			return [compartments.pythonLanguage.of(this.getCompartmentContent(context))];
+		}
+		return this.getCompartmentContent(context);
 	}
 };

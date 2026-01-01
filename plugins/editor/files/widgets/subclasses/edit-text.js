@@ -1,5 +1,5 @@
 /*\
-title: $:/plugins/BTC/tiddlywiki-codemirror/modules/subclasses/editor/edit-text.js
+title: $:/plugins/BurningTreeC/tiddlywiki-codemirror/modules/subclasses/editor/edit-text.js
 type: application/javascript
 module-type: widget-subclass
 

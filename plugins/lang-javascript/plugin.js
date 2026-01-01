@@ -41,16 +41,34 @@ exports.plugin = {
 	description: "JavaScript/TypeScript syntax highlighting",
 	priority: 50,
 
+	init: function(cm6Core) {
+		this._core = cm6Core;
+	},
+
+	registerCompartments: function() {
+		var Compartment = this._core.state.Compartment;
+		return {
+			javascriptLanguage: new Compartment()
+		};
+	},
+
 	condition: function(context) {
 		var type = context.tiddlerType;
 		return ALL_TYPES.indexOf(type) !== -1;
 	},
 
-	getExtensions: function(context) {
+	getCompartmentContent: function(context) {
 		var type = context.tiddlerType;
 		var isTypescript = TS_TYPES.indexOf(type) !== -1 || TSX_TYPES.indexOf(type) !== -1;
 		var isJsx = JSX_TYPES.indexOf(type) !== -1 || TSX_TYPES.indexOf(type) !== -1;
-
 		return [langJs.javascript({ typescript: isTypescript, jsx: isJsx })];
+	},
+
+	getExtensions: function(context) {
+		var compartments = context.engine._compartments;
+		if (compartments.javascriptLanguage) {
+			return [compartments.javascriptLanguage.of(this.getCompartmentContent(context))];
+		}
+		return this.getCompartmentContent(context);
 	}
 };

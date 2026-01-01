@@ -1302,6 +1302,8 @@ export const HTMLBlock: BlockParser = {
     if (!selfClose) {
       const openRe = new RegExp(`<${tagName.replace(/\$/g, '\\$')}(?:\\s|>|/>)`)
       const closeRe = new RegExp(`</${tagName.replace(/\$/g, '\\$')}>`)
+      // For multi-line: match closing tag at start of line with optional indent
+      const closeReWithIndent = new RegExp(`^(\\s*)</${tagName.replace(/\$/g, '\\$')}>`)
       let blockEnd = openingTagLineEnd
       let foundClose = false
 
@@ -1370,8 +1372,8 @@ export const HTMLBlock: BlockParser = {
             nestLevel++
           }
 
-          // Check for closing tag
-          const closeMatch = closeRe.exec(lineText)
+          // Check for closing tag (use closeReWithIndent to capture indentation)
+          const closeMatch = closeReWithIndent.exec(lineText)
           if (closeMatch) {
             nestLevel--
             if (nestLevel === 0) {
@@ -1391,7 +1393,7 @@ export const HTMLBlock: BlockParser = {
               }
 
               // Add closing tag element with marks
-              const closeIndent = (closeMatch[1] || '').length
+              const closeIndent = closeMatch[1].length
               const closingTagOpenBracket = cx.lineStart + closeIndent
               children.push(elt(Type.TagMark, closingTagOpenBracket, closingTagOpenBracket + 1)) // <
               children.push(elt(Type.TagMark, closingTagOpenBracket + 1, closingTagOpenBracket + 2)) // /
@@ -1399,7 +1401,8 @@ export const HTMLBlock: BlockParser = {
               children.push(elt(isWidget ? Type.WidgetName : Type.TagName, closeTagStart, closeTagStart + tagName.length))
 
               // Parse any inline content AFTER the closing tag on the same line
-              const closeTagFullEnd = closeIndent + closeMatch[0].length
+              // Note: closeMatch[0].length already includes the indent
+              const closeTagFullEnd = closeMatch[0].length
               const closingTagEndPos = cx.lineStart + closeTagFullEnd
               children.push(elt(Type.TagMark, closingTagEndPos - 1, closingTagEndPos)) // >
               const afterCloseTag = lineText.slice(closeTagFullEnd)

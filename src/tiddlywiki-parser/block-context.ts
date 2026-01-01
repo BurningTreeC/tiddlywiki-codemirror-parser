@@ -124,10 +124,17 @@ export class BlockContext implements PartialParse {
   }
 
   /**
-   * Get the end position of the previous line
+   * Get the end position of the previous line's content (excluding newline)
+   * For the last line without trailing newline, returns the document end
    */
   prevLineEnd(): number {
-    return this.lineStart > 0 ? this.lineStart - 1 : 0
+    if (this.lineStart <= 0) return 0
+    // If we're at the document end (atEnd is true), lineStart is the doc end
+    // In this case, return lineStart (not lineStart - 1) since there's no newline to skip
+    if (this.atEnd && this.lineStart === this.to) {
+      return this.lineStart
+    }
+    return this.lineStart - 1
   }
 
   /**

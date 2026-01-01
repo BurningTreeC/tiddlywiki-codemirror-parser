@@ -1,5 +1,5 @@
 /*\
-title: $:/plugins/BTC/tiddlywiki-codemirror-6/plugins/tw-toolbar.js
+title: $:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/tw-toolbar.js
 type: application/javascript
 module-type: codemirror6-plugin
 

@@ -416,6 +416,53 @@ function CodeMirrorEngine(options) {
 		extensions.push(cmKeymap.of(km));
 	}
 
+	// Core: Line wrapping
+	var lineWrapping = EditorView.lineWrapping;
+	if (lineWrapping) {
+		extensions.push(lineWrapping);
+	}
+
+	// Core: Set tabindex on the editor content element
+	var tabIndex = this.widget && this.widget.editTabIndex;
+	if (tabIndex !== undefined && tabIndex !== null) {
+		extensions.push(EditorView.contentAttributes.of({ tabindex: String(tabIndex) }));
+	}
+
+	// Core: Undo/redo history
+	var history = (core.commands || {}).history;
+	var historyKeymap = (core.commands || {}).historyKeymap;
+	if (history) {
+		extensions.push(history());
+		if (historyKeymap && cmKeymap) {
+			extensions.push(cmKeymap.of(historyKeymap));
+		}
+	}
+
+	// Core: Bracket matching
+	var bracketMatching = (core.language || {}).bracketMatching;
+	if (bracketMatching) {
+		extensions.push(bracketMatching());
+	}
+
+	// Core: Default syntax highlighting (fallback for languages without custom styles)
+	// Uses classHighlighter to add CSS classes (.tok-keyword, .tok-string, etc.)
+	// so themes can style them via CSS
+	var syntaxHighlighting = (core.language || {}).syntaxHighlighting;
+	var classHighlighter = (core.lezerHighlight || {}).classHighlighter;
+	if (syntaxHighlighting && classHighlighter) {
+		extensions.push(syntaxHighlighting(classHighlighter, { fallback: true }));
+	}
+
+	// Core: Autocompletion (enables completion popups for all languages)
+	var autocompletion = (core.autocomplete || {}).autocompletion;
+	var completionKeymap = (core.autocomplete || {}).completionKeymap;
+	if (autocompletion) {
+		extensions.push(autocompletion());
+		if (completionKeymap && cmKeymap) {
+			extensions.push(cmKeymap.of(completionKeymap));
+		}
+	}
+
 	// Collect extensions from plugins
 	// 
 	// IMPORTANT: Plugins with compartments are responsible for their own compartment.of() calls.
@@ -502,6 +549,10 @@ function CodeMirrorEngine(options) {
 			
 			if (update.focusChanged) {
 				if (update.view.hasFocus) {
+					// Cancel popups if widget has editCancelPopups set
+					if (self.widget && self.widget.editCancelPopups && $tw.popup) {
+						$tw.popup.cancel(0);
+					}
 					self._triggerEvent("focus", update);
 				} else {
 					self._handleBlur();

@@ -113,14 +113,30 @@ function containerIndent(context: TreeIndentContext): number | null {
     console.log(`  cursorLine: ${cursorLine.number}`)
   }
   if (cursorLine.number === openLine.number) {
-    // If cursor is after %> on an opening line, indent
     const lineText = cursorLine.text
-    const closeTagMatch = /%>\s*$/.exec(lineText.slice(0, context.pos - cursorLine.from))
-    if (closeTagMatch) {
-      // Check if this line has <%if or <%elseif or <%else (openers that need indent)
-      if (/<%\s*(if|elseif|else)\s/.test(lineText) || /<%\s*else\s*%>/.test(lineText)) {
-        if (DEBUG_INDENT) console.log(`  -> ${baseIndent + context.unit} (cursor on opening line, after %>)`)
+    // Check if cursor is at end of line (after %> or closing tag)
+    const atLineEnd = context.pos >= cursorLine.from + lineText.trimEnd().length
+
+    if (atLineEnd) {
+      // Check for <%if%>, <%elseif%>, <%else%> openers - indent content
+      if (/<%\s*(if|elseif)\s+.+%>\s*$/.test(lineText) || /<%\s*else\s*%>\s*$/.test(lineText)) {
+        if (DEBUG_INDENT) console.log(`  -> ${baseIndent + context.unit} (cursor after conditional opener)`)
         return baseIndent + context.unit
+      }
+      // Check for <%endif%> - stay at same indent
+      if (/<%\s*endif\s*%>\s*$/.test(lineText)) {
+        if (DEBUG_INDENT) console.log(`  -> ${baseIndent} (cursor after endif)`)
+        return baseIndent
+      }
+      // Check for opening widget/HTML tag - indent content
+      if (/<[$a-zA-Z][^>]*>\s*$/.test(lineText) && !/<\//.test(lineText)) {
+        if (DEBUG_INDENT) console.log(`  -> ${baseIndent + context.unit} (cursor after opening tag)`)
+        return baseIndent + context.unit
+      }
+      // Check for closing widget/HTML tag - stay at same indent
+      if (/<\/[$a-zA-Z][^>]*>\s*$/.test(lineText)) {
+        if (DEBUG_INDENT) console.log(`  -> ${baseIndent} (cursor after closing tag)`)
+        return baseIndent
       }
     }
     if (DEBUG_INDENT) console.log(`  -> null (cursor on opening line, default)`)
@@ -191,26 +207,38 @@ const configured = baseParser.configure({
         // This happens when all nodes end at doc length and cursor is at boundary
         const docLength = context.state.doc.length
         if (context.pos === docLength && docLength > 0) {
-          // Check if previous line is a conditional opener that needs indentation
-          const cursorLine = context.state.doc.lineAt(context.pos)
-          if (cursorLine.number > 1) {
-            const prevLine = context.state.doc.line(cursorLine.number - 1)
-            const prevText = prevLine.text.trim()
-            if (DEBUG_INDENT) {
-              console.log(`Document indent at doc end: prevLine = "${prevText}"`)
-            }
-            // Check for <%if%>, <%elseif%>, <%else%>
-            if (/<%\s*(if|elseif)\s+.+%>\s*$/.test(prevText) || /<%\s*else\s*%>\s*$/.test(prevText)) {
-              const baseIndent = getLineIndent(context, prevLine.from)
-              if (DEBUG_INDENT) console.log(`  -> ${baseIndent + context.unit} (prev line is opener)`)
-              return baseIndent + context.unit
-            }
-            // Check for widget/HTML opening tags: <$widget> or <div>
-            if (/<[$a-zA-Z][^>]*>\s*$/.test(prevText) && !/<\//.test(prevText)) {
-              const baseIndent = getLineIndent(context, prevLine.from)
-              if (DEBUG_INDENT) console.log(`  -> ${baseIndent + context.unit} (prev line is opening tag)`)
-              return baseIndent + context.unit
-            }
+          // Get the line at cursor position (or just before if at end)
+          const cursorLine = context.state.doc.lineAt(Math.max(0, context.pos - 1))
+          const lineText = cursorLine.text.trim()
+
+          if (DEBUG_INDENT) {
+            console.log(`Document indent at doc end: lineText = "${lineText}"`)
+          }
+
+          // Check current line for conditional opener that needs indentation
+          // Check for <%if%>, <%elseif%>, <%else%>
+          if (/<%\s*(if|elseif)\s+.+%>\s*$/.test(lineText) || /<%\s*else\s*%>\s*$/.test(lineText)) {
+            const baseIndent = getLineIndent(context, cursorLine.from)
+            if (DEBUG_INDENT) console.log(`  -> ${baseIndent + context.unit} (line is conditional opener)`)
+            return baseIndent + context.unit
+          }
+          // Check for widget/HTML opening tags: <$widget> or <div>
+          if (/<[$a-zA-Z][^>]*>\s*$/.test(lineText) && !/<\//.test(lineText)) {
+            const baseIndent = getLineIndent(context, cursorLine.from)
+            if (DEBUG_INDENT) console.log(`  -> ${baseIndent + context.unit} (line is opening tag)`)
+            return baseIndent + context.unit
+          }
+          // Check for <%endif%> - return same level (base indent of the line)
+          if (/<%\s*endif\s*%>\s*$/.test(lineText)) {
+            const baseIndent = getLineIndent(context, cursorLine.from)
+            if (DEBUG_INDENT) console.log(`  -> ${baseIndent} (line is endif)`)
+            return baseIndent
+          }
+          // Check for closing widget/HTML tags: </$widget> or </div>
+          if (/<\/[$a-zA-Z][^>]*>\s*$/.test(lineText)) {
+            const baseIndent = getLineIndent(context, cursorLine.from)
+            if (DEBUG_INDENT) console.log(`  -> ${baseIndent} (line is closing tag)`)
+            return baseIndent
           }
         }
         return null

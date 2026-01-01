@@ -7,7 +7,7 @@
 
 import { Prec, EditorState } from "@codemirror/state"
 import { KeyBinding, keymap } from "@codemirror/view"
-import { Language, LanguageSupport, LanguageDescription, syntaxTree, ParseContext, indentOnInput } from "@codemirror/language"
+import { Language, LanguageSupport, LanguageDescription, syntaxTree, ParseContext, indentOnInput, getIndentation, getIndentUnit } from "@codemirror/language"
 import { Completion, CompletionContext, CompletionResult, autocompletion, completionKeymap } from "@codemirror/autocomplete"
 import { syntaxHighlighting, HighlightStyle } from "@codemirror/language"
 import { tags as t } from "@lezer/highlight"
@@ -420,6 +420,10 @@ export function tiddlywiki(config: TiddlyWikiLanguageConfig = {}): LanguageSuppo
     support.push(lang.data.of({
       autocomplete: widgetAttributeCompletion
     }))
+    // Add attribute value completion (for $variable=", tiddler=", etc.)
+    support.push(lang.data.of({
+      autocomplete: attributeValueCompletion(getMacroNames, getTiddlerTitles)
+    }))
   }
 
   if (completeMacros) {
@@ -655,6 +659,131 @@ function widgetAttributeCompletion(context: CompletionContext): CompletionResult
     to: pos,
     options,
     validFor: /^[$a-zA-Z\-]*$/
+  }
+}
+
+/**
+ * Attribute value completion source
+ * Triggers when cursor is inside an attribute value, e.g., $variable="..."
+ * Provides context-aware completions based on the attribute name
+ */
+function attributeValueCompletion(
+  getMacroNames?: () => string[],
+  getTiddlerTitles?: () => string[]
+) {
+  return (context: CompletionContext): CompletionResult | null => {
+    const { state, pos } = context
+
+    // Look back to find if we're inside an attribute value
+    const textBefore = state.sliceDoc(Math.max(0, pos - 200), pos)
+
+    // Match: attrname="value or attrname='value (cursor is after the opening quote)
+    const attrValueMatch = /([$a-zA-Z][\w\-]*)\s*=\s*(["'])([^"']*)$/.exec(textBefore)
+    if (!attrValueMatch) return null
+
+    const attrName = attrValueMatch[1]
+    const quoteChar = attrValueMatch[2]
+    const partial = attrValueMatch[3]
+    const from = pos - partial.length
+
+    // Check we're not in a code block or comment
+    const tree = syntaxTree(state).resolveInner(pos, -1)
+    let node = tree
+    while (node && !node.type.isTop) {
+      if (node.name === "FencedCode" || node.name === "CodeBlock" ||
+          node.name === "TypedBlock" || node.name === "CommentBlock") {
+        return null
+      }
+      node = node.parent!
+    }
+
+    let options: Completion[] = []
+    let detail = ""
+
+    // $variable attribute - complete with macro/procedure/function names
+    if (attrName === "$variable") {
+      const macros = getMacroNames ? getMacroNames() : commonMacros
+      detail = "variable"
+      options = macros.map(name => ({
+        label: name,
+        type: "function",
+        detail,
+        apply: (view, _completion, from, to) => {
+          // Check if there's already a closing quote after cursor
+          const textAfter = view.state.sliceDoc(to, to + 1)
+          const suffix = textAfter === quoteChar ? "" : quoteChar
+          view.dispatch({
+            changes: { from, to, insert: name + suffix },
+            selection: { anchor: from + name.length + suffix.length }
+          })
+        }
+      }))
+    }
+    // tiddler or $tiddler attribute - complete with tiddler titles
+    else if (attrName === "tiddler" || attrName === "$tiddler") {
+      const titles = getTiddlerTitles ? getTiddlerTitles() : []
+      if (titles.length === 0) return null
+      detail = "tiddler"
+      options = titles.map(title => ({
+        label: title,
+        type: "variable",
+        detail,
+        apply: (view, _completion, from, to) => {
+          const textAfter = view.state.sliceDoc(to, to + 1)
+          const suffix = textAfter === quoteChar ? "" : quoteChar
+          view.dispatch({
+            changes: { from, to, insert: title + suffix },
+            selection: { anchor: from + title.length + suffix.length }
+          })
+        }
+      }))
+    }
+    // to attribute (for $link, $action-navigate) - complete with tiddler titles
+    else if (attrName === "to" || attrName === "$to") {
+      const titles = getTiddlerTitles ? getTiddlerTitles() : []
+      if (titles.length === 0) return null
+      detail = "tiddler"
+      options = titles.map(title => ({
+        label: title,
+        type: "variable",
+        detail,
+        apply: (view, _completion, from, to) => {
+          const textAfter = view.state.sliceDoc(to, to + 1)
+          const suffix = textAfter === quoteChar ? "" : quoteChar
+          view.dispatch({
+            changes: { from, to, insert: title + suffix },
+            selection: { anchor: from + title.length + suffix.length }
+          })
+        }
+      }))
+    }
+    // $name attribute (for $macrocall) - complete with macro names
+    else if (attrName === "$name") {
+      const macros = getMacroNames ? getMacroNames() : commonMacros
+      detail = "macro"
+      options = macros.map(name => ({
+        label: name,
+        type: "function",
+        detail,
+        apply: (view, _completion, from, to) => {
+          const textAfter = view.state.sliceDoc(to, to + 1)
+          const suffix = textAfter === quoteChar ? "" : quoteChar
+          view.dispatch({
+            changes: { from, to, insert: name + suffix },
+            selection: { anchor: from + name.length + suffix.length }
+          })
+        }
+      }))
+    }
+
+    if (options.length === 0) return null
+
+    return {
+      from,
+      to: pos,
+      options,
+      validFor: /^[\w\-$:\/. ]*$/
+    }
   }
 }
 
@@ -1328,10 +1457,10 @@ function filterRunPrefixCompletion(context: CompletionContext): CompletionResult
 // ============================================================================
 
 const conditionalKeywords = [
-  { label: "if", detail: "Conditional if", insert: "if [] %>" },
-  { label: "elseif", detail: "Conditional else-if", insert: "elseif [] %>" },
-  { label: "else", detail: "Conditional else", insert: " else %>" },
-  { label: "endif", detail: "End conditional", insert: " endif %>" },
+  { label: "if", detail: "Conditional if", insert: "if [] %>", outdent: false },
+  { label: "elseif", detail: "Conditional else-if", insert: "elseif [] %>", outdent: true },
+  { label: "else", detail: "Conditional else", insert: " else %>", outdent: true },
+  { label: "endif", detail: "End conditional", insert: " endif %>", outdent: true },
 ]
 
 /**
@@ -1354,20 +1483,50 @@ function conditionalCompletion(context: CompletionContext): CompletionResult | n
   // Replace from after <% (including any whitespace typed)
   const from = pos - whitespace.length - partial.length
 
+  // Calculate the position of <% on the line
+  const openMarkPos = textBefore.lastIndexOf('<%')
+
   const options: Completion[] = conditionalKeywords.map(kw => ({
     label: kw.label,
     type: "keyword",
     detail: kw.detail,
     apply: (view, _completion, from, to) => {
       const insert = kw.insert
-      // For if/elseif, place cursor inside the []
-      const cursorOffset = (kw.label === "if" || kw.label === "elseif")
-        ? insert.indexOf('[') + 1
-        : insert.length
-      view.dispatch({
-        changes: { from, to, insert },
-        selection: { anchor: from + cursorOffset }
-      })
+
+      // For outdenting keywords (else, elseif, endif), remove one level of indentation
+      if (kw.outdent && openMarkPos > 0) {
+        const unit = getIndentUnit(view.state)
+        const leadingWhitespace = textBefore.slice(0, openMarkPos)
+
+        // Calculate new indentation (one level less)
+        let currentIndent = 0
+        for (const ch of leadingWhitespace) {
+          if (ch === ' ') currentIndent++
+          else if (ch === '\t') currentIndent += unit
+        }
+        const newIndent = Math.max(0, currentIndent - unit)
+        const newWhitespace = ' '.repeat(newIndent)
+
+        // Replace from start of line
+        const fullInsert = newWhitespace + '<%' + insert
+        const cursorOffset = (kw.label === "elseif")
+          ? fullInsert.indexOf('[') + 1
+          : fullInsert.length
+
+        view.dispatch({
+          changes: { from: line.from, to, insert: fullInsert },
+          selection: { anchor: line.from + cursorOffset }
+        })
+      } else {
+        // Normal insert (for "if" or when not indented)
+        const cursorOffset = (kw.label === "if" || kw.label === "elseif")
+          ? insert.indexOf('[') + 1
+          : insert.length
+        view.dispatch({
+          changes: { from, to, insert },
+          selection: { anchor: from + cursorOffset }
+        })
+      }
     }
   }))
 

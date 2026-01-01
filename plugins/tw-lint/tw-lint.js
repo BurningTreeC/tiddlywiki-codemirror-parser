@@ -1,5 +1,5 @@
 /*\
-title: $:/plugins/BTC/tiddlywiki-codemirror-6/plugins/tw-lint.js
+title: $:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/tw-lint.js
 type: application/javascript
 module-type: codemirror6-plugin
 
