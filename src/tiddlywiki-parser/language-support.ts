@@ -408,19 +408,25 @@ const coreFilterOperators = [
 
 // Filter Run Prefixes (including named prefixes)
 const filterRunPrefixes = [
-  { label: "+", detail: "intersection - filter the input" },
-  { label: "-", detail: "subtraction - remove from results" },
-  { label: "~", detail: "else - use if previous was empty" },
-  { label: "=", detail: "literal - add title literally" },
-  { label: ":filter", detail: "named - filter each title" },
-  { label: ":map", detail: "named - transform each title" },
-  { label: ":reduce", detail: "named - reduce to single value" },
-  { label: ":intersection", detail: "named - keep common titles" },
-  { label: ":cascade", detail: "named - cascade through filters" },
-  { label: ":all", detail: "named - pass to all runs" },
-  { label: ":some", detail: "named - pass to any matching run" },
-  { label: ":sort", detail: "named - sort by subfilter result" },
-  { label: ":flat", detail: "named - flatten list output" },
+  // Symbol prefixes
+  { label: "+", detail: "intersection - filter the input (same as :and)" },
+  { label: "-", detail: "subtraction - remove from results (same as :except)" },
+  { label: "~", detail: "else - use if previous was empty (same as :else)" },
+  { label: "=", detail: "literal - add title literally (same as :all)" },
+  // Named equivalents of symbols
+  { label: ":and", detail: "intersection - same as +" },
+  { label: ":except", detail: "subtraction - same as -" },
+  { label: ":else", detail: "else - same as ~" },
+  { label: ":all", detail: "literal - same as =" },
+  // Other named prefixes
+  { label: ":filter", detail: "filter each title through subfilter" },
+  { label: ":map", detail: "transform each title via subfilter" },
+  { label: ":reduce", detail: "reduce to single value" },
+  { label: ":intersection", detail: "keep titles common to all runs" },
+  { label: ":cascade", detail: "cascade through filters" },
+  { label: ":some", detail: "pass to any matching run" },
+  { label: ":sort", detail: "sort by subfilter result" },
+  { label: ":flat", detail: "flatten list output" },
 ]
 
 /**
