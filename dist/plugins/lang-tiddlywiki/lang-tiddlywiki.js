@@ -5995,8 +5995,8 @@ function macroCompletion(getMacroNames) {
         const textBefore = state.sliceDoc(pos - 50, pos);
         // Match <<macro for regular macro calls
         const macroMatch = /<<[\w\-]*$/.exec(textBefore);
-        // Match [<variable or [operator<variable for variable references in filters
-        const filterVarMatch = /\[[\w\-:!]*<[\w\-]*$/.exec(textBefore);
+        // Match [<variable or [operator<variable or ]operator<variable for variable references in filters
+        const filterVarMatch = /[\[\]][\w\-:!]*<[\w\-]*$/.exec(textBefore);
         const m = macroMatch || filterVarMatch;
         if (!m)
             return null;
@@ -6014,7 +6014,7 @@ function macroCompletion(getMacroNames) {
         const customMacros = getMacroNames ? getMacroNames() : [];
         const macros = customMacros.length > 0 ? customMacros : commonMacros;
         if (filterVarMatch) {
-            // Variable reference in filter: [<variable>] or [operator<variable>]
+            // Variable reference in filter: [<variable>] or [operator<variable>] or ]operator<variable>]
             const prefix = m[0].slice(0, m[0].lastIndexOf('<') + 1);
             const options = macros.map(name => ({
                 label: prefix + name,
@@ -6026,7 +6026,7 @@ function macroCompletion(getMacroNames) {
                 from: pos - filterVarMatch[0].length,
                 to: pos,
                 options,
-                validFor: /^\[[\w\-:!]*<[\w\-]*$/
+                validFor: /^[\[\]][\w\-:!]*<[\w\-]*$/
             };
         }
         // Regular macro call
@@ -6058,10 +6058,10 @@ function tiddlerCompletion(getTiddlerTitles) {
         const transcludeMatch = /\{\{[^{}|]*$/.exec(textBefore);
         // Match [img[ or [img ...attrs[ for images (source is inside the last [)
         const imageMatch = /\[img(?:\s+[^\[]*)?\[[^\]|]*$/.exec(textBefore);
-        // Match [operator[ for filter operand (tiddler title) - e.g., [tag[, [has[, [title[
-        const filterOperandMatch = /\[[\w\-:!]*\[[^\]]*$/.exec(textBefore);
-        // Match [{ or [operator{ for text references inside filters
-        const filterTextRefMatch = /\[[\w\-:!]*\{[^}]*$/.exec(textBefore);
+        // Match [operator[ or ]operator[ for filter operand (tiddler title) - e.g., [tag[, [has[, ]tag[
+        const filterOperandMatch = /[\[\]][\w\-:!]*\[[^\]]*$/.exec(textBefore);
+        // Match [{ or [operator{ or ]operator{ for text references inside filters
+        const filterTextRefMatch = /[\[\]][\w\-:!]*\{[^}]*$/.exec(textBefore);
         const match = linkMatch || transcludeMatch || imageMatch || filterOperandMatch || filterTextRefMatch;
         if (!match)
             return null;
@@ -6084,17 +6084,17 @@ function tiddlerCompletion(getTiddlerTitles) {
         let validFor;
         let detail;
         if (filterTextRefMatch) {
-            // Text reference inside filter: [operator{tiddler}] or [{tiddler}]
+            // Text reference inside filter: [operator{tiddler}] or [{tiddler}] or ]operator{tiddler}]
             prefix = match[0].slice(0, match[0].lastIndexOf('{') + 1);
             suffix = "}]";
-            validFor = /^\[[\w\-:!]*\{[^}]*$/;
+            validFor = /^[\[\]][\w\-:!]*\{[^}]*$/;
             detail = "text reference";
         }
         else if (filterOperandMatch) {
-            // Filter operand: [operator[value]] or [[value]]
+            // Filter operand: [operator[value]] or [[value]] or ]operator[value]]
             prefix = match[0].slice(0, match[0].lastIndexOf('[') + 1);
             suffix = "]]";
-            validFor = /^\[[\w\-:!]*\[[^\]]*$/;
+            validFor = /^[\[\]][\w\-:!]*\[[^\]]*$/;
             detail = "filter operand";
         }
         else if (linkMatch) {
@@ -6179,13 +6179,13 @@ function filterOperatorCompletion(getFilterOperators) {
         // Match patterns like: [tag, [!has, [tag[value]tag, etc.
         const textBefore = state.sliceDoc(Math.max(0, pos - 100), pos);
         // Don't complete operators inside filter operand contexts:
-        // - [[ or [operator[ for literal tiddler titles (complete tiddlers instead)
-        // - [{ or [operator{ for text references (complete tiddlers instead)
-        // - [< or [operator< for variable references (complete macros instead)
-        // These patterns match both at start of step and after an operator name
-        if (/\[[^\[\]{}<>]*\[[^\]]*$/.test(textBefore) ||
-            /\[[^\[\]{}<>]*\{[^}]*$/.test(textBefore) ||
-            /\[[^\[\]{}<>]*<[^>]*$/.test(textBefore)) {
+        // - [[ or [operator[ or ]operator[ for literal tiddler titles (complete tiddlers instead)
+        // - [{ or [operator{ or ]operator{ for text references (complete tiddlers instead)
+        // - [< or [operator< or ]operator< for variable references (complete macros instead)
+        // These patterns match at start of step, after operator name, or after previous step's ]
+        if (/[\[\]][\w\-:!]*\[[^\]]*$/.test(textBefore) ||
+            /[\[\]][\w\-:!]*\{[^}]*$/.test(textBefore) ||
+            /[\[\]][\w\-:!]*<[^>]*$/.test(textBefore)) {
             return null;
         }
         // Check if we're inside a filter expression (inside brackets [])
