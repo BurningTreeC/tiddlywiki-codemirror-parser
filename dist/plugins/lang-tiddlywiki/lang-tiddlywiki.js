@@ -2281,12 +2281,9 @@ function parseTableRow(text, offset, cx, marker) {
     return cells;
 }
 // ============================================================================
-// Comment Block (<!-- --> or /% %/)
+// Comment Block (<!-- -->)
 // ============================================================================
 const htmlCommentStartRe = /^<!--/;
-const htmlCommentEndRe = /-->$/;
-const twCommentStartRe = /^\/%/;
-const twCommentEndRe = /%\/$/;
 const CommentBlock = {
     name: "CommentBlock",
     parse(cx, line) {
@@ -2294,38 +2291,41 @@ const CommentBlock = {
         // HTML-style comment
         if (htmlCommentStartRe.test(text)) {
             const start = cx.lineStart;
-            // Single line comment?
-            if (htmlCommentEndRe.test(text)) {
-                cx.addElement(elt(Type.CommentBlock, start, start + line.text.length, [
+            // Check for --> on this line
+            const endMatch = text.match(/-->/);
+            if (endMatch) {
+                const commentEndPos = start + line.text.indexOf('-->') + 3;
+                cx.addElement(elt(Type.CommentBlock, start, commentEndPos, [
                     elt(Type.CommentMarker, start, start + 4),
-                    elt(Type.CommentMarker, start + line.text.length - 3, start + line.text.length),
+                    elt(Type.CommentMarker, commentEndPos - 3, commentEndPos),
                 ]));
+                // Parse any inline content after the comment on the same line
+                const afterComment = line.text.slice(line.text.indexOf('-->') + 3);
+                if (afterComment.trim()) {
+                    const inlineElements = cx.parser.parseInline(afterComment, commentEndPos);
+                    const paragraphElt = cx.elt(Type.Paragraph, commentEndPos, commentEndPos + afterComment.length, inlineElements);
+                    cx.addElement(paragraphElt);
+                }
                 return true;
             }
             // Multi-line comment
             while (cx.nextLine()) {
-                if (htmlCommentEndRe.test(cx.line.text)) {
-                    cx.addElement(elt(Type.CommentBlock, start, cx.lineStart + cx.line.text.length));
+                const lineText = cx.line.text;
+                const endIdx = lineText.indexOf('-->');
+                if (endIdx !== -1) {
+                    const commentEndPos = cx.lineStart + endIdx + 3;
+                    cx.addElement(elt(Type.CommentBlock, start, commentEndPos));
+                    // Parse any inline content after the comment
+                    const afterComment = lineText.slice(endIdx + 3);
+                    if (afterComment.trim()) {
+                        const inlineElements = cx.parser.parseInline(afterComment, commentEndPos);
+                        const paragraphElt = cx.elt(Type.Paragraph, commentEndPos, commentEndPos + afterComment.length, inlineElements);
+                        cx.addElement(paragraphElt);
+                    }
                     return true;
                 }
             }
             // Unclosed comment
-            cx.addElement(elt(Type.CommentBlock, start, cx.lineStart));
-            return true;
-        }
-        // TiddlyWiki-style comment
-        if (twCommentStartRe.test(text)) {
-            const start = cx.lineStart;
-            if (twCommentEndRe.test(text)) {
-                cx.addElement(elt(Type.CommentBlock, start, start + line.text.length));
-                return true;
-            }
-            while (cx.nextLine()) {
-                if (twCommentEndRe.test(cx.line.text)) {
-                    cx.addElement(elt(Type.CommentBlock, start, cx.lineStart + cx.line.text.length));
-                    return true;
-                }
-            }
             cx.addElement(elt(Type.CommentBlock, start, cx.lineStart));
             return true;
         }
@@ -5072,7 +5072,6 @@ const parser = new TiddlyWikiParser();
 const data = language.defineLanguageFacet({
     commentTokens: {
         block: { open: "<!--", close: "-->" },
-        // TiddlyWiki also supports /% %/ comments
     }
 });
 /**
@@ -5962,12 +5961,17 @@ const filterRunPrefixes = [
     { label: ":flat", detail: "flatten list output" },
 ];
 /**
- * Macro completion source (<<macro)
+ * Macro completion source (<<macro or [<variable> or [operator<variable> in filters)
  */
 function macroCompletion(getMacroNames) {
     return (context) => {
         const { state, pos } = context;
-        const m = /<<[\w\-]*$/.exec(state.sliceDoc(pos - 30, pos));
+        const textBefore = state.sliceDoc(pos - 50, pos);
+        // Match <<macro for regular macro calls
+        const macroMatch = /<<[\w\-]*$/.exec(textBefore);
+        // Match [<variable or [operator<variable for variable references in filters
+        const filterVarMatch = /\[[\w\-:!]*<[\w\-]*$/.exec(textBefore);
+        const m = macroMatch || filterVarMatch;
         if (!m)
             return null;
         // Don't complete inside code blocks or comments
@@ -5983,6 +5987,23 @@ function macroCompletion(getMacroNames) {
         // Use provided macro names, fall back to common macros if empty
         const customMacros = getMacroNames ? getMacroNames() : [];
         const macros = customMacros.length > 0 ? customMacros : commonMacros;
+        if (filterVarMatch) {
+            // Variable reference in filter: [<variable>] or [operator<variable>]
+            const prefix = m[0].slice(0, m[0].lastIndexOf('<') + 1);
+            const options = macros.map(name => ({
+                label: prefix + name,
+                type: "function",
+                detail: "variable",
+                apply: prefix + name + ">]"
+            }));
+            return {
+                from: pos - filterVarMatch[0].length,
+                to: pos,
+                options,
+                validFor: /^\[[\w\-:!]*<[\w\-]*$/
+            };
+        }
+        // Regular macro call
         const options = macros.map(m => ({
             label: "<<" + m,
             type: "function",
@@ -5998,19 +6019,24 @@ function macroCompletion(getMacroNames) {
     };
 }
 /**
- * Tiddler title completion source ([[link, {{transclusion, or [img[source)
+ * Tiddler title completion source ([[link, {{transclusion, [img[source, or filter operands)
+ * Also handles filter operand contexts like [tag[, [has[, [{, [operator{, etc.
  */
 function tiddlerCompletion(getTiddlerTitles) {
     return (context) => {
         const { state, pos } = context;
         const textBefore = state.sliceDoc(pos - 100, pos);
-        // Match [[ for links
+        // Match [[ for links (also works inside filters for literal titles)
         const linkMatch = /\[\[[^\]|]*$/.exec(textBefore);
         // Match {{ for transclusions
         const transcludeMatch = /\{\{[^{}|]*$/.exec(textBefore);
         // Match [img[ or [img ...attrs[ for images (source is inside the last [)
         const imageMatch = /\[img(?:\s+[^\[]*)?\[[^\]|]*$/.exec(textBefore);
-        const match = linkMatch || transcludeMatch || imageMatch;
+        // Match [operator[ for filter operand (tiddler title) - e.g., [tag[, [has[, [title[
+        const filterOperandMatch = /\[[\w\-:!]*\[[^\]]*$/.exec(textBefore);
+        // Match [{ or [operator{ for text references inside filters
+        const filterTextRefMatch = /\[[\w\-:!]*\{[^}]*$/.exec(textBefore);
+        const match = linkMatch || transcludeMatch || imageMatch || filterOperandMatch || filterTextRefMatch;
         if (!match)
             return null;
         // Don't complete inside code blocks or comments
@@ -6030,15 +6056,32 @@ function tiddlerCompletion(getTiddlerTitles) {
         let prefix;
         let suffix;
         let validFor;
-        if (linkMatch) {
+        let detail;
+        if (filterTextRefMatch) {
+            // Text reference inside filter: [operator{tiddler}] or [{tiddler}]
+            prefix = match[0].slice(0, match[0].lastIndexOf('{') + 1);
+            suffix = "}]";
+            validFor = /^\[[\w\-:!]*\{[^}]*$/;
+            detail = "text reference";
+        }
+        else if (filterOperandMatch) {
+            // Filter operand: [operator[value]] or [[value]]
+            prefix = match[0].slice(0, match[0].lastIndexOf('[') + 1);
+            suffix = "]]";
+            validFor = /^\[[\w\-:!]*\[[^\]]*$/;
+            detail = "filter operand";
+        }
+        else if (linkMatch) {
             prefix = "[[";
             suffix = "]]";
             validFor = /^\[\[[^\]|]*$/;
+            detail = "tiddler";
         }
         else if (transcludeMatch) {
             prefix = "{{";
             suffix = "}}";
             validFor = /^\{\{[^{}|]*$/;
+            detail = "tiddler";
         }
         else {
             // Image match - we need to find where the [ starts for the source
@@ -6046,11 +6089,12 @@ function tiddlerCompletion(getTiddlerTitles) {
             prefix = match[0].slice(0, bracketPos + 1);
             suffix = "]]";
             validFor = /^\[img(?:\s+[^\[]*)?\[[^\]|]*$/;
+            detail = "image";
         }
         const options = titles.map(title => ({
             label: prefix + title,
             type: "variable",
-            detail: imageMatch ? "image" : "tiddler",
+            detail,
             apply: prefix + title + suffix
         }));
         return {
@@ -6108,6 +6152,16 @@ function filterOperatorCompletion(getFilterOperators) {
         // Look for filter operator context: after [ and optional ! or other prefix
         // Match patterns like: [tag, [!has, [tag[value]tag, etc.
         const textBefore = state.sliceDoc(Math.max(0, pos - 100), pos);
+        // Don't complete operators inside filter operand contexts:
+        // - [[ or [operator[ for literal tiddler titles (complete tiddlers instead)
+        // - [{ or [operator{ for text references (complete tiddlers instead)
+        // - [< or [operator< for variable references (complete macros instead)
+        // These patterns match both at start of step and after an operator name
+        if (/\[[^\[\]{}<>]*\[[^\]]*$/.test(textBefore) ||
+            /\[[^\[\]{}<>]*\{[^}]*$/.test(textBefore) ||
+            /\[[^\[\]{}<>]*<[^>]*$/.test(textBefore)) {
+            return null;
+        }
         // Check if we're inside a filter expression (inside brackets [])
         // and after a position where an operator would go
         const filterOperatorMatch = /\[(!?)(\w*)$/.exec(textBefore);

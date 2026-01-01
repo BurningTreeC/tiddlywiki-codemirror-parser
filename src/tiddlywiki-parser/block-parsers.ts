@@ -395,7 +395,7 @@ function parseTableRow(text: string, offset: number, cx: BlockContext, marker?: 
 // ============================================================================
 
 const htmlCommentStartRe = /^<!--/
-const htmlCommentEndRe = /-->$/
+const htmlCommentEndRe = /-->/
 
 export const CommentBlock: BlockParser = {
   name: "CommentBlock",
@@ -406,19 +406,40 @@ export const CommentBlock: BlockParser = {
     if (htmlCommentStartRe.test(text)) {
       const start = cx.lineStart
 
-      // Single line comment?
-      if (htmlCommentEndRe.test(text)) {
-        cx.addElement(elt(Type.CommentBlock, start, start + line.text.length, [
+      // Check for --> on this line
+      const endMatch = text.match(/-->/)
+      if (endMatch) {
+        const commentEndPos = start + line.text.indexOf('-->') + 3
+        cx.addElement(elt(Type.CommentBlock, start, commentEndPos, [
           elt(Type.CommentMarker, start, start + 4),
-          elt(Type.CommentMarker, start + line.text.length - 3, start + line.text.length),
+          elt(Type.CommentMarker, commentEndPos - 3, commentEndPos),
         ]))
+
+        // Parse any inline content after the comment on the same line
+        const afterComment = line.text.slice(line.text.indexOf('-->') + 3)
+        if (afterComment.trim()) {
+          const inlineElements = cx.parser.parseInline(afterComment, commentEndPos)
+          const paragraphElt = cx.elt(Type.Paragraph, commentEndPos, commentEndPos + afterComment.length, inlineElements as Element[])
+          cx.addElement(paragraphElt)
+        }
         return true
       }
 
       // Multi-line comment
       while (cx.nextLine()) {
-        if (htmlCommentEndRe.test(cx.line.text)) {
-          cx.addElement(elt(Type.CommentBlock, start, cx.lineStart + cx.line.text.length))
+        const lineText = cx.line.text
+        const endIdx = lineText.indexOf('-->')
+        if (endIdx !== -1) {
+          const commentEndPos = cx.lineStart + endIdx + 3
+          cx.addElement(elt(Type.CommentBlock, start, commentEndPos))
+
+          // Parse any inline content after the comment
+          const afterComment = lineText.slice(endIdx + 3)
+          if (afterComment.trim()) {
+            const inlineElements = cx.parser.parseInline(afterComment, commentEndPos)
+            const paragraphElt = cx.elt(Type.Paragraph, commentEndPos, commentEndPos + afterComment.length, inlineElements as Element[])
+            cx.addElement(paragraphElt)
+          }
           return true
         }
       }
