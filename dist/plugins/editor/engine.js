@@ -309,6 +309,7 @@ function CodeMirrorEngine(options) {
 	var EditorState = core.state.EditorState;
 	var EditorView = core.view.EditorView;
 	var Compartment = core.state.Compartment;
+	var Prec = core.state.Prec;
 	var cmKeymap = core.view.keymap;
 
 	this._EditorState = EditorState;
@@ -508,10 +509,42 @@ function CodeMirrorEngine(options) {
 	// TiddlyWiki Event Integration
 	// ========================================================================
 	
+	// Store reference to completionStatus for keyboard handling
+	var completionStatus = core.autocomplete && core.autocomplete.completionStatus;
+
 	extensions.push(
-		EditorView.domEventHandlers({
+		Prec.high(EditorView.domEventHandlers({
 			keydown: function(event, view) {
 				if (self._destroyed) return false;
+
+				// Priority TiddlyWiki shortcuts first
+				if ($tw.keyboardManager.handleKeydownEvent(event, { onlyPriority: true })) {
+					return true;
+				}
+
+				// Handle Escape key specially
+				var isEscape = (event.keyCode === 27) && !event.ctrlKey && !event.shiftKey && !event.altKey && !event.metaKey;
+				if (isEscape) {
+					// If completion popup is active, let CM close it
+					if (completionStatus && completionStatus(view.state) === "active") {
+						event.stopPropagation();
+						return false;
+					}
+				}
+
+				// Check parent keyboard widgets (they have priority over CM keymaps)
+				var widget = self.widget;
+				while (widget) {
+					if (widget.parseTreeNode && widget.parseTreeNode.type === "keyboard") {
+						var keyInfoArray = widget.keyInfoArray;
+						if ($tw.keyboardManager.checkKeyDescriptors(event, keyInfoArray)) {
+							return true; // Let keyboard widget handle it
+						}
+					}
+					widget = widget.parentWidget;
+				}
+
+				// Fall back to widget's handler
 				if (self.widget && typeof self.widget.handleKeydownEvent === "function") {
 					return self.widget.handleKeydownEvent(event);
 				}
@@ -538,7 +571,7 @@ function CodeMirrorEngine(options) {
 				}
 				return false;
 			}
-		})
+		}))
 	);
 
 	// ========================================================================
