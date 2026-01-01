@@ -321,10 +321,6 @@ function space(ch) {
     return ch === Ch.Space || ch === Ch.Tab;
 }
 /**
- * Punctuation characters for flanking rules
- */
-const Punctuation = /[!"#$%&'()*+,\-./:;<=>?@\[\]\\^_`{|}~\xA1\u2010-\u2027]/;
-/**
  * Element represents a node in the parse tree
  */
 class Element {
@@ -529,6 +525,26 @@ class Buffer {
  * BlockContext manages block-level parsing state
  */
 class BlockContext {
+    /**
+     * Save the current parsing position for potential restore
+     */
+    savePosition() {
+        return {
+            lineStart: this.lineStart,
+            lineEnd: this.lineEnd,
+            lineText: this._line.text,
+            atEnd: this.atEnd
+        };
+    }
+    /**
+     * Restore a previously saved parsing position
+     */
+    restorePosition(saved) {
+        this.lineStart = saved.lineStart;
+        this.lineEnd = saved.lineEnd;
+        this._line.reset(saved.lineText);
+        this.atEnd = saved.atEnd;
+    }
     constructor(parser, input, fragments, ranges) {
         this.parser = parser;
         this.input = input;
@@ -1296,6 +1312,117 @@ function findEnd(cx, name) {
     return null;
 }
 /**
+ * Parse a filter expression into elements
+ * Used for \function body parsing
+ */
+function parseFilterBody(filterContent, offset) {
+    const elements = [];
+    let pos = 0;
+    const len = filterContent.length;
+    while (pos < len) {
+        const ch = filterContent[pos];
+        // Skip whitespace
+        if (/\s/.test(ch)) {
+            pos++;
+            continue;
+        }
+        // Filter step: [operators...]
+        if (ch === '[') {
+            const stepStart = pos;
+            pos++; // skip [
+            // Parse operators within this step
+            const stepChildren = [];
+            while (pos < len && filterContent[pos] !== ']') {
+                // Check for negation
+                if (filterContent[pos] === '!') {
+                    pos++;
+                }
+                const operandCh = filterContent[pos];
+                if (operandCh === '[') {
+                    // Literal operand: [value]
+                    pos++;
+                    const operandStart = pos;
+                    let depth = 1;
+                    while (pos < len && depth > 0) {
+                        if (filterContent[pos] === '[')
+                            depth++;
+                        else if (filterContent[pos] === ']')
+                            depth--;
+                        if (depth > 0)
+                            pos++;
+                    }
+                    stepChildren.push(elt(Type.FilterOperand, offset + operandStart, offset + pos));
+                    if (pos < len && filterContent[pos] === ']')
+                        pos++;
+                }
+                else if (operandCh === '<') {
+                    // Variable: <varname>
+                    pos++;
+                    const operandStart = pos;
+                    while (pos < len && filterContent[pos] !== '>')
+                        pos++;
+                    stepChildren.push(elt(Type.FilterVariable, offset + operandStart, offset + pos));
+                    if (pos < len)
+                        pos++;
+                }
+                else if (operandCh === '{') {
+                    // Text reference: {textref}
+                    pos++;
+                    const operandStart = pos;
+                    while (pos < len && filterContent[pos] !== '}')
+                        pos++;
+                    stepChildren.push(elt(Type.FilterTextRef, offset + operandStart, offset + pos));
+                    if (pos < len)
+                        pos++;
+                }
+                else if (operandCh === '/') {
+                    // Regexp: /regexp/flags
+                    pos++;
+                    const operandStart = pos;
+                    while (pos < len && filterContent[pos] !== '/') {
+                        if (filterContent[pos] === '\\')
+                            pos++;
+                        pos++;
+                    }
+                    stepChildren.push(elt(Type.FilterRegexp, offset + operandStart, offset + pos));
+                    if (pos < len)
+                        pos++;
+                    while (pos < len && /[gimsuy]/.test(filterContent[pos]))
+                        pos++;
+                }
+                else if (/[a-zA-Z]/.test(operandCh)) {
+                    // Operator name
+                    const opStart = pos;
+                    while (pos < len && /[a-zA-Z0-9\-_:!]/.test(filterContent[pos]))
+                        pos++;
+                    stepChildren.push(elt(Type.FilterOperatorName, offset + opStart, offset + pos));
+                }
+                else {
+                    pos++;
+                }
+            }
+            // Skip closing ]
+            if (pos < len && filterContent[pos] === ']')
+                pos++;
+            elements.push(elt(Type.FilterOperator, offset + stepStart, offset + pos, stepChildren));
+        }
+        else if (ch === '+' || ch === '-' || ch === '~' || ch === '=') {
+            // Run prefix
+            pos++;
+        }
+        else if (ch === ':') {
+            // Named run prefix
+            pos++;
+            while (pos < len && /[a-zA-Z0-9\-_]/.test(filterContent[pos]))
+                pos++;
+        }
+        else {
+            pos++;
+        }
+    }
+    return elements;
+}
+/**
  * Parse parameter definitions: name:default, name2:"default2"
  */
 function parseParams(paramStr, basePos) {
@@ -1324,20 +1451,22 @@ const MacroDefPragma = {
             const pragmaStart = cx.lineStart;
             const name = multiMatch[1];
             const paramStr = multiMatch[2];
-            // Create elements for pragma mark, keyword, name, params
-            const children = [
-                elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
-                elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 7), // "define"
-                elt(Type.PragmaName, pragmaStart + text.indexOf(name), pragmaStart + text.indexOf(name) + name.length),
-            ];
-            // Parse parameters
-            if (paramStr) {
-                const paramStart = pragmaStart + text.indexOf("(") + 1;
-                children.push(...parseParams(paramStr, paramStart));
-            }
+            // Save position in case we need to fall back to single-line
+            const savedPos = cx.savePosition();
             // Find body and \end
             const endInfo = findEnd(cx, name);
             if (endInfo) {
+                // Create elements for pragma mark, keyword, name, params
+                const children = [
+                    elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
+                    elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 7), // "define"
+                    elt(Type.PragmaName, pragmaStart + text.indexOf(name), pragmaStart + text.indexOf(name) + name.length),
+                ];
+                // Parse parameters
+                if (paramStr) {
+                    const paramStart = pragmaStart + text.indexOf("(") + 1;
+                    children.push(...parseParams(paramStr, paramStart));
+                }
                 // Parse body content recursively
                 if (endInfo.bodyEnd > endInfo.bodyStart) {
                     const bodyElements = cx.parseContentRange(endInfo.bodyStart, endInfo.bodyEnd, true);
@@ -1347,9 +1476,8 @@ const MacroDefPragma = {
                 cx.nextLine();
                 return [elt(Type.MacroDefinition, pragmaStart, cx.prevLineEnd(), children)];
             }
-            // No \end, single line after all
-            cx.nextLine();
-            return [elt(Type.MacroDefinition, pragmaStart, cx.prevLineEnd(), children)];
+            // No \end found - restore position and treat as single-line (no body)
+            cx.restorePosition(savedPos);
         }
         // Single line define
         const singleMatch = defineRe.exec(text);
@@ -1367,12 +1495,12 @@ const MacroDefPragma = {
                 const paramStart = pragmaStart + text.indexOf("(") + 1;
                 children.push(...parseParams(paramStr, paramStart));
             }
-            // Single-line body is typically just text/macro content, parse inline
-            if (body.trim()) {
-                const bodyStart = pragmaStart + text.lastIndexOf(")") + 1;
-                const bodyEnd = pragmaStart + text.length;
-                // For single-line defines, body is usually simple text, keep as PragmaBody
-                children.push(elt(Type.PragmaBody, bodyStart, bodyEnd));
+            // Single-line body - parse as inline wikitext
+            if (body) {
+                // Find where body actually starts in text (after the regex matched \s*)
+                const bodyStart = pragmaStart + text.length - body.length;
+                const inlineElements = cx.parser.parseInline(body, bodyStart);
+                children.push(...inlineElements);
             }
             cx.nextLine();
             return [elt(Type.MacroDefinition, pragmaStart, cx.prevLineEnd(), children)];
@@ -1407,17 +1535,19 @@ const FnProcDefPragma = {
                     break;
                 default: return null;
             }
-            const children = [
-                elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
-                elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 1 + keyword.length),
-                elt(Type.PragmaName, pragmaStart + text.indexOf(name), pragmaStart + text.indexOf(name) + name.length),
-            ];
-            if (paramStr) {
-                const paramStart = pragmaStart + text.indexOf("(") + 1;
-                children.push(...parseParams(paramStr, paramStart));
-            }
+            // Save position in case we need to fall back to single-line
+            const savedPos = cx.savePosition();
             const endInfo = findEnd(cx, name);
             if (endInfo) {
+                const children = [
+                    elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
+                    elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 1 + keyword.length),
+                    elt(Type.PragmaName, pragmaStart + text.indexOf(name), pragmaStart + text.indexOf(name) + name.length),
+                ];
+                if (paramStr) {
+                    const paramStart = pragmaStart + text.indexOf("(") + 1;
+                    children.push(...parseParams(paramStr, paramStart));
+                }
                 // Parse body content recursively
                 if (endInfo.bodyEnd > endInfo.bodyStart) {
                     const bodyElements = cx.parseContentRange(endInfo.bodyStart, endInfo.bodyEnd, true);
@@ -1427,8 +1557,8 @@ const FnProcDefPragma = {
                 cx.nextLine();
                 return [elt(nodeType, pragmaStart, cx.prevLineEnd(), children)];
             }
-            cx.nextLine();
-            return [elt(nodeType, pragmaStart, cx.prevLineEnd(), children)];
+            // No \end found - restore position and treat as single-line (no body)
+            cx.restorePosition(savedPos);
         }
         // Single line function/procedure/widget
         const singleMatch = fnprocRe.exec(text);
@@ -1460,11 +1590,20 @@ const FnProcDefPragma = {
                 const paramStart = pragmaStart + text.indexOf("(") + 1;
                 children.push(...parseParams(paramStr, paramStart));
             }
-            // Single-line body - keep as PragmaBody for simple content
-            if (body.trim()) {
-                const bodyStart = pragmaStart + text.lastIndexOf(")") + 1;
-                const bodyEnd = pragmaStart + text.length;
-                children.push(elt(Type.PragmaBody, bodyStart, bodyEnd));
+            // Single-line body parsing
+            if (body) {
+                // Find where body actually starts in text (after the regex matched \s*)
+                const bodyStart = pragmaStart + text.length - body.length;
+                if (keyword === "function") {
+                    // Function body is a filter expression
+                    const filterElements = parseFilterBody(body, bodyStart);
+                    children.push(elt(Type.FilterExpression, bodyStart, pragmaStart + text.length, filterElements));
+                }
+                else {
+                    // Procedure/widget body is inline wikitext
+                    const inlineElements = cx.parser.parseInline(body, bodyStart);
+                    children.push(...inlineElements);
+                }
             }
             cx.nextLine();
             return [elt(nodeType, pragmaStart, cx.prevLineEnd(), children)];
@@ -1554,6 +1693,253 @@ const WhitespacePragma = {
     }
 };
 /**
+ * Partial/incomplete pragma patterns for highlighting while typing
+ * These match pragmas that are being typed but aren't complete yet
+ */
+// Partial \define - matches incomplete define statements (including partial keyword)
+const definePartialRe = /^\\define(?:\s+([^(\s]+))?(?:\s*\(([^)]*)?)?$/;
+const defineKeywordPartialRe = /^\\(d|de|def|defi|defin)$/;
+// Partial \function/\procedure/\widget (including partial keywords)
+const fnprocPartialRe = /^\\(function|procedure|widget)(?:\s+([^(\s]+))?(?:\s*\(([^)]*)?)?$/;
+const functionKeywordPartialRe = /^\\(f|fu|fun|func|funct|functi|functio)$/;
+const procedureKeywordPartialRe = /^\\(p|pr|pro|proc|proce|proced|procedu|procedur)$/;
+const widgetKeywordPartialRe = /^\\(wi|wid|widg|widge)$/;
+// Partial \rules - just the keyword or with only/except (including partial keyword)
+const rulesPartialRe = /^\\rules(?:\s+(only|except)?)?(?:\s+(.*))?$/;
+const rulesKeywordPartialRe = /^\\(r|ru|rul|rule)$/;
+// Partial \import - just the keyword (including partial keyword)
+const importPartialRe = /^\\import(?:\s*(.*))?$/;
+const importKeywordPartialRe = /^\\(i|im|imp|impo|impor)$/;
+// Partial \parameters - incomplete (including partial keyword)
+const parametersPartialRe = /^\\parameters(?:\s*\(([^)]*)?)?$/;
+const parametersKeywordPartialRe = /^\\(pa|par|para|param|parame|paramet|paramete|parameter)$/;
+// Partial \whitespace - just the keyword (including partial keyword)
+const whitespacePartialRe = /^\\whitespace(?:\s+(.*))?$/;
+const whitespaceKeywordPartialRe = /^\\(wh|whi|whit|white|whites|whitesp|whitespa|whitespac)$/;
+// Partial \end
+const endKeywordPartialRe = /^\\(e|en|end)(?:\s+.*)?$/;
+/**
+ * Partial pragma parser - catches incomplete pragmas while typing
+ * This must be LAST in the parser list
+ */
+const PartialPragma = {
+    name: "partial",
+    parse(cx, line) {
+        const text = line.text;
+        const pragmaStart = cx.lineStart;
+        // Try partial \define
+        let match = definePartialRe.exec(text);
+        if (match) {
+            const children = [
+                elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
+                elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 7), // "define"
+            ];
+            const name = match[1];
+            if (name) {
+                const nameStart = pragmaStart + text.indexOf(name);
+                children.push(elt(Type.PragmaName, nameStart, nameStart + name.length));
+            }
+            const paramStr = match[2];
+            if (paramStr !== undefined) {
+                const paramStart = pragmaStart + text.indexOf("(") + 1;
+                if (paramStr) {
+                    children.push(...parseParams(paramStr, paramStart));
+                }
+            }
+            cx.nextLine();
+            return [elt(Type.MacroDefinition, pragmaStart, cx.prevLineEnd(), children)];
+        }
+        // Try partial \function/\procedure/\widget
+        match = fnprocPartialRe.exec(text);
+        if (match) {
+            const keyword = match[1];
+            let nodeType;
+            switch (keyword) {
+                case "function":
+                    nodeType = Type.FunctionDefinition;
+                    break;
+                case "procedure":
+                    nodeType = Type.ProcedureDefinition;
+                    break;
+                case "widget":
+                    nodeType = Type.WidgetDefinition;
+                    break;
+                default: return null;
+            }
+            const children = [
+                elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
+                elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 1 + keyword.length),
+            ];
+            const name = match[2];
+            if (name) {
+                const nameStart = pragmaStart + text.indexOf(name);
+                children.push(elt(Type.PragmaName, nameStart, nameStart + name.length));
+            }
+            const paramStr = match[3];
+            if (paramStr !== undefined) {
+                const paramStart = pragmaStart + text.indexOf("(") + 1;
+                if (paramStr) {
+                    children.push(...parseParams(paramStr, paramStart));
+                }
+            }
+            cx.nextLine();
+            return [elt(nodeType, pragmaStart, cx.prevLineEnd(), children)];
+        }
+        // Try partial \rules
+        match = rulesPartialRe.exec(text);
+        if (match) {
+            const children = [
+                elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
+                elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 6), // "rules"
+            ];
+            cx.nextLine();
+            return [elt(Type.RulesPragma, pragmaStart, cx.prevLineEnd(), children)];
+        }
+        // Try partial \import
+        match = importPartialRe.exec(text);
+        if (match) {
+            const children = [
+                elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
+                elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 7), // "import"
+            ];
+            const filter = match[1];
+            if (filter && filter.trim()) {
+                children.push(elt(Type.FilterExpression, pragmaStart + 8, pragmaStart + 8 + filter.length));
+            }
+            cx.nextLine();
+            return [elt(Type.ImportPragma, pragmaStart, cx.prevLineEnd(), children)];
+        }
+        // Try partial \parameters
+        match = parametersPartialRe.exec(text);
+        if (match) {
+            const children = [
+                elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
+                elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 11), // "parameters"
+            ];
+            const paramStr = match[1];
+            if (paramStr !== undefined) {
+                const paramStart = pragmaStart + text.indexOf("(") + 1;
+                if (paramStr) {
+                    children.push(...parseParams(paramStr, paramStart));
+                }
+            }
+            cx.nextLine();
+            return [elt(Type.ParametersPragma, pragmaStart, cx.prevLineEnd(), children)];
+        }
+        // Try partial \whitespace
+        match = whitespacePartialRe.exec(text);
+        if (match) {
+            const children = [
+                elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
+                elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 11), // "whitespace"
+            ];
+            cx.nextLine();
+            return [elt(Type.WhitespacePragma, pragmaStart, cx.prevLineEnd(), children)];
+        }
+        // Try partial keywords (typing in progress)
+        // \d, \de, \def, \defi, \defin -> partial define
+        match = defineKeywordPartialRe.exec(text);
+        if (match) {
+            const keyword = match[1];
+            const children = [
+                elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
+                elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 1 + keyword.length),
+            ];
+            cx.nextLine();
+            return [elt(Type.MacroDefinition, pragmaStart, cx.prevLineEnd(), children)];
+        }
+        // \f, \fu, \fun, etc. -> partial function
+        match = functionKeywordPartialRe.exec(text);
+        if (match) {
+            const keyword = match[1];
+            const children = [
+                elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
+                elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 1 + keyword.length),
+            ];
+            cx.nextLine();
+            return [elt(Type.FunctionDefinition, pragmaStart, cx.prevLineEnd(), children)];
+        }
+        // \p, \pr, \pro, etc. -> partial procedure
+        match = procedureKeywordPartialRe.exec(text);
+        if (match) {
+            const keyword = match[1];
+            const children = [
+                elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
+                elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 1 + keyword.length),
+            ];
+            cx.nextLine();
+            return [elt(Type.ProcedureDefinition, pragmaStart, cx.prevLineEnd(), children)];
+        }
+        // \wi, \wid, etc. -> partial widget
+        match = widgetKeywordPartialRe.exec(text);
+        if (match) {
+            const keyword = match[1];
+            const children = [
+                elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
+                elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 1 + keyword.length),
+            ];
+            cx.nextLine();
+            return [elt(Type.WidgetDefinition, pragmaStart, cx.prevLineEnd(), children)];
+        }
+        // \r, \ru, \rul, \rule -> partial rules
+        match = rulesKeywordPartialRe.exec(text);
+        if (match) {
+            const keyword = match[1];
+            const children = [
+                elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
+                elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 1 + keyword.length),
+            ];
+            cx.nextLine();
+            return [elt(Type.RulesPragma, pragmaStart, cx.prevLineEnd(), children)];
+        }
+        // \i, \im, \imp, etc. -> partial import
+        match = importKeywordPartialRe.exec(text);
+        if (match) {
+            const keyword = match[1];
+            const children = [
+                elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
+                elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 1 + keyword.length),
+            ];
+            cx.nextLine();
+            return [elt(Type.ImportPragma, pragmaStart, cx.prevLineEnd(), children)];
+        }
+        // \pa, \par, etc. -> partial parameters
+        match = parametersKeywordPartialRe.exec(text);
+        if (match) {
+            const keyword = match[1];
+            const children = [
+                elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
+                elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 1 + keyword.length),
+            ];
+            cx.nextLine();
+            return [elt(Type.ParametersPragma, pragmaStart, cx.prevLineEnd(), children)];
+        }
+        // \wh, \whi, etc. -> partial whitespace
+        match = whitespaceKeywordPartialRe.exec(text);
+        if (match) {
+            const keyword = match[1];
+            const children = [
+                elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
+                elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 1 + keyword.length),
+            ];
+            cx.nextLine();
+            return [elt(Type.WhitespacePragma, pragmaStart, cx.prevLineEnd(), children)];
+        }
+        // \e, \en, \end -> partial end marker
+        match = endKeywordPartialRe.exec(text);
+        if (match) {
+            const keyword = match[1];
+            const children = [
+                elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
+                elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 1 + keyword.length),
+            ];
+            cx.nextLine();
+            return [elt(Type.PragmaEnd, pragmaStart, cx.prevLineEnd(), children)];
+        }
+        return null;
+    }
+};
+/**
  * All pragma parsers
  */
 const DefaultPragmaParsers = [
@@ -1563,6 +1949,7 @@ const DefaultPragmaParsers = [
     ImportPragma,
     ParametersPragma,
     WhitespacePragma,
+    PartialPragma, // Must be last - catches incomplete pragmas
 ];
 
 /**
@@ -2612,7 +2999,16 @@ const HTMLBlock = {
             const children = [];
             const tagStart = start + indent + 2; // After "</"
             children.push(elt(isWidget ? Type.WidgetName : Type.TagName, tagStart, tagStart + tagName.length));
-            cx.addElement(elt(isWidget ? Type.WidgetEnd : Type.HTMLEndTag, start, start + text.length, children));
+            // End the closing tag element at the actual tag end, not end of line
+            const closeTagEnd = start + closeMatch[0].length;
+            cx.addElement(elt(isWidget ? Type.WidgetEnd : Type.HTMLEndTag, start, closeTagEnd, children));
+            // Parse any inline content after the closing tag on the same line
+            const afterTag = text.slice(closeMatch[0].length);
+            if (afterTag.trim()) {
+                const inlineElements = cx.parser.parseInline(afterTag, closeTagEnd);
+                const paragraphElt = cx.elt(Type.Paragraph, closeTagEnd, closeTagEnd + afterTag.length, inlineElements);
+                cx.addElement(paragraphElt);
+            }
             return true;
         }
         // Check for opening tag start
@@ -2767,7 +3163,15 @@ const HTMLBlock = {
                     // Add closing tag element
                     const closeTagStart = openingTagEnd + sameLineClose.index + 2; // After </
                     children.push(elt(isWidget ? Type.WidgetName : Type.TagName, closeTagStart, closeTagStart + tagName.length));
-                    blockEnd = openingTagEnd + sameLineClose.index + sameLineClose[0].length;
+                    const closeTagEnd = openingTagEnd + sameLineClose.index + sameLineClose[0].length;
+                    // Parse any inline content AFTER the closing tag on the same line
+                    const afterCloseTag = restOfLine.slice(sameLineClose.index + sameLineClose[0].length);
+                    if (afterCloseTag.trim()) {
+                        const afterCloseStart = closeTagEnd;
+                        const inlineElements = cx.parser.parseInline(afterCloseTag, afterCloseStart);
+                        children.push(...inlineElements);
+                    }
+                    blockEnd = openingTagLineEnd;
                     foundClose = true;
                 }
             }
@@ -2786,7 +3190,8 @@ const HTMLBlock = {
                         nestLevel++;
                     }
                     // Check for closing tag
-                    if (closeRe.test(lineText)) {
+                    const closeMatch = closeRe.exec(lineText);
+                    if (closeMatch) {
                         nestLevel--;
                         if (nestLevel === 0) {
                             // Found our closing tag
@@ -2802,9 +3207,17 @@ const HTMLBlock = {
                                 children.push(...contentElements);
                             }
                             // Add closing tag element
-                            const closeIndent = lineText.match(/^\s*/)?.[0].length || 0;
+                            const closeIndent = (closeMatch[1] || '').length;
                             const closeTagStart = cx.lineStart + closeIndent + 2;
                             children.push(elt(isWidget ? Type.WidgetName : Type.TagName, closeTagStart, closeTagStart + tagName.length));
+                            // Parse any inline content AFTER the closing tag on the same line
+                            const closeTagFullEnd = closeIndent + closeMatch[0].length;
+                            const afterCloseTag = lineText.slice(closeTagFullEnd);
+                            if (afterCloseTag.trim()) {
+                                const afterCloseStart = cx.lineStart + closeTagFullEnd;
+                                const inlineElements = cx.parser.parseInline(afterCloseTag, afterCloseStart);
+                                children.push(...inlineElements);
+                            }
                             blockEnd = cx.lineStart + lineText.length;
                             foundClose = true;
                             break;
@@ -3097,16 +3510,12 @@ const Bold = {
     parse(cx, next, pos) {
         if (next !== Ch.Apostrophe || cx.char(pos + 1) !== Ch.Apostrophe)
             return -1;
-        // Check flanking
+        // Use simple flanking rules like TiddlyWiki (not Markdown's complex rules)
         const before = cx.slice(pos - 1, pos);
         const after = cx.slice(pos + 2, pos + 3);
         const sBefore = /\s|^$/.test(before);
         const sAfter = /\s|^$/.test(after);
-        const pBefore = Punctuation.test(before);
-        const pAfter = Punctuation.test(after);
-        const canOpen = !sAfter && (!pAfter || sBefore || pBefore);
-        const canClose = !sBefore && (!pBefore || sAfter || pAfter);
-        return cx.addDelimiter(BoldDelim, pos, pos + 2, canOpen, canClose);
+        return cx.addDelimiter(BoldDelim, pos, pos + 2, !sAfter, !sBefore);
     }
 };
 // ============================================================================
@@ -3150,8 +3559,9 @@ const Strikethrough = {
     parse(cx, next, pos) {
         if (next !== Ch.Tilde || cx.char(pos + 1) !== Ch.Tilde)
             return -1;
-        // Make sure it's not ~~~
-        if (cx.char(pos + 2) === Ch.Tilde)
+        // Make sure it's not ~~~ (odd number of tildes, which is a code fence marker)
+        // But allow ~~~~ (even number, which is empty strikethrough)
+        if (cx.char(pos + 2) === Ch.Tilde && cx.char(pos + 3) !== Ch.Tilde)
             return -1;
         const before = cx.slice(pos - 1, pos);
         const after = cx.slice(pos + 2, pos + 3);

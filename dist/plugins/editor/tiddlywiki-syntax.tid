@@ -1,7 +1,57 @@
 title: $:/plugins/BurningTreeC/tiddlywiki-codemirror/tiddlywiki-syntax
 tags: $:/tags/Stylesheet
 
+\procedure dark-codemirror-syntax-highlighting()
+
 \rules only
+
+  :root {
+    --cm-tw-background: #0d1117;
+    --cm-tw-foreground: #e6edf3;
+    --cm-tw-selection: #388bfd66;
+    --cm-tw-cursor: #e6edf3;
+    --cm-tw-line-highlight: rgba(56, 139, 253, 0.1);
+
+    --cm-tw-heading-color: #79c0ff;
+    --cm-tw-bold-color: #ff7b72;
+    --cm-tw-italic-color: #7ee787;
+    --cm-tw-underline-color: #ffa657;
+    --cm-tw-strikethrough-color: #8b949e;
+    --cm-tw-highlight-color: #e3b341;
+    --cm-tw-highlight-bg: rgba(187, 128, 9, 0.15);
+
+    --cm-tw-link-color: #79c0ff;
+    --cm-tw-url-color: #58a6ff;
+
+    --cm-tw-transclusion-color: #d2a8ff;
+    --cm-tw-filter-color: #d2a8ff;
+    --cm-tw-variable-color: #ffa657;
+
+    --cm-tw-macro-color: #ffa657;
+    --cm-tw-widget-color: #7ee787;
+    --cm-tw-attribute-color: #79c0ff;
+    --cm-tw-attribute-value-color: #a5d6ff;
+
+    --cm-tw-code-color: #ff7b72;
+    --cm-tw-code-bg: rgba(110, 118, 129, 0.4);
+    --cm-tw-codeinfo-color: #d2a8ff;
+
+    --cm-tw-list-color: #e6edf3;
+    --cm-tw-blockquote-color: #8b949e;
+    --cm-tw-hr-color: #30363d;
+
+    --cm-tw-comment-color: #8b949e;
+    --cm-tw-pragma-color: #d2a8ff;
+    --cm-tw-pragma-keyword-color: #ff7b72;
+
+    --cm-tw-escape-color: #79c0ff;
+    --cm-tw-entity-color: #79c0ff;
+    --cm-tw-mark-color: #6e7681;
+  }
+
+\end
+
+\rules only macrocallinline macrocallblock conditional
 
 :root {
   /* Base colors */
@@ -60,51 +110,11 @@ tags: $:/tags/Stylesheet
    Dark Theme
    ============================================================================ */
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --cm-tw-background: #0d1117;
-    --cm-tw-foreground: #e6edf3;
-    --cm-tw-selection: #388bfd66;
-    --cm-tw-cursor: #e6edf3;
-    --cm-tw-line-highlight: rgba(56, 139, 253, 0.1);
+<%if [[$:/palette]get[text]get[color-scheme]match[dark]] %>
 
-    --cm-tw-heading-color: #79c0ff;
-    --cm-tw-bold-color: #ff7b72;
-    --cm-tw-italic-color: #7ee787;
-    --cm-tw-underline-color: #ffa657;
-    --cm-tw-strikethrough-color: #8b949e;
-    --cm-tw-highlight-color: #e3b341;
-    --cm-tw-highlight-bg: rgba(187, 128, 9, 0.15);
+	<<dark-codemirror-syntax-highlighting>>
 
-    --cm-tw-link-color: #79c0ff;
-    --cm-tw-url-color: #58a6ff;
-
-    --cm-tw-transclusion-color: #d2a8ff;
-    --cm-tw-filter-color: #d2a8ff;
-    --cm-tw-variable-color: #ffa657;
-
-    --cm-tw-macro-color: #ffa657;
-    --cm-tw-widget-color: #7ee787;
-    --cm-tw-attribute-color: #79c0ff;
-    --cm-tw-attribute-value-color: #a5d6ff;
-
-    --cm-tw-code-color: #ff7b72;
-    --cm-tw-code-bg: rgba(110, 118, 129, 0.4);
-    --cm-tw-codeinfo-color: #d2a8ff;
-
-    --cm-tw-list-color: #e6edf3;
-    --cm-tw-blockquote-color: #8b949e;
-    --cm-tw-hr-color: #30363d;
-
-    --cm-tw-comment-color: #8b949e;
-    --cm-tw-pragma-color: #d2a8ff;
-    --cm-tw-pragma-keyword-color: #ff7b72;
-
-    --cm-tw-escape-color: #79c0ff;
-    --cm-tw-entity-color: #79c0ff;
-    --cm-tw-mark-color: #6e7681;
-  }
-}
+<% endif %>
 
 /* TiddlyWiki palette integration */
 .tc-body.tc-dark,

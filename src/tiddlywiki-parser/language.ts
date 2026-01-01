@@ -19,7 +19,6 @@ import { Type } from "./types"
 const data = defineLanguageFacet({
   commentTokens: {
     block: { open: "<!--", close: "-->" },
-    // TiddlyWiki also supports /% %/ comments
   }
 })
 

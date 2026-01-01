@@ -1,0 +1,404 @@
+title: WikiText Syntax Example
+tags: Reference Example
+
+\whitespace trim
+\rules except wikilink
+\import [[$:/core/macros]]
+\parameters (title:"Default Title", count:5)
+
+\define single-line-macro() This is a single-line macro body
+\define single-line-with-params(name, value:"default") Param: $name$ = $value$
+
+\define multi-line-macro(name)
+This is a multi-line macro definition.
+You can use $name$ as a placeholder.
+
+Nested content is supported:
+
+\procedure nested-proc()
+This procedure is nested inside the macro definition.
+\end nested-proc
+
+Back to the outer macro.
+\end
+
+\procedure single-proc(input) Return: $(input)$
+\procedure multi-proc(input, format:"html")
+Procedures are similar to macros but with different scoping.
+Return value: <<return `Processed: $(input)$`>>
+\end
+
+\function single-fn(x) [<x>add[1]]
+\function multi-fn(tiddler, field:"text")
+[<tiddler>get<field>]
+\end
+
+\widget $my.single.widget() <span>Single-line widget</span>
+\widget $my.multi.widget(content, class:"default-class")
+<div class=<<class>>>
+<<content>>
+</div>
+\end
+
+! Heading Level 1
+!! Heading Level 2
+!!! Heading Level 3
+!!!! Heading Level 4
+!!!!! Heading Level 5
+!!!!!! Heading Level 6
+
+---
+
+! Inline Formatting
+
+''Bold text'' and //italic text// and __underlined text__.
+
+~~Strikethrough text~~ and ^^superscript^^ and ,,subscript,,.
+
+Combined: ''//bold italic//'' and ''__bold underlined__''.
+
+`Inline code with backticks` preserves formatting.
+
+! Links and References
+
+!! Wiki Links
+* [[Simple Link]]
+* [[Display Text|Target Tiddler]]
+* [[Link to Section|Tiddler#Section]]
+
+!! External Links
+* [ext[https://tiddlywiki.com]]
+* [ext[TiddlyWiki Website|https://tiddlywiki.com]]
+
+!! CamelCase Links
+WikiWord and AnotherCamelCase will auto-link.
+~NotALink because of the tilde escape.
+
+!! System Links
+$:/core/ui/PageTemplate is a system tiddler.
+$:/plugins/tiddlywiki/codemirror and $:/config/DefaultSidebarTab.
+
+!! Auto-linked URLs
+https://example.com/path?query=value&other=123
+
+! Images
+
+[img[https://tiddlywiki.com/favicon.ico]]
+[img[Alt text tooltip|TiddlerWithImage]]
+[img width=100 height=50 class="thumbnail" [icon.png]]
+[img width=200 [Description tooltip|https://example.com/image.jpg]]
+
+! Transclusions
+
+!! Simple Transclusions
+{{MyTiddler}}
+{{TiddlerName!!fieldname}}
+{{Tiddler##indexName}}
+{{!!currentTiddlerField}}
+
+!! Transclusions with Templates
+{{MyData||TemplateToUse}}
+{{SourceData||$:/core/templates/html-tiddler}}
+
+!! Filtered Transclusions
+{{{[tag[example]sort[title]]}}}
+{{{[all[tiddlers]prefix[$:/]]first[5]}}}||$:/core/templates/plain-text
+
+! Macros
+
+<<now "YYYY-MM-DD hh:mm:ss">>
+<<my-macro "first value" param2:"second value">>
+<<tabs "[tag[Tab]]" default:"DefaultTab" class:"tc-vertical">>
+
+Block-level macro:
+<<list-links "[tag[Example]]">>
+
+! Widgets
+
+!! Self-closing Widgets
+<$text text="Hello World"/>
+<$view tiddler="MyTiddler" field="title"/>
+<$transclude tiddler={{!!source}} mode="block"/>
+
+!! Widgets with Content
+<$link to="TargetTiddler">
+Click here to navigate
+</$link>
+
+<$list filter="[tag[todo]!has[done]]">
+<$checkbox field="done"/> <$link/> - <$view field="priority"/>
+</$list>
+
+!! Widget Attribute Types
+<$button
+    set="$:/state/mystate"
+    setTo="open"
+    class="tc-btn-invisible"
+    tooltip="Click to open"
+    disabled={{$:/status/loading}}
+    actions=<<my-action-macro>>
+>
+Button Text
+</$button>
+
+<$reveal state="$:/state/mystate" type="match" text="open" animate="yes">
+This content is revealed when state matches.
+</$reveal>
+
+!! Filter Attributes
+<$list filter="[all[tiddlers]tag[Journal]sort[created]limit[10]]">
+<$link/><br/>
+</$list>
+
+!! Indirect Attribute Values
+<$text text={{!!title}}/>
+<$transclude tiddler={{$:/config/source}}/>
+
+!! Macro Attribute Values
+<$set name="myvar" value=<<currentTiddler>>>
+Working with <<myvar>>
+</$set>
+
+!! Substituted Attribute Values
+<$text text=`The title is $(currentTiddler)$`/>
+<$button message="tm-notify" param=`Notification for ${[<currentTiddler>get[title]]}$`/>
+
+! HTML Elements
+
+<div class="my-container" style="padding: 1em;">
+<span id="unique-id">Inline HTML content</span>
+<p>Paragraph with <strong>nested</strong> elements.</p>
+</div>
+
+<blockquote cite="https://example.com">
+A styled blockquote using HTML.
+</blockquote>
+
+<details>
+<summary>Click to expand</summary>
+Hidden content appears here.
+</details>
+
+! Lists
+
+!! Bullet Lists
+* First item
+* Second item
+** Nested item
+** Another nested
+*** Deeply nested
+* Back to top level
+
+!! Numbered Lists
+# First numbered
+# Second numbered
+## Sub-item 2.1
+## Sub-item 2.2
+### Sub-sub-item
+# Third numbered
+
+!! Definition Lists
+; Term One
+: Definition for term one
+; Term Two
+: Definition for term two
+: Additional definition
+
+!! Mixed Lists
+* Bullet item
+*# Numbered inside bullet
+*# Another numbered
+*#* Bullet inside numbered inside bullet
+* Regular bullet
+
+!! Block Quotes (single-line style)
+> Quote line one
+> Quote line two
+>> Nested quote
+
+! Block Quotes (multi-line style)
+
+<<<.important
+This is a multi-line block quote.
+
+It can contain ''formatted text'' and [[links]].
+
+Multiple paragraphs are supported.
+
+<<< Author Name, Source Title
+
+<<<.warning.big
+Block quote with multiple CSS classes.
+<<<
+
+! Tables
+
+|!Header 1|!Header 2|!Header 3|h
+|Cell 1A|Cell 1B|Cell 1C|
+|Cell 2A|Cell 2B|Cell 2C|
+|Footer A|Footer B|Footer C|f
+
+|myTable tableClass anotherClass|k
+|!Name|!Value|!Description|h
+|Alpha|100|First value|
+|Beta|200|Second value|
+|>|Merged cell spanning two columns|Extra|
+|^Top aligned|Middle|Bottom aligned|
+|Caption for the table|c
+
+! Code Blocks
+
+```javascript
+function greet(name) {
+    console.log(`Hello, ${name}!`);
+    return { greeting: "hello", recipient: name };
+}
+```
+
+```css
+.my-class {
+    color: blue;
+    background: linear-gradient(to right, #fff, #000);
+}
+```
+
+```
+Plain code block without language specification.
+All formatting is preserved literally.
+```
+
+! Typed Blocks
+
+$$$text/vnd.tiddlywiki
+This content will be parsed as //wikitext//.
+With ''formatting'' and [[links]].
+$$$
+
+$$$application/javascript
+// This is JavaScript code
+const x = { key: "value" };
+$$$
+
+$$$text/html
+<div>Raw HTML content</div>
+<script>alert('Hello');</script>
+$$$
+
+! Styled Spans and Blocks
+
+@@.highlight This has the highlight class@@
+@@color:red; This text is red@@
+@@background-color:yellow; color:black; Yellow highlighted text@@
+@@.warning.important Multiple CSS classes applied@@
+
+@@.myClass
+This is a multi-line styled block.
+
+All content until the closing @@ is styled.
+
+<<some-macro>>
+
+@@
+
+! Comments
+
+<!-- This is an HTML comment that won't appear in output -->
+
+Regular text continues here.
+
+! Conditional Rendering
+
+<%if [<currentTiddler>tag[draft]] %>
+This content only appears if the tiddler has the "draft" tag.
+<%elseif [<currentTiddler>tag[archived]] %>
+This appears for archived tiddlers instead.
+<%else%>
+This is the default content when no conditions match.
+<%endif%>
+
+<%if [<count>compare:number:gt[0]] %>
+There are items to display.
+<%endif%>
+
+! Variable Substitution
+
+In procedures and functions, use $(variableName)$ syntax:
+The current tiddler is $(currentTiddler)$.
+The count parameter is $(count)$.
+
+! Entities and Special Characters
+
+HTML entities: &amp; &lt; &gt; &quot; &nbsp; &copy; &mdash;
+Numeric entities: &#65; &#x41; &#x1F600;
+
+En-dash: -- and em-dash: ---
+
+Escaped characters: \* \# \! \[ \] \{ \} \< \>
+
+! Filter Expressions (in context)
+
+<$list filter="[all[tiddlers]!is[system]tag[example]sort[title]limit[10]]">
+* <$link/> - <$view field="modified" format="relativedate"/>
+</$list>
+
+<$count filter="[tag[todo]!has[done]]"/> items remaining
+
+{{{[tag[Project]each[status]get[status]sort[]]}}}
+
+! Keyboard Widget with Priority
+
+<$keyboard key="ctrl+S" message="tm-save" priority="100">
+<$keyboard key="escape" message="tm-cancel" priority="50">
+<input type="text" placeholder="Press Ctrl+S to save, Escape to cancel"/>
+</$keyboard>
+</$keyboard>
+
+! Complex Nested Structures
+
+<$list filter="[tag[Category]]" variable="category">
+<div class="category-section">
+<h2><<category>></h2>
+<$list filter="[tag<category>sort[title]]">
+<$link>
+<$view field="title"/>
+</$link>
+{{!!description}}
+</$list>
+</div>
+</$list>
+
+! Action Widgets
+
+<$button>
+<$action-setfield $tiddler="$:/temp/state" text="active"/>
+<$action-sendmessage $message="tm-notify" $param="Action completed"/>
+<$action-navigate $to="TargetTiddler"/>
+Perform Actions
+</$button>
+
+! Let and Set Widgets
+
+<$let
+    firstName="John"
+    lastName="Doe"
+    fullName=`$(firstName)$ $(lastName)$`
+    filter={{{ [<firstName>addsuffix[ ]addsuffix<lastName>] }}}
+>
+Name: <<fullName>>
+</$let>
+
+<$set name="dynamicValue" filter="[all[tiddlers]tag[important]count[]]">
+There are <<dynamicValue>> important tiddlers.
+</$set>
+
+! Wikitext in Macro Parameters
+
+<<my-macro """
+This parameter contains
+multiple lines of text
+with ''wikitext'' formatting
+""">>
+
+<<tabs tabsList:"[[Tab One]] [[Tab Two]] [[Tab Three]]">>
+
+<<list-links filter:"[prefix[$:/]]" template:"$:/core/templates/tid-tiddler">>

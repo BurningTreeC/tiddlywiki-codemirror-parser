@@ -90,18 +90,13 @@ export const Bold: InlineParser = {
   parse(cx: InlineContext, next: number, pos: number): number {
     if (next !== Ch.Apostrophe || cx.char(pos + 1) !== Ch.Apostrophe) return -1
 
-    // Check flanking
+    // Use simple flanking rules like TiddlyWiki (not Markdown's complex rules)
     const before = cx.slice(pos - 1, pos)
     const after = cx.slice(pos + 2, pos + 3)
     const sBefore = /\s|^$/.test(before)
     const sAfter = /\s|^$/.test(after)
-    const pBefore = Punctuation.test(before)
-    const pAfter = Punctuation.test(after)
 
-    const canOpen = !sAfter && (!pAfter || sBefore || pBefore)
-    const canClose = !sBefore && (!pBefore || sAfter || pAfter)
-
-    return cx.addDelimiter(BoldDelim, pos, pos + 2, canOpen, canClose)
+    return cx.addDelimiter(BoldDelim, pos, pos + 2, !sAfter, !sBefore)
   }
 }
 
@@ -155,8 +150,9 @@ export const Strikethrough: InlineParser = {
   name: "Strikethrough",
   parse(cx: InlineContext, next: number, pos: number): number {
     if (next !== Ch.Tilde || cx.char(pos + 1) !== Ch.Tilde) return -1
-    // Make sure it's not ~~~
-    if (cx.char(pos + 2) === Ch.Tilde) return -1
+    // Make sure it's not ~~~ (odd number of tildes, which is a code fence marker)
+    // But allow ~~~~ (even number, which is empty strikethrough)
+    if (cx.char(pos + 2) === Ch.Tilde && cx.char(pos + 3) !== Ch.Tilde) return -1
 
     const before = cx.slice(pos - 1, pos)
     const after = cx.slice(pos + 2, pos + 3)

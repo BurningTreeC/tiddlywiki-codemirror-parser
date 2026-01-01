@@ -391,13 +391,11 @@ function parseTableRow(text: string, offset: number, cx: BlockContext, marker?: 
 }
 
 // ============================================================================
-// Comment Block (<!-- --> or /% %/)
+// Comment Block (<!-- -->)
 // ============================================================================
 
 const htmlCommentStartRe = /^<!--/
 const htmlCommentEndRe = /-->$/
-const twCommentStartRe = /^\/%/
-const twCommentEndRe = /%\/$/
 
 export const CommentBlock: BlockParser = {
   name: "CommentBlock",
@@ -426,26 +424,6 @@ export const CommentBlock: BlockParser = {
       }
 
       // Unclosed comment
-      cx.addElement(elt(Type.CommentBlock, start, cx.lineStart))
-      return true
-    }
-
-    // TiddlyWiki-style comment
-    if (twCommentStartRe.test(text)) {
-      const start = cx.lineStart
-
-      if (twCommentEndRe.test(text)) {
-        cx.addElement(elt(Type.CommentBlock, start, start + line.text.length))
-        return true
-      }
-
-      while (cx.nextLine()) {
-        if (twCommentEndRe.test(cx.line.text)) {
-          cx.addElement(elt(Type.CommentBlock, start, cx.lineStart + cx.line.text.length))
-          return true
-        }
-      }
-
       cx.addElement(elt(Type.CommentBlock, start, cx.lineStart))
       return true
     }
@@ -1123,7 +1101,18 @@ export const HTMLBlock: BlockParser = {
       const tagStart = start + indent + 2  // After "</"
       children.push(elt(isWidget ? Type.WidgetName : Type.TagName, tagStart, tagStart + tagName.length))
 
-      cx.addElement(elt(isWidget ? Type.WidgetEnd : Type.HTMLEndTag, start, start + text.length, children))
+      // End the closing tag element at the actual tag end, not end of line
+      const closeTagEnd = start + closeMatch[0].length
+      cx.addElement(elt(isWidget ? Type.WidgetEnd : Type.HTMLEndTag, start, closeTagEnd, children))
+
+      // Parse any inline content after the closing tag on the same line
+      const afterTag = text.slice(closeMatch[0].length)
+      if (afterTag.trim()) {
+        const inlineElements = cx.parser.parseInline(afterTag, closeTagEnd)
+        const paragraphElt = cx.elt(Type.Paragraph, closeTagEnd, closeTagEnd + afterTag.length, inlineElements as Element[])
+        cx.addElement(paragraphElt)
+      }
+
       return true
     }
 
@@ -1280,7 +1269,18 @@ export const HTMLBlock: BlockParser = {
           // Add closing tag element
           const closeTagStart = openingTagEnd + sameLineClose.index + 2 // After </
           children.push(elt(isWidget ? Type.WidgetName : Type.TagName, closeTagStart, closeTagStart + tagName.length))
-          blockEnd = openingTagEnd + sameLineClose.index + sameLineClose[0].length
+
+          const closeTagEnd = openingTagEnd + sameLineClose.index + sameLineClose[0].length
+
+          // Parse any inline content AFTER the closing tag on the same line
+          const afterCloseTag = restOfLine.slice(sameLineClose.index + sameLineClose[0].length)
+          if (afterCloseTag.trim()) {
+            const afterCloseStart = closeTagEnd
+            const inlineElements = cx.parser.parseInline(afterCloseTag, afterCloseStart)
+            children.push(...(inlineElements as Element[]))
+          }
+
+          blockEnd = openingTagLineEnd
           foundClose = true
         }
       }
@@ -1303,7 +1303,8 @@ export const HTMLBlock: BlockParser = {
           }
 
           // Check for closing tag
-          if (closeRe.test(lineText)) {
+          const closeMatch = closeRe.exec(lineText)
+          if (closeMatch) {
             nestLevel--
             if (nestLevel === 0) {
               // Found our closing tag
@@ -1322,9 +1323,19 @@ export const HTMLBlock: BlockParser = {
               }
 
               // Add closing tag element
-              const closeIndent = lineText.match(/^\s*/)?.[0].length || 0
+              const closeIndent = (closeMatch[1] || '').length
               const closeTagStart = cx.lineStart + closeIndent + 2
               children.push(elt(isWidget ? Type.WidgetName : Type.TagName, closeTagStart, closeTagStart + tagName.length))
+
+              // Parse any inline content AFTER the closing tag on the same line
+              const closeTagFullEnd = closeIndent + closeMatch[0].length
+              const afterCloseTag = lineText.slice(closeTagFullEnd)
+              if (afterCloseTag.trim()) {
+                const afterCloseStart = cx.lineStart + closeTagFullEnd
+                const inlineElements = cx.parser.parseInline(afterCloseTag, afterCloseStart)
+                children.push(...(inlineElements as Element[]))
+              }
+
               blockEnd = cx.lineStart + lineText.length
               foundClose = true
               break

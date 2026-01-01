@@ -63,6 +63,28 @@ export class BlockContext implements PartialParse {
 
   stoppedAt: number | null = null
 
+  /**
+   * Save the current parsing position for potential restore
+   */
+  savePosition(): { lineStart: number, lineEnd: number, lineText: string, atEnd: boolean } {
+    return {
+      lineStart: this.lineStart,
+      lineEnd: this.lineEnd,
+      lineText: this._line.text,
+      atEnd: this.atEnd
+    }
+  }
+
+  /**
+   * Restore a previously saved parsing position
+   */
+  restorePosition(saved: { lineStart: number, lineEnd: number, lineText: string, atEnd: boolean }) {
+    this.lineStart = saved.lineStart
+    this.lineEnd = saved.lineEnd
+    this._line.reset(saved.lineText)
+    this.atEnd = saved.atEnd
+  }
+
   constructor(
     readonly parser: TiddlyWikiParser,
     readonly input: Input,
