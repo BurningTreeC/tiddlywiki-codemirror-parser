@@ -1024,7 +1024,7 @@ function parseInlineAttributes(cx: InlineContext, attrString: string, offset: nu
       valueEnd = pos
       valueType = Type.AttributeSubstituted
 
-      // Parse $(variable)$ patterns inside the substituted string
+      // Parse $(variable)$ and ${ filter }$ patterns inside the substituted string
       const valueChildren: Element[] = [
         cx.elt(Type.Mark, offset + valueStart, offset + openMarkEnd)  // Opening `
       ]
@@ -1034,6 +1034,44 @@ function parseInlineAttributes(cx: InlineContext, attrString: string, offset: nu
       const contentOffset = offset + openMarkEnd
 
       while (contentPos < content.length) {
+        // Check for ${ filter }$ pattern first (filter expressions are substituted before variables)
+        // Note: can't use simple regex since filter may contain } characters
+        if (content.slice(contentPos, contentPos + 2) === '${') {
+          // Find the closing }$
+          const searchStart = contentPos + 2
+          let filterEndPos = -1
+          for (let i = searchStart; i < content.length - 1; i++) {
+            if (content[i] === '}' && content[i + 1] === '$') {
+              filterEndPos = i
+              break
+            }
+          }
+          if (filterEndPos !== -1) {
+            const filterMatch = [
+              content.slice(contentPos, filterEndPos + 2),
+              content.slice(contentPos + 2, filterEndPos)
+            ]
+            const filterStart = contentOffset + contentPos
+            const filterEnd = filterStart + filterMatch[0].length
+            const filterExprStart = filterStart + 2
+            const filterExprEnd = filterEnd - 2
+
+            // Parse the filter expression inside
+            const filterContent = filterMatch[1].trim()
+            const filterChildren = parseFilterExpression(cx, filterContent, filterExprStart + (filterMatch[1].length - filterMatch[1].trimStart().length))
+
+            valueChildren.push(cx.elt(Type.FilterSubstitution, filterStart, filterEnd, [
+              cx.elt(Type.FilterSubstitutionMark, filterStart, filterStart + 2),
+              cx.elt(Type.FilterExpression, filterExprStart, filterExprEnd, filterChildren),
+              cx.elt(Type.FilterSubstitutionMark, filterEnd - 2, filterEnd)
+            ]))
+
+            contentPos += filterMatch[0].length
+            continue
+          }
+        }
+
+        // Check for $(variable)$ pattern
         const varMatch = content.slice(contentPos).match(/^\$\(([^)]+)\)\$/)
         if (varMatch) {
           const varStart = contentOffset + contentPos

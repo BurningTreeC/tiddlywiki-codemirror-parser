@@ -178,9 +178,11 @@ export enum Type {
   Entity,               // &entity;
   HardBreak,            // """ or line break
   Dash,                 // -- or ---
-  Variable,             // $(var)$ in macro bodies
+  Variable,             // $(var)$ in substituted strings
   VariableMark,         // $( and )$
   VariableName,         // var in $(var)$
+  FilterSubstitution,   // ${ filter }$ in substituted strings
+  FilterSubstitutionMark, // ${ and }$
   Placeholder,          // $param$ in macro definitions
   PlaceholderMark,      // $ in $param$
 
