@@ -3109,12 +3109,21 @@ const HTMLBlock = {
         const afterTagName = text.slice(indent + 1 + tagName.length);
         let tagEndResult = findOpeningTagEnd(afterTagName);
         let accumulatedText = afterTagName;
-        // If not found on current line, keep reading lines
-        while (!tagEndResult) {
+        // If not found on current line, keep reading lines (but limit to avoid runaway parsing)
+        // Save position so we can restore if we don't find the tag end
+        const savedPos = cx.savePosition();
+        let linesSearched = 0;
+        const maxLinesForTagEnd = 20;
+        while (!tagEndResult && linesSearched < maxLinesForTagEnd) {
             if (!cx.nextLine())
                 break;
             accumulatedText += '\n' + cx.line.text;
             tagEndResult = findOpeningTagEnd(accumulatedText);
+            linesSearched++;
+        }
+        // If we didn't find the tag end, restore position to just after the first line
+        if (!tagEndResult) {
+            cx.restorePosition(savedPos);
         }
         if (tagEndResult) {
             selfClose = tagEndResult.selfClose;
@@ -3131,10 +3140,19 @@ const HTMLBlock = {
             }
         }
         else {
-            // No > found, treat as incomplete
+            // No > found, treat as incomplete - only include the first line
+            // Don't consume more lines looking for a closing tag
             selfClose = false;
-            openingTagEnd = cx.lineStart + cx.line.text.length;
+            openingTagEnd = start + text.length;
             openingTagLineEnd = openingTagEnd;
+            // Still parse whatever attributes we have on this line
+            if (afterTagName.trim()) {
+                const attrElements = parseAttributes(afterTagName, attrsStart);
+                children.push(...attrElements);
+            }
+            // For incomplete opening tags, just output what we have and return
+            cx.addElement(elt(isWidget ? Type.Widget : Type.HTMLBlock, start, openingTagEnd, children));
+            return true;
         }
         // Determine if this is a multi-line block with content
         if (!selfClose) {
@@ -3182,6 +3200,8 @@ const HTMLBlock = {
                 const blockContentStart = openingTagLineEnd + 1;
                 let contentEnd = blockContentStart;
                 let nestLevel = 1;
+                // Save position in case we don't find a closing tag
+                const savedPosForClose = cx.savePosition();
                 while (cx.nextLine()) {
                     const lineText = cx.line.text;
                     // Check for nested opening tags of the same name (complete tags only)
@@ -3223,6 +3243,12 @@ const HTMLBlock = {
                             break;
                         }
                     }
+                }
+                // If no closing tag found, restore position and only output the opening tag
+                // Let the content be parsed separately
+                if (!foundClose) {
+                    cx.restorePosition(savedPosForClose);
+                    blockEnd = openingTagLineEnd;
                 }
             }
             cx.addElement(elt(isWidget ? Type.Widget : Type.HTMLBlock, start, blockEnd, children));
