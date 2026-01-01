@@ -288,7 +288,31 @@ export const WikiLink: InlineParser = {
 
     const text = cx.slice(pos, cx.end)
     const match = wikiLinkRe.exec(text)
-    if (!match) return -1
+    if (!match) {
+      // Handle incomplete wiki link - [[ without ]]
+      // Match content up to end of line or newline
+      const incompleteMatch = /^\[\[([^\]\n]*)$/.exec(text)
+      if (incompleteMatch) {
+        const end = pos + incompleteMatch[0].length
+        const content = incompleteMatch[1]
+        const children: Element[] = [
+          cx.elt(Type.WikiLinkMark, pos, pos + 2),
+        ]
+        // Check for | separator
+        const pipeIdx = content.indexOf('|')
+        if (pipeIdx !== -1) {
+          children.push(cx.elt(Type.LinkText, pos + 2, pos + 2 + pipeIdx))
+          children.push(cx.elt(Type.LinkSeparator, pos + 2 + pipeIdx, pos + 3 + pipeIdx))
+          if (content.length > pipeIdx + 1) {
+            children.push(cx.elt(Type.LinkTarget, pos + 3 + pipeIdx, end))
+          }
+        } else if (content) {
+          children.push(cx.elt(Type.LinkTarget, pos + 2, end))
+        }
+        return cx.addElement(cx.elt(Type.WikiLink, pos, end, children))
+      }
+      return -1
+    }
 
     const end = pos + match[0].length
     const firstPart = match[1]
@@ -327,7 +351,30 @@ export const ExternalLink: InlineParser = {
 
     const text = cx.slice(pos, cx.end)
     const match = extLinkRe.exec(text)
-    if (!match) return -1
+    if (!match) {
+      // Handle incomplete external link - [ext[ without ]]
+      const incompleteMatch = /^\[ext\[([^\]\n]*)$/.exec(text)
+      if (incompleteMatch) {
+        const end = pos + incompleteMatch[0].length
+        const content = incompleteMatch[1]
+        const children: Element[] = [
+          cx.elt(Type.ExtLinkMark, pos, pos + 5), // [ext[
+        ]
+        // Check for | separator
+        const pipeIdx = content.indexOf('|')
+        if (pipeIdx !== -1) {
+          children.push(cx.elt(Type.LinkText, pos + 5, pos + 5 + pipeIdx))
+          children.push(cx.elt(Type.LinkSeparator, pos + 5 + pipeIdx, pos + 6 + pipeIdx))
+          if (content.length > pipeIdx + 1) {
+            children.push(cx.elt(Type.URLLink, pos + 6 + pipeIdx, end))
+          }
+        } else if (content) {
+          children.push(cx.elt(Type.URLLink, pos + 5, end))
+        }
+        return cx.addElement(cx.elt(Type.ExternalLink, pos, end, children))
+      }
+      return -1
+    }
 
     const end = pos + match[0].length
     const firstPart = match[1]
@@ -364,7 +411,50 @@ export const ImageLink: InlineParser = {
 
     const text = cx.slice(pos, cx.end)
     const match = imgLinkRe.exec(text)
-    if (!match) return -1
+    if (!match) {
+      // Handle incomplete image link - [img[ without ]]
+      const incompleteMatch = /^\[img(\s+[^\[\n]+)?\[([^\]\n]*)$/.exec(text)
+      if (incompleteMatch) {
+        const end = pos + incompleteMatch[0].length
+        const attrs = incompleteMatch[1]
+        const content = incompleteMatch[2]
+
+        const children: Element[] = [
+          cx.elt(Type.ImageMark, pos, pos + 4), // [img
+        ]
+
+        let attrEnd = pos + 4
+
+        // Parse attributes if present
+        if (attrs) {
+          const attrStart = pos + 4
+          attrEnd = attrStart + attrs.length
+          const attrElements = parseInlineAttributes(cx, attrs.trim(), attrStart + (attrs.length - attrs.trimStart().length))
+          children.push(...attrElements)
+        }
+
+        // Add the opening [ of the source bracket
+        children.push(cx.elt(Type.ImageMark, attrEnd, attrEnd + 1)) // [
+
+        // Parse content
+        if (content) {
+          const innerStart = attrEnd + 1
+          const pipeIdx = content.indexOf('|')
+          if (pipeIdx !== -1) {
+            children.push(cx.elt(Type.ImageTooltip, innerStart, innerStart + pipeIdx))
+            children.push(cx.elt(Type.LinkSeparator, innerStart + pipeIdx, innerStart + pipeIdx + 1))
+            if (content.length > pipeIdx + 1) {
+              children.push(cx.elt(Type.ImageSource, innerStart + pipeIdx + 1, end))
+            }
+          } else {
+            children.push(cx.elt(Type.ImageSource, innerStart, end))
+          }
+        }
+
+        return cx.addElement(cx.elt(Type.ImageLink, pos, end, children))
+      }
+      return -1
+    }
 
     const end = pos + match[0].length
     const attrs = match[1] // attributes like " width=100 class=thumb"
@@ -470,7 +560,27 @@ export const Transclusion: InlineParser = {
 
     const text = cx.slice(pos, cx.end)
     const match = transclusionRe.exec(text)
-    if (!match) return -1
+    if (!match) {
+      // Handle incomplete transclusion - {{ without }}
+      const incompleteMatch = /^\{\{([^{}\n]*)$/.exec(text)
+      if (incompleteMatch) {
+        const end = pos + incompleteMatch[0].length
+        const target = incompleteMatch[1]
+
+        const children: Element[] = [
+          cx.elt(Type.TransclusionMark, pos, pos + 2),
+        ]
+
+        if (target) {
+          // Parse target details (tiddler!!field or tiddler##index)
+          const targetChildren = parseTransclusionTarget(cx, target, pos + 2)
+          children.push(...targetChildren)
+        }
+
+        return cx.addElement(cx.elt(Type.Transclusion, pos, end, children))
+      }
+      return -1
+    }
 
     const end = pos + match[0].length
     const target = match[1]
@@ -633,7 +743,29 @@ export const FilteredTransclusion: InlineParser = {
         break
       }
     }
-    if (filterEnd === -1) return -1
+    if (filterEnd === -1) {
+      // Handle incomplete filtered transclusion - {{{ without }}}
+      // Match content up to end of line
+      const incompleteMatch = /^\{\{\{([^\n]*)$/.exec(text)
+      if (incompleteMatch) {
+        const end = pos + incompleteMatch[0].length
+        const filter = incompleteMatch[1]
+
+        // Parse filter expression details
+        const filterChildren = parseFilterExpression(cx, filter, pos + 3)
+
+        const children: Element[] = [
+          cx.elt(Type.FilteredTransclusionMark, pos, pos + 3),
+        ]
+
+        if (filter) {
+          children.push(cx.elt(Type.FilterExpression, pos + 3, end, filterChildren))
+        }
+
+        return cx.addElement(cx.elt(Type.FilteredTransclusion, pos, end, children))
+      }
+      return -1
+    }
 
     const filter = text.slice(3, filterEnd)
     let end = pos + filterEnd + 3
