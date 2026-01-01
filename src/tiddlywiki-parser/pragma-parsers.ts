@@ -21,7 +21,7 @@ import type { BlockContext } from "./block-context"
  * Single line: \define name(params) body
  * Multiline: \define name(params)\n body \n\end
  */
-const defineRe = /^\\define\s+([^(\s]+)\s*\(\s*([^)]*)\s*\)\s*(.*)$/
+const defineRe = /^\\define\s+([^(\s]+)\s*\(\s*([^)]*)\s*\)(.*)$/
 const defineMultilineRe = /^\\define\s+([^(\s]+)\s*\(\s*([^)]*)\s*\)\s*$/
 
 /**
@@ -29,7 +29,7 @@ const defineMultilineRe = /^\\define\s+([^(\s]+)\s*\(\s*([^)]*)\s*\)\s*$/
  * Single line: \function name(params) body
  * Multiline: \function name(params)\n body \n\end
  */
-const fnprocRe = /^\\(function|procedure|widget)\s+([^(\s]+)\s*\(\s*([^)]*)\s*\)\s*(.*)$/
+const fnprocRe = /^\\(function|procedure|widget)\s+([^(\s]+)\s*\(\s*([^)]*)\s*\)(.*)$/
 const fnprocMultilineRe = /^\\(function|procedure|widget)\s+([^(\s]+)\s*\(\s*([^)]*)\s*\)$/
 
 /**
@@ -302,15 +302,8 @@ export const MacroDefPragma: PragmaParser = {
       const paramStr = singleMatch[2]
       const body = singleMatch[3]
 
-      // Check if body looks incomplete (e.g., starts with << but no >>)
-      // In that case, try to find \end and treat as multi-line
-      const bodyLooksIncomplete = body && (
-        (body.includes("<<") && !body.includes(">>")) ||
-        (body.includes("{{") && !body.includes("}}")) ||
-        (body.includes("{{{") && !body.includes("}}}"))
-      )
-
-      if (bodyLooksIncomplete) {
+      // If there's any body content, check for \end and treat as multi-line if found
+      if (body) {
         const savedPos = cx.savePosition()
         const endInfo = findEnd(cx, name)
         if (endInfo) {
@@ -449,15 +442,8 @@ export const FnProcDefPragma: PragmaParser = {
         default: return null
       }
 
-      // Check if body looks incomplete (e.g., starts with << but no >>)
-      // In that case, try to find \end and treat as multi-line
-      const bodyLooksIncomplete = body && (
-        (body.includes("<<") && !body.includes(">>")) ||
-        (body.includes("{{") && !body.includes("}}")) ||
-        (body.includes("{{{") && !body.includes("}}}"))
-      )
-
-      if (bodyLooksIncomplete) {
+      // If there's any body content, check for \end and treat as multi-line if found
+      if (body) {
         const savedPos = cx.savePosition()
         const endInfo = findEnd(cx, name)
         if (endInfo) {
