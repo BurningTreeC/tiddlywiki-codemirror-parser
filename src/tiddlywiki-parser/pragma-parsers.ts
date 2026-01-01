@@ -53,22 +53,75 @@ const parametersRe = /^\\parameters\s*\(\s*([^)]*)\s*\)$/
 const whitespaceRe = /^\\whitespace\s+(trim|notrim)$/
 
 /**
- * Find the \end marker for a multi-line pragma
+ * Find the \end marker for a multi-line pragma, properly handling nested definitions.
+ *
+ * TiddlyWiki rules:
+ * - \end (bare) closes the most recently opened definition
+ * - \end name closes specifically that named definition
+ * - Nested \procedure/\function/\widget/\define blocks must be tracked
+ *
+ * Returns positions for the body content and end marker, not the content itself.
+ * The body should be parsed recursively by the caller.
  */
-function findEnd(cx: BlockContext, name: string): { body: string, endPos: number } | null {
-  const endRe = new RegExp(`^\\s*\\\\end(?:\\s+${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})?\\s*$`)
-  let body = ""
-  let startLineEnd = cx.lineStart + cx.line.text.length
+function findEnd(cx: BlockContext, name: string): { bodyStart: number, bodyEnd: number, endStart: number, endEnd: number } | null {
+  // Match any multi-line definition start (nothing after closing paren)
+  const openRe = /^\\(define|procedure|function|widget)\s+([^(\s]+)\s*\([^)]*\)\s*$/
+  // Match any \end (bare or named)
+  const endRe = /^\s*\\end(?:\s+(\S+))?\s*$/
+
+  const bodyStart = cx.lineStart + cx.line.text.length + 1 // After the declaration line + newline
+  const nestedNames: string[] = [] // Stack of nested definition names
 
   while (cx.nextLine()) {
-    if (endRe.test(cx.line.text)) {
-      return { body, endPos: cx.lineStart + cx.line.text.length }
+    const text = cx.line.text
+
+    // Check for nested multi-line definition opening
+    const openMatch = openRe.exec(text)
+    if (openMatch) {
+      nestedNames.push(openMatch[2])
+      continue
     }
-    if (body) body += "\n"
-    body += cx.line.text
+
+    // Check for \end
+    const endMatch = endRe.exec(text)
+    if (endMatch) {
+      const endName = endMatch[1] // undefined for bare \end
+
+      if (nestedNames.length === 0) {
+        // No nesting - this \end is for us
+        // Accept bare \end or \end ourname
+        if (!endName || endName === name) {
+          return {
+            bodyStart,
+            bodyEnd: cx.lineStart - 1, // Before the \end line (exclude newline)
+            endStart: cx.lineStart,
+            endEnd: cx.lineStart + text.length
+          }
+        }
+        // Named \end for different name at top level - error in source, continue
+      } else {
+        // We have nesting
+        if (!endName) {
+          // Bare \end closes innermost nested definition
+          nestedNames.pop()
+        } else if (endName === nestedNames[nestedNames.length - 1]) {
+          // Named \end matches innermost nested definition
+          nestedNames.pop()
+        } else if (endName === name) {
+          // Named \end for our name while nested - closes our definition
+          return {
+            bodyStart,
+            bodyEnd: cx.lineStart - 1,
+            endStart: cx.lineStart,
+            endEnd: cx.lineStart + text.length
+          }
+        }
+        // Named \end that doesn't match - continue
+      }
+    }
   }
 
-  // No \end found, treat body as empty
+  // No \end found
   return null
 }
 
@@ -123,8 +176,12 @@ export const MacroDefPragma: PragmaParser = {
       // Find body and \end
       const endInfo = findEnd(cx, name)
       if (endInfo) {
-        children.push(elt(Type.PragmaBody, cx.lineStart - endInfo.body.length - 1, cx.lineStart - 1))
-        children.push(elt(Type.PragmaEnd, cx.lineStart, cx.lineStart + cx.line.text.length))
+        // Parse body content recursively
+        if (endInfo.bodyEnd > endInfo.bodyStart) {
+          const bodyElements = cx.parseContentRange(endInfo.bodyStart, endInfo.bodyEnd, true)
+          children.push(...bodyElements)
+        }
+        children.push(elt(Type.PragmaEnd, endInfo.endStart, endInfo.endEnd))
         cx.nextLine()
 
         return [elt(Type.MacroDefinition, pragmaStart, cx.prevLineEnd(), children)]
@@ -154,10 +211,11 @@ export const MacroDefPragma: PragmaParser = {
         children.push(...parseParams(paramStr, paramStart))
       }
 
-      // Add body if present
-      if (body) {
-        const bodyStart = pragmaStart + text.indexOf(")") + 1
+      // Single-line body is typically just text/macro content, parse inline
+      if (body.trim()) {
+        const bodyStart = pragmaStart + text.lastIndexOf(")") + 1
         const bodyEnd = pragmaStart + text.length
+        // For single-line defines, body is usually simple text, keep as PragmaBody
         children.push(elt(Type.PragmaBody, bodyStart, bodyEnd))
       }
 
@@ -207,8 +265,12 @@ export const FnProcDefPragma: PragmaParser = {
 
       const endInfo = findEnd(cx, name)
       if (endInfo) {
-        children.push(elt(Type.PragmaBody, cx.lineStart - endInfo.body.length - 1, cx.lineStart - 1))
-        children.push(elt(Type.PragmaEnd, cx.lineStart, cx.lineStart + cx.line.text.length))
+        // Parse body content recursively
+        if (endInfo.bodyEnd > endInfo.bodyStart) {
+          const bodyElements = cx.parseContentRange(endInfo.bodyStart, endInfo.bodyEnd, true)
+          children.push(...bodyElements)
+        }
+        children.push(elt(Type.PragmaEnd, endInfo.endStart, endInfo.endEnd))
         cx.nextLine()
 
         return [elt(nodeType, pragmaStart, cx.prevLineEnd(), children)]
@@ -246,9 +308,9 @@ export const FnProcDefPragma: PragmaParser = {
         children.push(...parseParams(paramStr, paramStart))
       }
 
-      // Add body if present
-      if (body) {
-        const bodyStart = pragmaStart + text.indexOf(")") + 1
+      // Single-line body - keep as PragmaBody for simple content
+      if (body.trim()) {
+        const bodyStart = pragmaStart + text.lastIndexOf(")") + 1
         const bodyEnd = pragmaStart + text.length
         children.push(elt(Type.PragmaBody, bodyStart, bodyEnd))
       }

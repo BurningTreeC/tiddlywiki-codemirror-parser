@@ -4,7 +4,7 @@
  * Handles block-level parsing following the Lezer Markdown architecture.
  */
 
-import { Tree, TreeBuffer, NodeSet, NodeProp, Input, TreeFragment, PartialParse } from "@lezer/common"
+import { Tree, TreeBuffer, TreeCursor, NodeSet, NodeProp, Input, TreeFragment, PartialParse } from "@lezer/common"
 import { Type, CompositeBlockTypes } from "./types"
 import {
   Line, Element, elt, CompositeBlock, LeafBlock,
@@ -425,5 +425,71 @@ export class BlockContext implements PartialParse {
 
   stopAt(pos: number) {
     this.stoppedAt = pos
+  }
+
+  /**
+   * Parse a range of content as blocks and return Elements.
+   * Used for recursive parsing of pragma bodies and widget content.
+   *
+   * This creates a fresh parse of the content range and extracts elements
+   * from the resulting tree, avoiding buffer corruption issues.
+   *
+   * @param from Start position in the document
+   * @param to End position in the document
+   * @param parsePragmasFirst Whether to parse pragmas at the start of the range
+   * @returns Array of parsed elements
+   */
+  parseContentRange(from: number, to: number, parsePragmasFirst: boolean = true): Element[] {
+    if (from >= to) return []
+
+    // Parse the content range as a fresh document
+    const content = this.input.read(from, to)
+    const tree = this.parser.parse(content)
+
+    // Extract elements from the tree, adjusting positions
+    return this.extractElements(tree, from)
+  }
+
+  /**
+   * Extract Elements from a parsed Tree, adjusting positions by offset
+   */
+  private extractElements(tree: Tree, offset: number): Element[] {
+    const elements: Element[] = []
+    const cursor = tree.cursor()
+
+    // Skip the Document node, get its children
+    if (cursor.firstChild()) {
+      do {
+        const element = this.nodeToElement(cursor, offset)
+        if (element) {
+          elements.push(element)
+        }
+      } while (cursor.nextSibling())
+    }
+
+    return elements
+  }
+
+  /**
+   * Convert a tree node (at cursor position) to an Element
+   */
+  private nodeToElement(cursor: any, offset: number): Element | null {
+    const type = cursor.type.id
+    const from = cursor.from + offset
+    const to = cursor.to + offset
+    const children: Element[] = []
+
+    // Recursively convert children
+    if (cursor.firstChild()) {
+      do {
+        const child = this.nodeToElement(cursor, offset)
+        if (child) {
+          children.push(child)
+        }
+      } while (cursor.nextSibling())
+      cursor.parent()
+    }
+
+    return new Element(type, from, to, children)
   }
 }

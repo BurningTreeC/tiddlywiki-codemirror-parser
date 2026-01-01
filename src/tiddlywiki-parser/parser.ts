@@ -103,11 +103,12 @@ const defaultStyleTags = styleTags({
   TagName: t.tagName,
   Attribute: t.attributeName,
   AttributeName: t.attributeName,
-  "AttributeValue AttributeString AttributeNumber": t.attributeValue,
-  AttributeIndirect: t.special(t.attributeValue),
-  AttributeFiltered: t.special(t.attributeValue),
-  AttributeMacro: t.special(t.attributeValue),
-  AttributeSubstituted: t.special(t.attributeValue),
+  "AttributeValue AttributeString": t.attributeValue,
+  AttributeNumber: t.number,
+  AttributeIndirect: t.special(t.link),      // Same as Transclusion
+  AttributeFiltered: t.special(t.link),      // Same as FilteredTransclusion
+  AttributeMacro: t.macroName,               // Same as MacroCall
+  AttributeSubstituted: t.special(t.string), // Substituted strings
   SelfClosingMarker: t.processingInstruction,
 
   // Lists
@@ -145,8 +146,32 @@ const defaultStyleTags = styleTags({
   Escape: t.escape,
   Entity: t.character,
   Dash: t.punctuation,
-  Variable: t.variableName,
+  Variable: t.special(t.variableName),
+  VariableMark: t.processingInstruction,
+  VariableName: t.variableName,
+  Placeholder: t.special(t.variableName),
+  PlaceholderMark: t.processingInstruction,
   HardBreak: t.processingInstruction,
+
+  // Filter expression components
+  FilterRun: t.content,
+  FilterOperator: t.operator,
+  FilterOperatorName: t.operatorKeyword,
+  FilterOperand: t.string,
+  FilterVariable: t.variableName,
+  FilterTextRef: t.special(t.string),
+  FilterRegexp: t.regexp,
+
+  // Styled blocks
+  StyledBlock: t.content,
+  StyledBlockMark: t.processingInstruction,
+  StyledBlockClass: t.className,
+
+  // Conditionals
+  ConditionalBlock: t.content,
+  ConditionalMark: t.processingInstruction,
+  ConditionalKeyword: t.controlKeyword,
+  ConditionalBranch: t.content,
 
   // Generic
   Paragraph: t.content,

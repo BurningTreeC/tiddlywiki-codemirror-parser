@@ -849,6 +849,64 @@ class BlockContext {
     stopAt(pos) {
         this.stoppedAt = pos;
     }
+    /**
+     * Parse a range of content as blocks and return Elements.
+     * Used for recursive parsing of pragma bodies and widget content.
+     *
+     * This creates a fresh parse of the content range and extracts elements
+     * from the resulting tree, avoiding buffer corruption issues.
+     *
+     * @param from Start position in the document
+     * @param to End position in the document
+     * @param parsePragmasFirst Whether to parse pragmas at the start of the range
+     * @returns Array of parsed elements
+     */
+    parseContentRange(from, to, parsePragmasFirst = true) {
+        if (from >= to)
+            return [];
+        // Parse the content range as a fresh document
+        const content = this.input.read(from, to);
+        const tree = this.parser.parse(content);
+        // Extract elements from the tree, adjusting positions
+        return this.extractElements(tree, from);
+    }
+    /**
+     * Extract Elements from a parsed Tree, adjusting positions by offset
+     */
+    extractElements(tree, offset) {
+        const elements = [];
+        const cursor = tree.cursor();
+        // Skip the Document node, get its children
+        if (cursor.firstChild()) {
+            do {
+                const element = this.nodeToElement(cursor, offset);
+                if (element) {
+                    elements.push(element);
+                }
+            } while (cursor.nextSibling());
+        }
+        return elements;
+    }
+    /**
+     * Convert a tree node (at cursor position) to an Element
+     */
+    nodeToElement(cursor, offset) {
+        const type = cursor.type.id;
+        const from = cursor.from + offset;
+        const to = cursor.to + offset;
+        const children = [];
+        // Recursively convert children
+        if (cursor.firstChild()) {
+            do {
+                const child = this.nodeToElement(cursor, offset);
+                if (child) {
+                    children.push(child);
+                }
+            } while (cursor.nextSibling());
+            cursor.parent();
+        }
+        return new Element(type, from, to, children);
+    }
 }
 
 /**
@@ -1146,21 +1204,72 @@ const parametersRe = /^\\parameters\s*\(\s*([^)]*)\s*\)$/;
  */
 const whitespaceRe = /^\\whitespace\s+(trim|notrim)$/;
 /**
- * Find the \end marker for a multi-line pragma
+ * Find the \end marker for a multi-line pragma, properly handling nested definitions.
+ *
+ * TiddlyWiki rules:
+ * - \end (bare) closes the most recently opened definition
+ * - \end name closes specifically that named definition
+ * - Nested \procedure/\function/\widget/\define blocks must be tracked
+ *
+ * Returns positions for the body content and end marker, not the content itself.
+ * The body should be parsed recursively by the caller.
  */
 function findEnd(cx, name) {
-    const endRe = new RegExp(`^\\s*\\\\end(?:\\s+${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})?\\s*$`);
-    let body = "";
-    cx.lineStart + cx.line.text.length;
+    // Match any multi-line definition start (nothing after closing paren)
+    const openRe = /^\\(define|procedure|function|widget)\s+([^(\s]+)\s*\([^)]*\)\s*$/;
+    // Match any \end (bare or named)
+    const endRe = /^\s*\\end(?:\s+(\S+))?\s*$/;
+    const bodyStart = cx.lineStart + cx.line.text.length + 1; // After the declaration line + newline
+    const nestedNames = []; // Stack of nested definition names
     while (cx.nextLine()) {
-        if (endRe.test(cx.line.text)) {
-            return { body, endPos: cx.lineStart + cx.line.text.length };
+        const text = cx.line.text;
+        // Check for nested multi-line definition opening
+        const openMatch = openRe.exec(text);
+        if (openMatch) {
+            nestedNames.push(openMatch[2]);
+            continue;
         }
-        if (body)
-            body += "\n";
-        body += cx.line.text;
+        // Check for \end
+        const endMatch = endRe.exec(text);
+        if (endMatch) {
+            const endName = endMatch[1]; // undefined for bare \end
+            if (nestedNames.length === 0) {
+                // No nesting - this \end is for us
+                // Accept bare \end or \end ourname
+                if (!endName || endName === name) {
+                    return {
+                        bodyStart,
+                        bodyEnd: cx.lineStart - 1, // Before the \end line (exclude newline)
+                        endStart: cx.lineStart,
+                        endEnd: cx.lineStart + text.length
+                    };
+                }
+                // Named \end for different name at top level - error in source, continue
+            }
+            else {
+                // We have nesting
+                if (!endName) {
+                    // Bare \end closes innermost nested definition
+                    nestedNames.pop();
+                }
+                else if (endName === nestedNames[nestedNames.length - 1]) {
+                    // Named \end matches innermost nested definition
+                    nestedNames.pop();
+                }
+                else if (endName === name) {
+                    // Named \end for our name while nested - closes our definition
+                    return {
+                        bodyStart,
+                        bodyEnd: cx.lineStart - 1,
+                        endStart: cx.lineStart,
+                        endEnd: cx.lineStart + text.length
+                    };
+                }
+                // Named \end that doesn't match - continue
+            }
+        }
     }
-    // No \end found, treat body as empty
+    // No \end found
     return null;
 }
 /**
@@ -1206,8 +1315,12 @@ const MacroDefPragma = {
             // Find body and \end
             const endInfo = findEnd(cx, name);
             if (endInfo) {
-                children.push(elt(Type.PragmaBody, cx.lineStart - endInfo.body.length - 1, cx.lineStart - 1));
-                children.push(elt(Type.PragmaEnd, cx.lineStart, cx.lineStart + cx.line.text.length));
+                // Parse body content recursively
+                if (endInfo.bodyEnd > endInfo.bodyStart) {
+                    const bodyElements = cx.parseContentRange(endInfo.bodyStart, endInfo.bodyEnd, true);
+                    children.push(...bodyElements);
+                }
+                children.push(elt(Type.PragmaEnd, endInfo.endStart, endInfo.endEnd));
                 cx.nextLine();
                 return [elt(Type.MacroDefinition, pragmaStart, cx.prevLineEnd(), children)];
             }
@@ -1231,10 +1344,11 @@ const MacroDefPragma = {
                 const paramStart = pragmaStart + text.indexOf("(") + 1;
                 children.push(...parseParams(paramStr, paramStart));
             }
-            // Add body if present
-            if (body) {
-                const bodyStart = pragmaStart + text.indexOf(")") + 1;
+            // Single-line body is typically just text/macro content, parse inline
+            if (body.trim()) {
+                const bodyStart = pragmaStart + text.lastIndexOf(")") + 1;
                 const bodyEnd = pragmaStart + text.length;
+                // For single-line defines, body is usually simple text, keep as PragmaBody
                 children.push(elt(Type.PragmaBody, bodyStart, bodyEnd));
             }
             cx.nextLine();
@@ -1281,8 +1395,12 @@ const FnProcDefPragma = {
             }
             const endInfo = findEnd(cx, name);
             if (endInfo) {
-                children.push(elt(Type.PragmaBody, cx.lineStart - endInfo.body.length - 1, cx.lineStart - 1));
-                children.push(elt(Type.PragmaEnd, cx.lineStart, cx.lineStart + cx.line.text.length));
+                // Parse body content recursively
+                if (endInfo.bodyEnd > endInfo.bodyStart) {
+                    const bodyElements = cx.parseContentRange(endInfo.bodyStart, endInfo.bodyEnd, true);
+                    children.push(...bodyElements);
+                }
+                children.push(elt(Type.PragmaEnd, endInfo.endStart, endInfo.endEnd));
                 cx.nextLine();
                 return [elt(nodeType, pragmaStart, cx.prevLineEnd(), children)];
             }
@@ -1319,9 +1437,9 @@ const FnProcDefPragma = {
                 const paramStart = pragmaStart + text.indexOf("(") + 1;
                 children.push(...parseParams(paramStr, paramStart));
             }
-            // Add body if present
-            if (body) {
-                const bodyStart = pragmaStart + text.indexOf(")") + 1;
+            // Single-line body - keep as PragmaBody for simple content
+            if (body.trim()) {
+                const bodyStart = pragmaStart + text.lastIndexOf(")") + 1;
                 const bodyEnd = pragmaStart + text.length;
                 children.push(elt(Type.PragmaBody, bodyStart, bodyEnd));
             }
@@ -1623,6 +1741,65 @@ const List = {
     }
 };
 // ============================================================================
+// Multi-line Block Quote (<<<...<<<)
+// ============================================================================
+// Opening: <<< (optionally with class)
+const blockQuoteOpenRe = /^<<<(.*)$/;
+const MultiLineBlockQuote = {
+    name: "MultiLineBlockQuote",
+    parse(cx, line) {
+        const openMatch = blockQuoteOpenRe.exec(line.text);
+        if (!openMatch)
+            return false;
+        // Check it's actually <<< at start (not <<<<)
+        if (!line.text.startsWith("<<<") || line.text.startsWith("<<<<"))
+            return false;
+        const start = cx.lineStart;
+        const openingMarkEnd = start + 3; // Length of "<<<""
+        openMatch[1].trim();
+        const children = [
+            elt(Type.QuoteMark, start, openingMarkEnd)
+        ];
+        // If there's class/style info after opening <<<, we could parse it
+        // For now, just note the position
+        // Find the closing <<<
+        const contentStart = start + line.text.length + 1; // After opening line + newline
+        let contentEnd = contentStart;
+        let closingStart = -1;
+        let closingEnd = -1;
+        let citation = "";
+        while (cx.nextLine()) {
+            const lineText = cx.line.text;
+            // Check for closing <<<
+            if (lineText.startsWith("<<<") && !lineText.startsWith("<<<<")) {
+                closingStart = cx.lineStart;
+                closingEnd = cx.lineStart + lineText.length;
+                contentEnd = closingStart - 1; // Before closing line (exclude newline)
+                citation = lineText.slice(3).trim();
+                break;
+            }
+        }
+        // Parse content between opening and closing <<< recursively
+        if (contentEnd > contentStart) {
+            const contentElements = cx.parseContentRange(contentStart, contentEnd, false);
+            children.push(...contentElements);
+        }
+        // Add closing mark
+        if (closingStart >= 0) {
+            children.push(elt(Type.QuoteMark, closingStart, closingStart + 3));
+            // If there's a citation, parse it as inline content
+            if (citation) {
+                const citationStart = closingStart + 3;
+                const citationElements = cx.parser.parseInline(citation, citationStart);
+                children.push(...citationElements);
+            }
+        }
+        const blockEnd = closingEnd >= 0 ? closingEnd : cx.prevLineEnd();
+        cx.addElement(elt(Type.BlockQuote, start, blockEnd, children));
+        return true;
+    }
+};
+// ============================================================================
 // Table Parser (|...|)
 // ============================================================================
 const tableRowRe = /^\|.*\|([fhck])?\s*$/;
@@ -1827,17 +2004,234 @@ const MacroCallBlock = {
 // ============================================================================
 // HTML Block and Widget Block
 // ============================================================================
-// Opening tag: <tagname or <$widget
-const openTagRe = /^(\s*)<([a-zA-Z$][a-zA-Z0-9\-]*)([^>]*?)(\/?)>/;
+/**
+ * Parse widget/HTML tag attributes
+ * Supports:
+ * - name="value" or name='value' (quoted string)
+ * - name=value (unquoted, no spaces)
+ * - name={{reference}} (indirect/transclusion)
+ * - name={{{filter}}} (filtered)
+ * - name=<<macro>> (macro call)
+ * - name=`substituted` or name=```substituted``` (substituted string)
+ * - name (boolean, no value)
+ */
+function parseAttributes(attrString, offset, isWidget) {
+    const elements = [];
+    let pos = 0;
+    const len = attrString.length;
+    while (pos < len) {
+        // Skip whitespace
+        while (pos < len && /\s/.test(attrString[pos]))
+            pos++;
+        if (pos >= len)
+            break;
+        // Parse attribute name (allows letters, numbers, hyphens, underscores, colons, dots, $)
+        const nameStart = pos;
+        while (pos < len && /[a-zA-Z0-9\-_:.$]/.test(attrString[pos]))
+            pos++;
+        if (pos === nameStart) {
+            // Not a valid attribute name, skip character
+            pos++;
+            continue;
+        }
+        const nameEnd = pos;
+        // Check for = sign
+        while (pos < len && /\s/.test(attrString[pos]))
+            pos++;
+        if (pos >= len || attrString[pos] !== '=') {
+            // Boolean attribute (no value)
+            const attrChildren = [
+                elt(Type.AttributeName, offset + nameStart, offset + nameEnd)
+            ];
+            elements.push(elt(Type.Attribute, offset + nameStart, offset + nameEnd, attrChildren));
+            continue;
+        }
+        // Skip the =
+        pos++;
+        // Skip whitespace after =
+        while (pos < len && /\s/.test(attrString[pos]))
+            pos++;
+        if (pos >= len) {
+            // Attribute with = but no value
+            const attrChildren = [
+                elt(Type.AttributeName, offset + nameStart, offset + nameEnd)
+            ];
+            elements.push(elt(Type.Attribute, offset + nameStart, offset + pos, attrChildren));
+            continue;
+        }
+        const valueStart = pos;
+        let valueEnd = pos;
+        let valueType = Type.AttributeValue;
+        const ch = attrString[pos];
+        if (ch === '"' || ch === "'") {
+            // Quoted string: "value" or 'value'
+            const quote = ch;
+            pos++; // skip opening quote
+            while (pos < len && attrString[pos] !== quote) {
+                if (attrString[pos] === '\\' && pos + 1 < len)
+                    pos++; // skip escaped char
+                pos++;
+            }
+            if (pos < len)
+                pos++; // skip closing quote
+            valueEnd = pos;
+            valueType = Type.AttributeString;
+        }
+        else if (ch === '{') {
+            // Could be {{indirect}} or {{{filtered}}}
+            if (attrString.slice(pos, pos + 3) === '{{{') {
+                // Filtered: {{{filter}}}
+                const openMarkStart = pos;
+                pos += 3;
+                const filterStart = pos;
+                while (pos < len && attrString.slice(pos, pos + 3) !== '}}}')
+                    pos++;
+                const filterEnd = pos;
+                if (attrString.slice(pos, pos + 3) === '}}}')
+                    pos += 3;
+                valueEnd = pos;
+                valueType = Type.AttributeFiltered;
+                // Create child elements for filtered transclusion
+                const valueChildren = [
+                    elt(Type.FilteredTransclusionMark, offset + openMarkStart, offset + openMarkStart + 3),
+                    elt(Type.FilterExpression, offset + filterStart, offset + filterEnd),
+                    elt(Type.FilteredTransclusionMark, offset + filterEnd, offset + valueEnd)
+                ];
+                const attrChildren = [
+                    elt(Type.AttributeName, offset + nameStart, offset + nameEnd),
+                    elt(valueType, offset + valueStart, offset + valueEnd, valueChildren)
+                ];
+                elements.push(elt(Type.Attribute, offset + nameStart, offset + valueEnd, attrChildren));
+                continue;
+            }
+            else if (attrString.slice(pos, pos + 2) === '{{') {
+                // Indirect: {{reference}}
+                const openMarkStart = pos;
+                pos += 2;
+                const targetStart = pos;
+                while (pos < len && attrString.slice(pos, pos + 2) !== '}}')
+                    pos++;
+                const targetEnd = pos;
+                if (attrString.slice(pos, pos + 2) === '}}')
+                    pos += 2;
+                valueEnd = pos;
+                valueType = Type.AttributeIndirect;
+                // Create child elements for transclusion
+                const valueChildren = [
+                    elt(Type.TransclusionMark, offset + openMarkStart, offset + openMarkStart + 2),
+                    elt(Type.TransclusionTarget, offset + targetStart, offset + targetEnd),
+                    elt(Type.TransclusionMark, offset + targetEnd, offset + valueEnd)
+                ];
+                const attrChildren = [
+                    elt(Type.AttributeName, offset + nameStart, offset + nameEnd),
+                    elt(valueType, offset + valueStart, offset + valueEnd, valueChildren)
+                ];
+                elements.push(elt(Type.Attribute, offset + nameStart, offset + valueEnd, attrChildren));
+                continue;
+            }
+            else {
+                // Just a { character, treat as unquoted value
+                while (pos < len && !/[\s>]/.test(attrString[pos]))
+                    pos++;
+                valueEnd = pos;
+            }
+        }
+        else if (ch === '<' && attrString[pos + 1] === '<') {
+            // Macro: <<macroname params>>
+            const openMarkStart = pos;
+            pos += 2;
+            const macroContentStart = pos;
+            // Parse macro name
+            while (pos < len && /[a-zA-Z0-9\-_.$]/.test(attrString[pos]))
+                pos++;
+            const macroNameEnd = pos;
+            // Skip to end of macro
+            let depth = 1;
+            while (pos < len && depth > 0) {
+                if (attrString.slice(pos, pos + 2) === '<<') {
+                    depth++;
+                    pos += 2;
+                }
+                else if (attrString.slice(pos, pos + 2) === '>>') {
+                    depth--;
+                    if (depth === 0)
+                        break;
+                    pos += 2;
+                }
+                else {
+                    pos++;
+                }
+            }
+            const closeMarkStart = pos;
+            if (attrString.slice(pos, pos + 2) === '>>')
+                pos += 2;
+            valueEnd = pos;
+            valueType = Type.AttributeMacro;
+            // Create child elements for macro
+            const valueChildren = [
+                elt(Type.MacroCallMark, offset + openMarkStart, offset + openMarkStart + 2),
+                elt(Type.MacroName, offset + macroContentStart, offset + macroNameEnd),
+                elt(Type.MacroCallMark, offset + closeMarkStart, offset + valueEnd)
+            ];
+            const attrChildren = [
+                elt(Type.AttributeName, offset + nameStart, offset + nameEnd),
+                elt(valueType, offset + valueStart, offset + valueEnd, valueChildren)
+            ];
+            elements.push(elt(Type.Attribute, offset + nameStart, offset + valueEnd, attrChildren));
+            continue;
+        }
+        else if (ch === '`') {
+            // Substituted string: `value` or ```value```
+            if (attrString.slice(pos, pos + 3) === '```') {
+                pos += 3;
+                while (pos < len && attrString.slice(pos, pos + 3) !== '```')
+                    pos++;
+                if (attrString.slice(pos, pos + 3) === '```')
+                    pos += 3;
+            }
+            else {
+                pos++; // skip opening `
+                while (pos < len && attrString[pos] !== '`')
+                    pos++;
+                if (pos < len)
+                    pos++; // skip closing `
+            }
+            valueEnd = pos;
+            valueType = Type.AttributeSubstituted;
+        }
+        else {
+            // Unquoted value - read until whitespace or >
+            while (pos < len && !/[\s>\/]/.test(attrString[pos]))
+                pos++;
+            valueEnd = pos;
+            // Check if it looks like a number
+            const valueText = attrString.slice(valueStart, valueEnd);
+            if (/^-?\d+(\.\d+)?$/.test(valueText)) {
+                valueType = Type.AttributeNumber;
+            }
+            else {
+                valueType = Type.AttributeString;
+            }
+        }
+        const attrChildren = [
+            elt(Type.AttributeName, offset + nameStart, offset + nameEnd),
+            elt(valueType, offset + valueStart, offset + valueEnd)
+        ];
+        elements.push(elt(Type.Attribute, offset + nameStart, offset + valueEnd, attrChildren));
+    }
+    return elements;
+}
+// Opening tag start: <tagname or <$widget (may not have closing >)
+const openTagStartRe = /^(\s*)<([a-zA-Z$][a-zA-Z0-9\-]*)/;
 // Closing tag: </tagname> or </$widget>
 const closeTagRe = /^(\s*)<\/([a-zA-Z$][a-zA-Z0-9\-]*)>/;
 // Self-closing check
-const selfClosingRe = /\/>$/;
+const selfClosingRe = /\/>\s*$/;
 const HTMLBlock = {
     name: "HTMLBlock",
     parse(cx, line) {
         const text = line.text;
-        // Try closing tag first
+        // Try closing tag first (orphaned closing tag)
         const closeMatch = closeTagRe.exec(text);
         if (closeMatch) {
             const indent = closeMatch[1].length;
@@ -1850,49 +2244,208 @@ const HTMLBlock = {
             cx.addElement(elt(isWidget ? Type.WidgetEnd : Type.HTMLEndTag, start, start + text.length, children));
             return true;
         }
-        // Try opening tag
-        const openMatch = openTagRe.exec(text);
-        if (!openMatch)
+        // Check for opening tag start
+        const openStartMatch = openTagStartRe.exec(text);
+        if (!openStartMatch)
             return false;
-        const indent = openMatch[1].length;
-        const tagName = openMatch[2];
-        const attrs = openMatch[3];
-        const selfClose = openMatch[4] === "/";
+        const indent = openStartMatch[1].length;
+        const tagName = openStartMatch[2];
         const isWidget = tagName.startsWith("$");
         const start = cx.lineStart;
         const children = [];
         const tagStart = start + indent + 1; // After "<"
         children.push(elt(isWidget ? Type.WidgetName : Type.TagName, tagStart, tagStart + tagName.length));
-        // Parse attributes if present
-        if (attrs.trim()) {
-            const attrsStart = tagStart + tagName.length;
-            children.push(elt(Type.TagAttributes, attrsStart, attrsStart + attrs.length));
-        }
-        // Determine if this is a multi-line block
-        if (!selfClose && !selfClosingRe.test(text)) {
-            // Look for closing tag on same line
-            const closeOnSameLine = new RegExp(`</${tagName.replace(/\$/g, '\\$')}>`).exec(text);
-            if (!closeOnSameLine) {
-                // Multi-line: find the closing tag
-                const closeRe = new RegExp(`^\\s*</${tagName.replace(/\$/g, '\\$')}>`);
-                let blockEnd = start + text.length;
-                while (cx.nextLine()) {
-                    const lineText = cx.line.text;
-                    if (closeRe.test(lineText)) {
-                        // Add closing tag as child
-                        const closeIndent = lineText.match(/^\s*/)?.[0].length || 0;
-                        const closeTagStart = cx.lineStart + closeIndent + 2;
-                        children.push(elt(isWidget ? Type.WidgetName : Type.TagName, closeTagStart, closeTagStart + tagName.length));
-                        blockEnd = cx.lineStart + lineText.length;
-                        break;
+        let openingTagEnd;
+        let selfClose;
+        let attrsStart = tagStart + tagName.length;
+        let openingTagLineEnd; // Position after the line containing >
+        /**
+         * Find the first > or /> that closes the opening tag, properly handling
+         * > inside quoted strings, macros, transclusions, etc.
+         */
+        const findOpeningTagEnd = (text) => {
+            let pos = 0;
+            const len = text.length;
+            while (pos < len) {
+                const ch = text[pos];
+                if (ch === '>') {
+                    return { pos: pos + 1, selfClose: false };
+                }
+                if (ch === '/' && text[pos + 1] === '>') {
+                    return { pos: pos + 2, selfClose: true };
+                }
+                if (ch === '"' || ch === "'") {
+                    // Skip quoted string
+                    const quote = ch;
+                    pos++;
+                    while (pos < len && text[pos] !== quote) {
+                        if (text[pos] === '\\')
+                            pos++;
+                        pos++;
+                    }
+                    pos++;
+                }
+                else if (ch === '<' && text[pos + 1] === '<') {
+                    // Skip macro <<...>>
+                    pos += 2;
+                    let depth = 1;
+                    while (pos < len && depth > 0) {
+                        if (text[pos] === '<' && text[pos + 1] === '<') {
+                            depth++;
+                            pos += 2;
+                        }
+                        else if (text[pos] === '>' && text[pos + 1] === '>') {
+                            depth--;
+                            pos += 2;
+                        }
+                        else {
+                            pos++;
+                        }
                     }
                 }
-                cx.addElement(elt(isWidget ? Type.Widget : Type.HTMLBlock, start, blockEnd, children));
-                return true;
+                else if (ch === '{' && text[pos + 1] === '{' && text[pos + 2] === '{') {
+                    // Skip filtered {{{...}}}
+                    pos += 3;
+                    while (pos < len && !(text[pos] === '}' && text[pos + 1] === '}' && text[pos + 2] === '}'))
+                        pos++;
+                    pos += 3;
+                }
+                else if (ch === '{' && text[pos + 1] === '{') {
+                    // Skip indirect {{...}}
+                    pos += 2;
+                    while (pos < len && !(text[pos] === '}' && text[pos + 1] === '}'))
+                        pos++;
+                    pos += 2;
+                }
+                else if (ch === '`') {
+                    // Skip substituted string
+                    if (text.slice(pos, pos + 3) === '```') {
+                        pos += 3;
+                        while (pos < len && text.slice(pos, pos + 3) !== '```')
+                            pos++;
+                        pos += 3;
+                    }
+                    else {
+                        pos++;
+                        while (pos < len && text[pos] !== '`')
+                            pos++;
+                        pos++;
+                    }
+                }
+                else {
+                    pos++;
+                }
+            }
+            return null;
+        };
+        // Find the opening tag's closing > starting from after the tag name
+        const afterTagName = text.slice(indent + 1 + tagName.length);
+        let tagEndResult = findOpeningTagEnd(afterTagName);
+        let accumulatedText = afterTagName;
+        // If not found on current line, keep reading lines
+        while (!tagEndResult) {
+            if (!cx.nextLine())
+                break;
+            accumulatedText += '\n' + cx.line.text;
+            tagEndResult = findOpeningTagEnd(accumulatedText);
+        }
+        if (tagEndResult) {
+            selfClose = tagEndResult.selfClose;
+            openingTagEnd = start + indent + 1 + tagName.length + tagEndResult.pos;
+            openingTagLineEnd = cx.lineStart + cx.line.text.length;
+            // Extract attribute content (between tag name and closing >)
+            let attrContent = accumulatedText.slice(0, tagEndResult.pos - 1);
+            if (selfClose && attrContent.endsWith('/')) {
+                attrContent = attrContent.slice(0, -1);
+            }
+            if (attrContent.trim()) {
+                const attrElements = parseAttributes(attrContent, attrsStart);
+                children.push(...attrElements);
             }
         }
-        // Single line or self-closing
-        cx.addElement(elt(isWidget ? Type.Widget : Type.HTMLBlock, start, start + text.length, children));
+        else {
+            // No > found, treat as incomplete
+            selfClose = false;
+            openingTagEnd = cx.lineStart + cx.line.text.length;
+            openingTagLineEnd = openingTagEnd;
+        }
+        // Determine if this is a multi-line block with content
+        if (!selfClose) {
+            const openRe = new RegExp(`<${tagName.replace(/\$/g, '\\$')}(?:\\s|>|/>)`);
+            const closeRe = new RegExp(`</${tagName.replace(/\$/g, '\\$')}>`);
+            let blockEnd = openingTagLineEnd;
+            let foundClose = false;
+            // First, check if closing tag is on the same line after the opening tag
+            const restOfLine = cx.input.read(openingTagEnd, openingTagLineEnd);
+            const sameLineClose = closeRe.exec(restOfLine);
+            if (sameLineClose) {
+                // Closing tag on same line - check for nested tags in between
+                const beforeClose = restOfLine.slice(0, sameLineClose.index);
+                const openMatches = beforeClose.match(openRe) || [];
+                const closeMatches = beforeClose.match(new RegExp(closeRe.source, 'g')) || [];
+                // Simple case: no nested same-name tags between open and close
+                if (openMatches.length === closeMatches.length) {
+                    const contentStart = openingTagEnd;
+                    const contentEnd = openingTagEnd + sameLineClose.index;
+                    // Parse inline content between opening and closing tags
+                    if (contentEnd > contentStart) {
+                        const contentText = cx.input.read(contentStart, contentEnd);
+                        const inlineElements = cx.parser.parseInline(contentText, contentStart);
+                        children.push(...inlineElements);
+                    }
+                    // Add closing tag element
+                    const closeTagStart = openingTagEnd + sameLineClose.index + 2; // After </
+                    children.push(elt(isWidget ? Type.WidgetName : Type.TagName, closeTagStart, closeTagStart + tagName.length));
+                    blockEnd = openingTagEnd + sameLineClose.index + sameLineClose[0].length;
+                    foundClose = true;
+                }
+            }
+            if (!foundClose) {
+                // Multi-line content: find the closing tag on subsequent lines
+                // But first, there may be inline content on the same line as the opening tag
+                const sameLineContent = cx.input.read(openingTagEnd, openingTagLineEnd);
+                const blockContentStart = openingTagLineEnd + 1;
+                let contentEnd = blockContentStart;
+                let nestLevel = 1;
+                while (cx.nextLine()) {
+                    const lineText = cx.line.text;
+                    // Check for nested opening tags of the same name (complete tags only)
+                    const nestedOpen = openRe.exec(lineText);
+                    if (nestedOpen && !selfClosingRe.test(lineText)) {
+                        nestLevel++;
+                    }
+                    // Check for closing tag
+                    if (closeRe.test(lineText)) {
+                        nestLevel--;
+                        if (nestLevel === 0) {
+                            // Found our closing tag
+                            contentEnd = cx.lineStart - 1; // Before closing tag line (exclude newline)
+                            // First, parse any inline content on the same line as the opening tag
+                            if (sameLineContent.trim()) {
+                                const inlineElements = cx.parser.parseInline(sameLineContent, openingTagEnd);
+                                children.push(...inlineElements);
+                            }
+                            // Then parse block content between opening line and closing tag
+                            if (contentEnd > blockContentStart) {
+                                const contentElements = cx.parseContentRange(blockContentStart, contentEnd, false);
+                                children.push(...contentElements);
+                            }
+                            // Add closing tag element
+                            const closeIndent = lineText.match(/^\s*/)?.[0].length || 0;
+                            const closeTagStart = cx.lineStart + closeIndent + 2;
+                            children.push(elt(isWidget ? Type.WidgetName : Type.TagName, closeTagStart, closeTagStart + tagName.length));
+                            blockEnd = cx.lineStart + lineText.length;
+                            foundClose = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            cx.addElement(elt(isWidget ? Type.Widget : Type.HTMLBlock, start, blockEnd, children));
+            return true;
+        }
+        // Self-closing tag
+        cx.addElement(elt(isWidget ? Type.Widget : Type.HTMLBlock, start, openingTagEnd, children));
         return true;
     }
 };
@@ -1904,6 +2457,7 @@ const DefaultBlockParsers = [
     HorizontalRule,
     FencedCode,
     TypedBlock,
+    MultiLineBlockQuote,
     List,
     Table,
     CommentBlock,
@@ -2272,9 +2826,292 @@ const MacroCall = {
     }
 };
 // ============================================================================
+// Inline Attribute Parsing Helper
+// ============================================================================
+/**
+ * Find the end of an inline tag, properly handling > inside attribute values
+ * Returns the position after the closing > or -1 if not found
+ */
+function findTagEnd(text) {
+    let pos = 0;
+    const len = text.length;
+    while (pos < len) {
+        const ch = text[pos];
+        if (ch === '>') {
+            return { end: pos + 1, selfClose: false };
+        }
+        if (ch === '/' && text[pos + 1] === '>') {
+            return { end: pos + 2, selfClose: true };
+        }
+        if (ch === '"' || ch === "'") {
+            // Skip quoted string
+            const quote = ch;
+            pos++;
+            while (pos < len && text[pos] !== quote) {
+                if (text[pos] === '\\')
+                    pos++; // skip escaped char
+                pos++;
+            }
+            pos++; // skip closing quote
+        }
+        else if (ch === '<' && text[pos + 1] === '<') {
+            // Skip macro <<...>>
+            pos += 2;
+            let depth = 1;
+            while (pos < len && depth > 0) {
+                if (text[pos] === '<' && text[pos + 1] === '<') {
+                    depth++;
+                    pos += 2;
+                }
+                else if (text[pos] === '>' && text[pos + 1] === '>') {
+                    depth--;
+                    pos += 2;
+                }
+                else {
+                    pos++;
+                }
+            }
+        }
+        else if (ch === '{' && text[pos + 1] === '{' && text[pos + 2] === '{') {
+            // Skip filtered {{{...}}}
+            pos += 3;
+            while (pos < len && !(text[pos] === '}' && text[pos + 1] === '}' && text[pos + 2] === '}'))
+                pos++;
+            pos += 3;
+        }
+        else if (ch === '{' && text[pos + 1] === '{') {
+            // Skip indirect {{...}}
+            pos += 2;
+            while (pos < len && !(text[pos] === '}' && text[pos + 1] === '}'))
+                pos++;
+            pos += 2;
+        }
+        else if (ch === '`') {
+            // Skip substituted string
+            if (text.slice(pos, pos + 3) === '```') {
+                pos += 3;
+                while (pos < len && text.slice(pos, pos + 3) !== '```')
+                    pos++;
+                pos += 3;
+            }
+            else {
+                pos++;
+                while (pos < len && text[pos] !== '`')
+                    pos++;
+                pos++;
+            }
+        }
+        else {
+            pos++;
+        }
+    }
+    return null;
+}
+/**
+ * Parse inline widget/HTML tag attributes
+ */
+function parseInlineAttributes(cx, attrString, offset) {
+    const elements = [];
+    let pos = 0;
+    const len = attrString.length;
+    while (pos < len) {
+        // Skip whitespace
+        while (pos < len && /\s/.test(attrString[pos]))
+            pos++;
+        if (pos >= len)
+            break;
+        // Parse attribute name
+        const nameStart = pos;
+        while (pos < len && /[a-zA-Z0-9\-_:.$]/.test(attrString[pos]))
+            pos++;
+        if (pos === nameStart) {
+            pos++;
+            continue;
+        }
+        const nameEnd = pos;
+        // Check for = sign
+        while (pos < len && /\s/.test(attrString[pos]))
+            pos++;
+        if (pos >= len || attrString[pos] !== '=') {
+            // Boolean attribute
+            const attrChildren = [
+                cx.elt(Type.AttributeName, offset + nameStart, offset + nameEnd)
+            ];
+            elements.push(cx.elt(Type.Attribute, offset + nameStart, offset + nameEnd, attrChildren));
+            continue;
+        }
+        // Skip the =
+        pos++;
+        // Skip whitespace after =
+        while (pos < len && /\s/.test(attrString[pos]))
+            pos++;
+        if (pos >= len) {
+            const attrChildren = [
+                cx.elt(Type.AttributeName, offset + nameStart, offset + nameEnd)
+            ];
+            elements.push(cx.elt(Type.Attribute, offset + nameStart, offset + pos, attrChildren));
+            continue;
+        }
+        const valueStart = pos;
+        let valueEnd = pos;
+        let valueType = Type.AttributeValue;
+        const ch = attrString[pos];
+        if (ch === '"' || ch === "'") {
+            const quote = ch;
+            pos++;
+            while (pos < len && attrString[pos] !== quote) {
+                if (attrString[pos] === '\\' && pos + 1 < len)
+                    pos++;
+                pos++;
+            }
+            if (pos < len)
+                pos++;
+            valueEnd = pos;
+            valueType = Type.AttributeString;
+        }
+        else if (ch === '{') {
+            if (attrString.slice(pos, pos + 3) === '{{{') {
+                // Filtered: {{{filter}}}
+                const openMarkStart = pos;
+                pos += 3;
+                const filterStart = pos;
+                while (pos < len && attrString.slice(pos, pos + 3) !== '}}}')
+                    pos++;
+                const filterEnd = pos;
+                if (attrString.slice(pos, pos + 3) === '}}}')
+                    pos += 3;
+                valueEnd = pos;
+                valueType = Type.AttributeFiltered;
+                // Create child elements for filtered transclusion
+                const valueChildren = [
+                    cx.elt(Type.FilteredTransclusionMark, offset + openMarkStart, offset + openMarkStart + 3),
+                    cx.elt(Type.FilterExpression, offset + filterStart, offset + filterEnd),
+                    cx.elt(Type.FilteredTransclusionMark, offset + filterEnd, offset + valueEnd)
+                ];
+                const attrChildren = [
+                    cx.elt(Type.AttributeName, offset + nameStart, offset + nameEnd),
+                    cx.elt(valueType, offset + valueStart, offset + valueEnd, valueChildren)
+                ];
+                elements.push(cx.elt(Type.Attribute, offset + nameStart, offset + valueEnd, attrChildren));
+                continue;
+            }
+            else if (attrString.slice(pos, pos + 2) === '{{') {
+                // Indirect: {{reference}}
+                const openMarkStart = pos;
+                pos += 2;
+                const targetStart = pos;
+                while (pos < len && attrString.slice(pos, pos + 2) !== '}}')
+                    pos++;
+                const targetEnd = pos;
+                if (attrString.slice(pos, pos + 2) === '}}')
+                    pos += 2;
+                valueEnd = pos;
+                valueType = Type.AttributeIndirect;
+                // Create child elements for transclusion
+                const valueChildren = [
+                    cx.elt(Type.TransclusionMark, offset + openMarkStart, offset + openMarkStart + 2),
+                    cx.elt(Type.TransclusionTarget, offset + targetStart, offset + targetEnd),
+                    cx.elt(Type.TransclusionMark, offset + targetEnd, offset + valueEnd)
+                ];
+                const attrChildren = [
+                    cx.elt(Type.AttributeName, offset + nameStart, offset + nameEnd),
+                    cx.elt(valueType, offset + valueStart, offset + valueEnd, valueChildren)
+                ];
+                elements.push(cx.elt(Type.Attribute, offset + nameStart, offset + valueEnd, attrChildren));
+                continue;
+            }
+            else {
+                while (pos < len && !/[\s>]/.test(attrString[pos]))
+                    pos++;
+                valueEnd = pos;
+            }
+        }
+        else if (ch === '<' && attrString[pos + 1] === '<') {
+            // Macro: <<macroname params>>
+            const openMarkStart = pos;
+            pos += 2;
+            const macroContentStart = pos;
+            // Parse macro name
+            while (pos < len && /[a-zA-Z0-9\-_.$]/.test(attrString[pos]))
+                pos++;
+            const macroNameEnd = pos;
+            // Skip to end of macro
+            let depth = 1;
+            while (pos < len && depth > 0) {
+                if (attrString.slice(pos, pos + 2) === '<<') {
+                    depth++;
+                    pos += 2;
+                }
+                else if (attrString.slice(pos, pos + 2) === '>>') {
+                    depth--;
+                    if (depth === 0)
+                        break;
+                    pos += 2;
+                }
+                else {
+                    pos++;
+                }
+            }
+            const closeMarkStart = pos;
+            if (attrString.slice(pos, pos + 2) === '>>')
+                pos += 2;
+            valueEnd = pos;
+            valueType = Type.AttributeMacro;
+            // Create child elements for macro
+            const valueChildren = [
+                cx.elt(Type.MacroCallMark, offset + openMarkStart, offset + openMarkStart + 2),
+                cx.elt(Type.MacroName, offset + macroContentStart, offset + macroNameEnd),
+                cx.elt(Type.MacroCallMark, offset + closeMarkStart, offset + valueEnd)
+            ];
+            const attrChildren = [
+                cx.elt(Type.AttributeName, offset + nameStart, offset + nameEnd),
+                cx.elt(valueType, offset + valueStart, offset + valueEnd, valueChildren)
+            ];
+            elements.push(cx.elt(Type.Attribute, offset + nameStart, offset + valueEnd, attrChildren));
+            continue;
+        }
+        else if (ch === '`') {
+            if (attrString.slice(pos, pos + 3) === '```') {
+                pos += 3;
+                while (pos < len && attrString.slice(pos, pos + 3) !== '```')
+                    pos++;
+                if (attrString.slice(pos, pos + 3) === '```')
+                    pos += 3;
+            }
+            else {
+                pos++;
+                while (pos < len && attrString[pos] !== '`')
+                    pos++;
+                if (pos < len)
+                    pos++;
+            }
+            valueEnd = pos;
+            valueType = Type.AttributeSubstituted;
+        }
+        else {
+            while (pos < len && !/[\s>\/]/.test(attrString[pos]))
+                pos++;
+            valueEnd = pos;
+            const valueText = attrString.slice(valueStart, valueEnd);
+            if (/^-?\d+(\.\d+)?$/.test(valueText)) {
+                valueType = Type.AttributeNumber;
+            }
+            else {
+                valueType = Type.AttributeString;
+            }
+        }
+        const attrChildren = [
+            cx.elt(Type.AttributeName, offset + nameStart, offset + nameEnd),
+            cx.elt(valueType, offset + valueStart, offset + valueEnd)
+        ];
+        elements.push(cx.elt(Type.Attribute, offset + nameStart, offset + valueEnd, attrChildren));
+    }
+    return elements;
+}
+// ============================================================================
 // Widget Parser (<$widget/>)
 // ============================================================================
-const widgetRe = /^<(\$[a-zA-Z0-9\-\.]+)([^>]*?)(\/)?\s*>/;
+const widgetStartRe = /^<(\$[a-zA-Z0-9\-\.]+)/;
 const Widget = {
     name: "Widget",
     parse(cx, next, pos) {
@@ -2283,18 +3120,26 @@ const Widget = {
         if (cx.char(pos + 1) !== Ch.Dollar)
             return -1;
         const text = cx.slice(pos, cx.end);
-        const match = widgetRe.exec(text);
-        if (!match)
+        const startMatch = widgetStartRe.exec(text);
+        if (!startMatch)
             return -1;
-        const end = pos + match[0].length;
-        const name = match[1];
-        match[2];
-        const selfClosing = match[3];
+        const name = startMatch[1];
+        const afterName = startMatch[0].length;
+        // Find the proper end of the tag (handling > inside attribute values)
+        const tagResult = findTagEnd(text.slice(afterName));
+        if (!tagResult)
+            return -1;
+        const end = pos + afterName + tagResult.end;
+        const attrString = text.slice(afterName, afterName + tagResult.end - (tagResult.selfClose ? 2 : 1));
         const children = [
             cx.elt(Type.WidgetName, pos + 1, pos + 1 + name.length),
         ];
-        // TODO: Parse attributes
-        if (selfClosing) {
+        // Parse attributes
+        if (attrString.trim()) {
+            const attrElements = parseInlineAttributes(cx, attrString, pos + afterName);
+            children.push(...attrElements);
+        }
+        if (tagResult.selfClose) {
             children.push(cx.elt(Type.SelfClosingMarker, end - 2, end - 1));
         }
         return cx.addElement(cx.elt(Type.InlineWidget, pos, end, children));
@@ -2303,7 +3148,7 @@ const Widget = {
 // ============================================================================
 // HTML Tag Parser (<tag/>)
 // ============================================================================
-const htmlTagRe = /^<([a-zA-Z][a-zA-Z0-9\-]*)([^>]*?)(\/)?\s*>/;
+const htmlTagStartRe = /^<([a-zA-Z][a-zA-Z0-9\-]*)/;
 const HTMLTag = {
     name: "HTMLTag",
     parse(cx, next, pos) {
@@ -2313,14 +3158,28 @@ const HTMLTag = {
         if (cx.char(pos + 1) === Ch.Dollar)
             return -1;
         const text = cx.slice(pos, cx.end);
-        const match = htmlTagRe.exec(text);
-        if (!match)
+        const startMatch = htmlTagStartRe.exec(text);
+        if (!startMatch)
             return -1;
-        const end = pos + match[0].length;
-        const name = match[1];
+        const name = startMatch[1];
+        const afterName = startMatch[0].length;
+        // Find the proper end of the tag (handling > inside attribute values)
+        const tagResult = findTagEnd(text.slice(afterName));
+        if (!tagResult)
+            return -1;
+        const end = pos + afterName + tagResult.end;
+        const attrString = text.slice(afterName, afterName + tagResult.end - (tagResult.selfClose ? 2 : 1));
         const children = [
             cx.elt(Type.TagName, pos + 1, pos + 1 + name.length),
         ];
+        // Parse attributes
+        if (attrString.trim()) {
+            const attrElements = parseInlineAttributes(cx, attrString, pos + afterName);
+            children.push(...attrElements);
+        }
+        if (tagResult.selfClose) {
+            children.push(cx.elt(Type.SelfClosingMarker, end - 2, end - 1));
+        }
         return cx.addElement(cx.elt(Type.HTMLTag, pos, end, children));
     }
 };
@@ -2502,11 +3361,12 @@ const defaultStyleTags = highlight.styleTags({
     TagName: highlight.tags.tagName,
     Attribute: highlight.tags.attributeName,
     AttributeName: highlight.tags.attributeName,
-    "AttributeValue AttributeString AttributeNumber": highlight.tags.attributeValue,
-    AttributeIndirect: highlight.tags.special(highlight.tags.attributeValue),
-    AttributeFiltered: highlight.tags.special(highlight.tags.attributeValue),
-    AttributeMacro: highlight.tags.special(highlight.tags.attributeValue),
-    AttributeSubstituted: highlight.tags.special(highlight.tags.attributeValue),
+    "AttributeValue AttributeString": highlight.tags.attributeValue,
+    AttributeNumber: highlight.tags.number,
+    AttributeIndirect: highlight.tags.special(highlight.tags.link), // Same as Transclusion
+    AttributeFiltered: highlight.tags.special(highlight.tags.link), // Same as FilteredTransclusion
+    AttributeMacro: highlight.tags.macroName, // Same as MacroCall
+    AttributeSubstituted: highlight.tags.special(highlight.tags.string), // Substituted strings
     SelfClosingMarker: highlight.tags.processingInstruction,
     // Lists
     "BulletList OrderedList DefinitionList": highlight.tags.list,

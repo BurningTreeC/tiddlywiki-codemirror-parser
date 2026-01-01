@@ -212,6 +212,22 @@ function getWidgetNames(): string[] {
 }
 
 /**
+ * Get filter operator names for autocompletion
+ */
+function getFilterOperators(): string[] {
+  if (typeof $tw === "undefined" || !$tw.wiki) return []
+  try {
+    // Filter operators are registered in $tw.wiki.filterOperators
+    if ($tw.wiki.filterOperators) {
+      return Object.keys($tw.wiki.filterOperators).sort()
+    }
+    return []
+  } catch (e) {
+    return []
+  }
+}
+
+/**
  * Build language support with options from context
  */
 function buildLanguageSupport(context: CM6PluginContext): Extension {
@@ -223,9 +239,12 @@ function buildLanguageSupport(context: CM6PluginContext): Extension {
     completeWidgets: options.completeWidgets !== false,
     completeMacros: options.completeMacros !== false,
     completeTiddlers: options.completeTiddlers !== false,
+    completeFilterOperators: options.completeFilterOperators !== false,
+    completeFilterRunPrefixes: options.completeFilterRunPrefixes !== false,
     getTiddlerTitles,
     getMacroNames,
-    getWidgetNames
+    getWidgetNames,
+    getFilterOperators
   })
 }
 

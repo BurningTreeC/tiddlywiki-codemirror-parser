@@ -208,22 +208,74 @@ export const Subscript: InlineParser = {
 }
 
 // ============================================================================
-// Highlight Parser (@@)
+// Highlight/Styled Parser (@@.className content@@ or @@color:red;content@@)
 // ============================================================================
-
-const HighlightDelim: DelimiterType = { resolve: "Highlight", mark: "HighlightMark" }
 
 export const Highlight: InlineParser = {
   name: "Highlight",
   parse(cx: InlineContext, next: number, pos: number): number {
     if (next !== Ch.At || cx.char(pos + 1) !== Ch.At) return -1
 
-    const before = cx.slice(pos - 1, pos)
-    const after = cx.slice(pos + 2, pos + 3)
-    const sBefore = /\s|^$/.test(before)
-    const sAfter = /\s|^$/.test(after)
+    const text = cx.slice(pos, cx.end)
 
-    return cx.addDelimiter(HighlightDelim, pos, pos + 2, !sAfter, !sBefore)
+    // Find closing @@
+    let closePos = -1
+    for (let i = 2; i < text.length - 1; i++) {
+      if (text[i] === '@' && text[i + 1] === '@') {
+        closePos = i
+        break
+      }
+    }
+    if (closePos === -1) return -1
+
+    const end = pos + closePos + 2
+    const content = text.slice(2, closePos)
+
+    const children: Element[] = [
+      cx.elt(Type.HighlightMark, pos, pos + 2),  // Opening @@
+    ]
+
+    // Check for .className or CSS styles at the start
+    let contentStart = 0
+    let hasClasses = false
+
+    // Parse .className(s)
+    while (contentStart < content.length && content[contentStart] === '.') {
+      hasClasses = true
+      const classStart = contentStart
+      contentStart++ // skip .
+      const classNameStart = contentStart
+      while (contentStart < content.length && /[a-zA-Z0-9_\-]/.test(content[contentStart])) {
+        contentStart++
+      }
+      if (contentStart > classNameStart) {
+        children.push(cx.elt(Type.StyledBlockMark, pos + 2 + classStart, pos + 2 + classStart + 1))
+        children.push(cx.elt(Type.StyledBlockClass, pos + 2 + classNameStart, pos + 2 + contentStart))
+      }
+    }
+
+    // Check for CSS styles (property:value;)
+    if (!hasClasses && content.includes(':') && content.includes(';')) {
+      const styleEnd = content.indexOf(';') + 1
+      // The style part is implicitly included in Highlight
+      contentStart = styleEnd
+    }
+
+    // Skip leading space after classes/styles
+    if (contentStart < content.length && /\s/.test(content[contentStart])) {
+      contentStart++
+    }
+
+    // The rest is content - parse it as inline
+    if (contentStart < closePos) {
+      const innerContent = content.slice(contentStart)
+      const innerElements = cx.parser.parseInline(innerContent, pos + 2 + contentStart)
+      children.push(...innerElements)
+    }
+
+    children.push(cx.elt(Type.HighlightMark, end - 2, end))  // Closing @@
+
+    return cx.addElement(cx.elt(Type.Highlight, pos, end, children))
   }
 }
 
@@ -338,6 +390,43 @@ export const ImageLink: InlineParser = {
 
 const transclusionRe = /^\{\{([^{}|]*?)(?:\|\|([^{}|]+?))?(?:\|([^{}]+?))?\}\}/
 
+/**
+ * Parse transclusion target details: tiddler!!field or tiddler##index
+ */
+function parseTransclusionTarget(cx: InlineContext, target: string, offset: number): Element[] {
+  const children: Element[] = []
+
+  // Check for !!field
+  const fieldIdx = target.indexOf("!!")
+  // Check for ##index
+  const indexIdx = target.indexOf("##")
+
+  if (fieldIdx !== -1 && (indexIdx === -1 || fieldIdx < indexIdx)) {
+    // Has field reference
+    const tiddlerPart = target.slice(0, fieldIdx)
+    const fieldPart = target.slice(fieldIdx + 2)
+
+    if (tiddlerPart) {
+      children.push(cx.elt(Type.TransclusionTarget, offset, offset + tiddlerPart.length))
+    }
+    children.push(cx.elt(Type.TransclusionField, offset + fieldIdx, offset + target.length))
+  } else if (indexIdx !== -1) {
+    // Has index reference
+    const tiddlerPart = target.slice(0, indexIdx)
+    const indexPart = target.slice(indexIdx + 2)
+
+    if (tiddlerPart) {
+      children.push(cx.elt(Type.TransclusionTarget, offset, offset + tiddlerPart.length))
+    }
+    children.push(cx.elt(Type.TransclusionIndex, offset + indexIdx, offset + target.length))
+  } else {
+    // Just a tiddler reference
+    children.push(cx.elt(Type.TransclusionTarget, offset, offset + target.length))
+  }
+
+  return children
+}
+
 export const Transclusion: InlineParser = {
   name: "Transclusion",
   parse(cx: InlineContext, next: number, pos: number): number {
@@ -355,8 +444,11 @@ export const Transclusion: InlineParser = {
 
     const children: Element[] = [
       cx.elt(Type.TransclusionMark, pos, pos + 2),
-      cx.elt(Type.TransclusionTarget, pos + 2, pos + 2 + target.length),
     ]
+
+    // Parse target details (tiddler!!field or tiddler##index)
+    const targetChildren = parseTransclusionTarget(cx, target, pos + 2)
+    children.push(...targetChildren)
 
     if (template) {
       const templateStart = pos + 2 + target.length + 2
@@ -370,10 +462,127 @@ export const Transclusion: InlineParser = {
 }
 
 // ============================================================================
-// Filtered Transclusion Parser ({{{filter}}})
+// Filter Expression Parser Helper
 // ============================================================================
 
-const filteredRe = /^\{\{\{([^{}]*?)\}\}\}(?:\|\|([^{}]+?))?/
+/**
+ * Parse filter expression content into detailed elements
+ * Handles: [operator[operand]], [operator<variable>], [operator{textref}]
+ * Also handles chained operators like [<var>operator{ref}]
+ */
+function parseFilterExpression(cx: InlineContext, filterContent: string, offset: number): Element[] {
+  const elements: Element[] = []
+  let pos = 0
+  const len = filterContent.length
+
+  while (pos < len) {
+    const ch = filterContent[pos]
+
+    // Skip whitespace
+    if (/\s/.test(ch)) {
+      pos++
+      continue
+    }
+
+    // Filter step: [operators...]
+    if (ch === '[') {
+      const stepStart = pos
+      pos++ // skip [
+
+      // Parse operators within this step (can be chained)
+      const stepChildren: Element[] = []
+
+      while (pos < len && filterContent[pos] !== ']') {
+        // Check for negation
+        if (filterContent[pos] === '!') {
+          pos++
+        }
+
+        // Check for operand-only (title selection): [literal], <variable>, {textref}
+        const operandCh = filterContent[pos]
+
+        if (operandCh === '[') {
+          // Literal operand: [value]
+          pos++
+          const operandStart = pos
+          let depth = 1
+          while (pos < len && depth > 0) {
+            if (filterContent[pos] === '[') depth++
+            else if (filterContent[pos] === ']') depth--
+            if (depth > 0) pos++
+          }
+          stepChildren.push(cx.elt(Type.FilterOperand, offset + operandStart, offset + pos))
+          if (pos < len && filterContent[pos] === ']') pos++
+        } else if (operandCh === '<') {
+          // Variable: <varname>
+          pos++
+          const operandStart = pos
+          while (pos < len && filterContent[pos] !== '>') pos++
+          stepChildren.push(cx.elt(Type.FilterVariable, offset + operandStart, offset + pos))
+          if (pos < len) pos++
+        } else if (operandCh === '{') {
+          // Text reference: {textref}
+          pos++
+          const operandStart = pos
+          while (pos < len && filterContent[pos] !== '}') pos++
+          stepChildren.push(cx.elt(Type.FilterTextRef, offset + operandStart, offset + pos))
+          if (pos < len) pos++
+        } else if (operandCh === '/') {
+          // Regexp: /regexp/flags
+          pos++
+          const operandStart = pos
+          while (pos < len && filterContent[pos] !== '/') {
+            if (filterContent[pos] === '\\') pos++
+            pos++
+          }
+          stepChildren.push(cx.elt(Type.FilterRegexp, offset + operandStart, offset + pos))
+          if (pos < len) pos++
+          while (pos < len && /[gimsuy]/.test(filterContent[pos])) pos++
+        } else if (/[a-zA-Z]/.test(operandCh)) {
+          // Operator name (and optional :suffix)
+          const opStart = pos
+          while (pos < len && /[a-zA-Z0-9\-_:!]/.test(filterContent[pos])) pos++
+          stepChildren.push(cx.elt(Type.FilterOperatorName, offset + opStart, offset + pos))
+        } else {
+          // Unknown character, skip
+          pos++
+        }
+      }
+
+      // Skip closing ]
+      if (pos < len && filterContent[pos] === ']') pos++
+
+      const stepEnd = pos
+      elements.push(cx.elt(Type.FilterOperator, offset + stepStart, offset + stepEnd, stepChildren))
+      continue
+    }
+
+    // Standalone title: [[Title]]
+    if (ch === '[' && filterContent[pos + 1] === '[') {
+      const start = pos
+      pos += 2
+      while (pos < len && !(filterContent[pos] === ']' && filterContent[pos + 1] === ']')) pos++
+      pos += 2
+      elements.push(cx.elt(Type.FilterOperand, offset + start, offset + pos))
+      continue
+    }
+
+    // Run prefix: + - ~ :prefix
+    if (ch === '+' || ch === '-' || ch === '~' || ch === ':') {
+      pos++
+      while (pos < len && /[a-zA-Z]/.test(filterContent[pos])) pos++
+      continue
+    }
+
+    pos++
+  }
+
+  return elements
+}
+
+// ============================================================================
+// Filtered Transclusion Parser ({{{filter}}})
+// ============================================================================
 
 export const FilteredTransclusion: InlineParser = {
   name: "FilteredTransclusion",
@@ -381,21 +590,41 @@ export const FilteredTransclusion: InlineParser = {
     if (next !== Ch.LeftBrace || cx.char(pos + 1) !== Ch.LeftBrace || cx.char(pos + 2) !== Ch.LeftBrace) return -1
 
     const text = cx.slice(pos, cx.end)
-    const match = filteredRe.exec(text)
-    if (!match) return -1
 
-    const end = pos + match[0].length
-    const filter = match[1]
-    const template = match[2]
+    // Find closing }}} - need to handle nested braces properly
+    let filterEnd = -1
+    for (let i = 3; i < text.length - 2; i++) {
+      if (text[i] === '}' && text[i + 1] === '}' && text[i + 2] === '}') {
+        filterEnd = i
+        break
+      }
+    }
+    if (filterEnd === -1) return -1
+
+    const filter = text.slice(3, filterEnd)
+    let end = pos + filterEnd + 3
+
+    // Check for template
+    let template = ""
+    if (text.slice(filterEnd + 3, filterEnd + 5) === "||") {
+      const templateStart = filterEnd + 5
+      let templateEnd = templateStart
+      while (templateEnd < text.length && !/[\s}]/.test(text[templateEnd])) templateEnd++
+      template = text.slice(templateStart, templateEnd)
+      end = pos + templateEnd
+    }
+
+    // Parse filter expression details
+    const filterChildren = parseFilterExpression(cx, filter, pos + 3)
 
     const children: Element[] = [
       cx.elt(Type.FilteredTransclusionMark, pos, pos + 3),
-      cx.elt(Type.FilterExpression, pos + 3, pos + 3 + filter.length),
-      cx.elt(Type.FilteredTransclusionMark, pos + 3 + filter.length, pos + 6 + filter.length),
+      cx.elt(Type.FilterExpression, pos + 3, pos + 3 + filter.length, filterChildren),
+      cx.elt(Type.FilteredTransclusionMark, pos + 3 + filter.length, pos + filterEnd + 3),
     ]
 
     if (template) {
-      children.push(cx.elt(Type.TransclusionTemplate, pos + 8 + filter.length, end))
+      children.push(cx.elt(Type.TransclusionTemplate, pos + filterEnd + 5, end))
     }
 
     return cx.addElement(cx.elt(Type.FilteredTransclusion, pos, end, children))
@@ -406,7 +635,101 @@ export const FilteredTransclusion: InlineParser = {
 // Macro Call Parser (<<macro params>>)
 // ============================================================================
 
-const macroRe = /^<<([^\s>]+)([^>]*)>>/
+/**
+ * Parse macro parameters into individual MacroParam elements
+ * Handles: name:"value", name:value, "value", value
+ */
+function parseMacroParams(cx: InlineContext, paramsStr: string, offset: number): Element[] {
+  const elements: Element[] = []
+  let pos = 0
+  const len = paramsStr.length
+
+  while (pos < len) {
+    // Skip whitespace
+    while (pos < len && /\s/.test(paramsStr[pos])) pos++
+    if (pos >= len) break
+
+    const paramStart = pos
+
+    // Check if it's a named parameter (name:value)
+    let nameEnd = pos
+    while (nameEnd < len && /[a-zA-Z0-9\-_]/.test(paramsStr[nameEnd])) nameEnd++
+
+    if (nameEnd > pos && paramsStr[nameEnd] === ':') {
+      // Named parameter
+      const nameStart = pos
+      pos = nameEnd + 1 // skip the :
+
+      // Parse value
+      const valueStart = pos
+      let valueEnd = pos
+
+      if (paramsStr[pos] === '"' || paramsStr[pos] === "'") {
+        // Quoted value
+        const quote = paramsStr[pos]
+        pos++
+        while (pos < len && paramsStr[pos] !== quote) {
+          if (paramsStr[pos] === '\\') pos++
+          pos++
+        }
+        if (pos < len) pos++
+        valueEnd = pos
+      } else if (paramsStr.slice(pos, pos + 3) === '[[[') {
+        // Triple bracket: [[[value]]]
+        pos += 3
+        while (pos < len && paramsStr.slice(pos, pos + 3) !== ']]]') pos++
+        pos += 3
+        valueEnd = pos
+      } else if (paramsStr.slice(pos, pos + 2) === '[[') {
+        // Double bracket: [[value]]
+        pos += 2
+        while (pos < len && paramsStr.slice(pos, pos + 2) !== ']]') pos++
+        pos += 2
+        valueEnd = pos
+      } else {
+        // Unquoted value
+        while (pos < len && !/[\s>]/.test(paramsStr[pos])) pos++
+        valueEnd = pos
+      }
+
+      const paramChildren: Element[] = [
+        cx.elt(Type.MacroParamName, offset + nameStart, offset + nameEnd),
+        cx.elt(Type.MacroParamValue, offset + valueStart, offset + valueEnd)
+      ]
+      elements.push(cx.elt(Type.MacroParam, offset + paramStart, offset + valueEnd, paramChildren))
+    } else {
+      // Positional parameter (just a value)
+      const valueStart = pos
+
+      if (paramsStr[pos] === '"' || paramsStr[pos] === "'") {
+        const quote = paramsStr[pos]
+        pos++
+        while (pos < len && paramsStr[pos] !== quote) {
+          if (paramsStr[pos] === '\\') pos++
+          pos++
+        }
+        if (pos < len) pos++
+      } else if (paramsStr.slice(pos, pos + 3) === '[[[') {
+        pos += 3
+        while (pos < len && paramsStr.slice(pos, pos + 3) !== ']]]') pos++
+        pos += 3
+      } else if (paramsStr.slice(pos, pos + 2) === '[[') {
+        pos += 2
+        while (pos < len && paramsStr.slice(pos, pos + 2) !== ']]') pos++
+        pos += 2
+      } else {
+        while (pos < len && !/[\s>]/.test(paramsStr[pos])) pos++
+      }
+
+      const paramChildren: Element[] = [
+        cx.elt(Type.MacroParamValue, offset + valueStart, offset + pos)
+      ]
+      elements.push(cx.elt(Type.MacroParam, offset + paramStart, offset + pos, paramChildren))
+    }
+  }
+
+  return elements
+}
 
 export const MacroCall: InlineParser = {
   name: "MacroCall",
@@ -414,20 +737,43 @@ export const MacroCall: InlineParser = {
     if (next !== Ch.LessThan || cx.char(pos + 1) !== Ch.LessThan) return -1
 
     const text = cx.slice(pos, cx.end)
-    const match = macroRe.exec(text)
-    if (!match) return -1
 
-    const end = pos + match[0].length
-    const name = match[1]
-    const params = match[2]
+    // Find closing >> handling nested macros
+    let closePos = -1
+    let depth = 1
+    for (let i = 2; i < text.length - 1; i++) {
+      if (text[i] === '<' && text[i + 1] === '<') {
+        depth++
+        i++
+      } else if (text[i] === '>' && text[i + 1] === '>') {
+        depth--
+        if (depth === 0) {
+          closePos = i
+          break
+        }
+        i++
+      }
+    }
+    if (closePos === -1) return -1
+
+    const end = pos + closePos + 2
+
+    // Parse macro name
+    let nameEnd = 2
+    while (nameEnd < closePos && !/\s/.test(text[nameEnd])) nameEnd++
+    const name = text.slice(2, nameEnd)
+    if (!name) return -1
 
     const children: Element[] = [
       cx.elt(Type.MacroCallMark, pos, pos + 2),
       cx.elt(Type.MacroName, pos + 2, pos + 2 + name.length),
     ]
 
-    if (params.trim()) {
-      children.push(cx.elt(Type.MacroParam, pos + 2 + name.length, end - 2))
+    // Parse parameters
+    const paramsStr = text.slice(nameEnd, closePos)
+    if (paramsStr.trim()) {
+      const paramElements = parseMacroParams(cx, paramsStr, pos + nameEnd)
+      children.push(...paramElements)
     }
 
     children.push(cx.elt(Type.MacroCallMark, end - 2, end))
@@ -437,10 +783,310 @@ export const MacroCall: InlineParser = {
 }
 
 // ============================================================================
+// Inline Attribute Parsing Helper
+// ============================================================================
+
+/**
+ * Find the end of an inline tag, properly handling > inside attribute values
+ * Returns the position after the closing > or -1 if not found
+ */
+function findTagEnd(text: string): { end: number, selfClose: boolean } | null {
+  let pos = 0
+  const len = text.length
+
+  while (pos < len) {
+    const ch = text[pos]
+
+    if (ch === '>') {
+      return { end: pos + 1, selfClose: false }
+    }
+    if (ch === '/' && text[pos + 1] === '>') {
+      return { end: pos + 2, selfClose: true }
+    }
+    if (ch === '"' || ch === "'") {
+      // Skip quoted string
+      const quote = ch
+      pos++
+      while (pos < len && text[pos] !== quote) {
+        if (text[pos] === '\\') pos++ // skip escaped char
+        pos++
+      }
+      pos++ // skip closing quote
+    } else if (ch === '<' && text[pos + 1] === '<') {
+      // Skip macro <<...>>
+      pos += 2
+      let depth = 1
+      while (pos < len && depth > 0) {
+        if (text[pos] === '<' && text[pos + 1] === '<') {
+          depth++
+          pos += 2
+        } else if (text[pos] === '>' && text[pos + 1] === '>') {
+          depth--
+          pos += 2
+        } else {
+          pos++
+        }
+      }
+    } else if (ch === '{' && text[pos + 1] === '{' && text[pos + 2] === '{') {
+      // Skip filtered {{{...}}}
+      pos += 3
+      while (pos < len && !(text[pos] === '}' && text[pos + 1] === '}' && text[pos + 2] === '}')) pos++
+      pos += 3
+    } else if (ch === '{' && text[pos + 1] === '{') {
+      // Skip indirect {{...}}
+      pos += 2
+      while (pos < len && !(text[pos] === '}' && text[pos + 1] === '}')) pos++
+      pos += 2
+    } else if (ch === '`') {
+      // Skip substituted string
+      if (text.slice(pos, pos + 3) === '```') {
+        pos += 3
+        while (pos < len && text.slice(pos, pos + 3) !== '```') pos++
+        pos += 3
+      } else {
+        pos++
+        while (pos < len && text[pos] !== '`') pos++
+        pos++
+      }
+    } else {
+      pos++
+    }
+  }
+  return null
+}
+
+/**
+ * Parse inline widget/HTML tag attributes
+ */
+function parseInlineAttributes(cx: InlineContext, attrString: string, offset: number): Element[] {
+  const elements: Element[] = []
+  let pos = 0
+  const len = attrString.length
+
+  while (pos < len) {
+    // Skip whitespace
+    while (pos < len && /\s/.test(attrString[pos])) pos++
+    if (pos >= len) break
+
+    // Parse attribute name
+    const nameStart = pos
+    while (pos < len && /[a-zA-Z0-9\-_:.$]/.test(attrString[pos])) pos++
+    if (pos === nameStart) {
+      pos++
+      continue
+    }
+    const nameEnd = pos
+
+    // Check for = sign
+    while (pos < len && /\s/.test(attrString[pos])) pos++
+
+    if (pos >= len || attrString[pos] !== '=') {
+      // Boolean attribute
+      const attrChildren: Element[] = [
+        cx.elt(Type.AttributeName, offset + nameStart, offset + nameEnd)
+      ]
+      elements.push(cx.elt(Type.Attribute, offset + nameStart, offset + nameEnd, attrChildren))
+      continue
+    }
+
+    // Skip the =
+    pos++
+
+    // Skip whitespace after =
+    while (pos < len && /\s/.test(attrString[pos])) pos++
+    if (pos >= len) {
+      const attrChildren: Element[] = [
+        cx.elt(Type.AttributeName, offset + nameStart, offset + nameEnd)
+      ]
+      elements.push(cx.elt(Type.Attribute, offset + nameStart, offset + pos, attrChildren))
+      continue
+    }
+
+    const valueStart = pos
+    let valueEnd = pos
+    let valueType = Type.AttributeValue
+    const ch = attrString[pos]
+
+    if (ch === '"' || ch === "'") {
+      const quote = ch
+      pos++
+      while (pos < len && attrString[pos] !== quote) {
+        if (attrString[pos] === '\\' && pos + 1 < len) pos++
+        pos++
+      }
+      if (pos < len) pos++
+      valueEnd = pos
+      valueType = Type.AttributeString
+    } else if (ch === '{') {
+      if (attrString.slice(pos, pos + 3) === '{{{') {
+        // Filtered: {{{filter}}}
+        const openMarkStart = pos
+        pos += 3
+        const filterStart = pos
+        while (pos < len && attrString.slice(pos, pos + 3) !== '}}}') pos++
+        const filterEnd = pos
+        if (attrString.slice(pos, pos + 3) === '}}}') pos += 3
+        valueEnd = pos
+        valueType = Type.AttributeFiltered
+        // Create child elements for filtered transclusion
+        const valueChildren: Element[] = [
+          cx.elt(Type.FilteredTransclusionMark, offset + openMarkStart, offset + openMarkStart + 3),
+          cx.elt(Type.FilterExpression, offset + filterStart, offset + filterEnd),
+          cx.elt(Type.FilteredTransclusionMark, offset + filterEnd, offset + valueEnd)
+        ]
+        const attrChildren: Element[] = [
+          cx.elt(Type.AttributeName, offset + nameStart, offset + nameEnd),
+          cx.elt(valueType, offset + valueStart, offset + valueEnd, valueChildren)
+        ]
+        elements.push(cx.elt(Type.Attribute, offset + nameStart, offset + valueEnd, attrChildren))
+        continue
+      } else if (attrString.slice(pos, pos + 2) === '{{') {
+        // Indirect: {{reference}}
+        const openMarkStart = pos
+        pos += 2
+        const targetStart = pos
+        while (pos < len && attrString.slice(pos, pos + 2) !== '}}') pos++
+        const targetEnd = pos
+        if (attrString.slice(pos, pos + 2) === '}}') pos += 2
+        valueEnd = pos
+        valueType = Type.AttributeIndirect
+        // Create child elements for transclusion
+        const valueChildren: Element[] = [
+          cx.elt(Type.TransclusionMark, offset + openMarkStart, offset + openMarkStart + 2),
+          cx.elt(Type.TransclusionTarget, offset + targetStart, offset + targetEnd),
+          cx.elt(Type.TransclusionMark, offset + targetEnd, offset + valueEnd)
+        ]
+        const attrChildren: Element[] = [
+          cx.elt(Type.AttributeName, offset + nameStart, offset + nameEnd),
+          cx.elt(valueType, offset + valueStart, offset + valueEnd, valueChildren)
+        ]
+        elements.push(cx.elt(Type.Attribute, offset + nameStart, offset + valueEnd, attrChildren))
+        continue
+      } else {
+        while (pos < len && !/[\s>]/.test(attrString[pos])) pos++
+        valueEnd = pos
+      }
+    } else if (ch === '<' && attrString[pos + 1] === '<') {
+      // Macro: <<macroname params>>
+      const openMarkStart = pos
+      pos += 2
+      const macroContentStart = pos
+      // Parse macro name
+      while (pos < len && /[a-zA-Z0-9\-_.$]/.test(attrString[pos])) pos++
+      const macroNameEnd = pos
+      // Skip to end of macro
+      let depth = 1
+      while (pos < len && depth > 0) {
+        if (attrString.slice(pos, pos + 2) === '<<') {
+          depth++
+          pos += 2
+        } else if (attrString.slice(pos, pos + 2) === '>>') {
+          depth--
+          if (depth === 0) break
+          pos += 2
+        } else {
+          pos++
+        }
+      }
+      const closeMarkStart = pos
+      if (attrString.slice(pos, pos + 2) === '>>') pos += 2
+      valueEnd = pos
+      valueType = Type.AttributeMacro
+      // Create child elements for macro
+      const valueChildren: Element[] = [
+        cx.elt(Type.MacroCallMark, offset + openMarkStart, offset + openMarkStart + 2),
+        cx.elt(Type.MacroName, offset + macroContentStart, offset + macroNameEnd),
+        cx.elt(Type.MacroCallMark, offset + closeMarkStart, offset + valueEnd)
+      ]
+      const attrChildren: Element[] = [
+        cx.elt(Type.AttributeName, offset + nameStart, offset + nameEnd),
+        cx.elt(valueType, offset + valueStart, offset + valueEnd, valueChildren)
+      ]
+      elements.push(cx.elt(Type.Attribute, offset + nameStart, offset + valueEnd, attrChildren))
+      continue
+    } else if (ch === '`') {
+      // Substituted string: `value` or ```value```
+      let openMarkEnd: number
+      let closeMarkStart: number
+      if (attrString.slice(pos, pos + 3) === '```') {
+        openMarkEnd = pos + 3
+        pos += 3
+        while (pos < len && attrString.slice(pos, pos + 3) !== '```') pos++
+        closeMarkStart = pos
+        if (attrString.slice(pos, pos + 3) === '```') pos += 3
+      } else {
+        openMarkEnd = pos + 1
+        pos++
+        while (pos < len && attrString[pos] !== '`') pos++
+        closeMarkStart = pos
+        if (pos < len) pos++
+      }
+      valueEnd = pos
+      valueType = Type.AttributeSubstituted
+
+      // Parse $(variable)$ patterns inside the substituted string
+      const valueChildren: Element[] = [
+        cx.elt(Type.Mark, offset + valueStart, offset + openMarkEnd)  // Opening `
+      ]
+
+      const content = attrString.slice(openMarkEnd, closeMarkStart)
+      let contentPos = 0
+      const contentOffset = offset + openMarkEnd
+
+      while (contentPos < content.length) {
+        const varMatch = content.slice(contentPos).match(/^\$\(([^)]+)\)\$/)
+        if (varMatch) {
+          const varStart = contentOffset + contentPos
+          const varEnd = varStart + varMatch[0].length
+          const varNameStart = varStart + 2
+          const varNameEnd = varNameStart + varMatch[1].length
+
+          valueChildren.push(cx.elt(Type.Variable, varStart, varEnd, [
+            cx.elt(Type.VariableMark, varStart, varStart + 2),
+            cx.elt(Type.VariableName, varNameStart, varNameEnd),
+            cx.elt(Type.VariableMark, varNameEnd, varEnd)
+          ]))
+
+          contentPos += varMatch[0].length
+        } else {
+          contentPos++
+        }
+      }
+
+      valueChildren.push(cx.elt(Type.Mark, offset + closeMarkStart, offset + valueEnd))  // Closing `
+
+      const attrChildren: Element[] = [
+        cx.elt(Type.AttributeName, offset + nameStart, offset + nameEnd),
+        cx.elt(valueType, offset + valueStart, offset + valueEnd, valueChildren)
+      ]
+      elements.push(cx.elt(Type.Attribute, offset + nameStart, offset + valueEnd, attrChildren))
+      continue
+    } else {
+      while (pos < len && !/[\s>\/]/.test(attrString[pos])) pos++
+      valueEnd = pos
+      const valueText = attrString.slice(valueStart, valueEnd)
+      if (/^-?\d+(\.\d+)?$/.test(valueText)) {
+        valueType = Type.AttributeNumber
+      } else {
+        valueType = Type.AttributeString
+      }
+    }
+
+    const attrChildren: Element[] = [
+      cx.elt(Type.AttributeName, offset + nameStart, offset + nameEnd),
+      cx.elt(valueType, offset + valueStart, offset + valueEnd)
+    ]
+    elements.push(cx.elt(Type.Attribute, offset + nameStart, offset + valueEnd, attrChildren))
+  }
+
+  return elements
+}
+
+// ============================================================================
 // Widget Parser (<$widget/>)
 // ============================================================================
 
-const widgetRe = /^<(\$[a-zA-Z0-9\-\.]+)([^>]*?)(\/)?\s*>/
+const widgetStartRe = /^<(\$[a-zA-Z0-9\-\.]+)/
 
 export const Widget: InlineParser = {
   name: "Widget",
@@ -449,21 +1095,30 @@ export const Widget: InlineParser = {
     if (cx.char(pos + 1) !== Ch.Dollar) return -1
 
     const text = cx.slice(pos, cx.end)
-    const match = widgetRe.exec(text)
-    if (!match) return -1
+    const startMatch = widgetStartRe.exec(text)
+    if (!startMatch) return -1
 
-    const end = pos + match[0].length
-    const name = match[1]
-    const attrs = match[2]
-    const selfClosing = match[3]
+    const name = startMatch[1]
+    const afterName = startMatch[0].length
+
+    // Find the proper end of the tag (handling > inside attribute values)
+    const tagResult = findTagEnd(text.slice(afterName))
+    if (!tagResult) return -1
+
+    const end = pos + afterName + tagResult.end
+    const attrString = text.slice(afterName, afterName + tagResult.end - (tagResult.selfClose ? 2 : 1))
 
     const children: Element[] = [
       cx.elt(Type.WidgetName, pos + 1, pos + 1 + name.length),
     ]
 
-    // TODO: Parse attributes
+    // Parse attributes
+    if (attrString.trim()) {
+      const attrElements = parseInlineAttributes(cx, attrString, pos + afterName)
+      children.push(...attrElements)
+    }
 
-    if (selfClosing) {
+    if (tagResult.selfClose) {
       children.push(cx.elt(Type.SelfClosingMarker, end - 2, end - 1))
     }
 
@@ -475,7 +1130,7 @@ export const Widget: InlineParser = {
 // HTML Tag Parser (<tag/>)
 // ============================================================================
 
-const htmlTagRe = /^<([a-zA-Z][a-zA-Z0-9\-]*)([^>]*?)(\/)?\s*>/
+const htmlTagStartRe = /^<([a-zA-Z][a-zA-Z0-9\-]*)/
 
 export const HTMLTag: InlineParser = {
   name: "HTMLTag",
@@ -485,15 +1140,32 @@ export const HTMLTag: InlineParser = {
     if (cx.char(pos + 1) === Ch.Dollar) return -1
 
     const text = cx.slice(pos, cx.end)
-    const match = htmlTagRe.exec(text)
-    if (!match) return -1
+    const startMatch = htmlTagStartRe.exec(text)
+    if (!startMatch) return -1
 
-    const end = pos + match[0].length
-    const name = match[1]
+    const name = startMatch[1]
+    const afterName = startMatch[0].length
+
+    // Find the proper end of the tag (handling > inside attribute values)
+    const tagResult = findTagEnd(text.slice(afterName))
+    if (!tagResult) return -1
+
+    const end = pos + afterName + tagResult.end
+    const attrString = text.slice(afterName, afterName + tagResult.end - (tagResult.selfClose ? 2 : 1))
 
     const children: Element[] = [
       cx.elt(Type.TagName, pos + 1, pos + 1 + name.length),
     ]
+
+    // Parse attributes
+    if (attrString.trim()) {
+      const attrElements = parseInlineAttributes(cx, attrString, pos + afterName)
+      children.push(...attrElements)
+    }
+
+    if (tagResult.selfClose) {
+      children.push(cx.elt(Type.SelfClosingMarker, end - 2, end - 1))
+    }
 
     return cx.addElement(cx.elt(Type.HTMLTag, pos, end, children))
   }
@@ -518,6 +1190,67 @@ export const Dash: InlineParser = {
     }
 
     return -1
+  }
+}
+
+// ============================================================================
+// Variable Substitution Parser $(variable)$
+// ============================================================================
+
+const variableRe = /^\$\(([^)]+)\)\$/
+
+export const VariableSubstitution: InlineParser = {
+  name: "VariableSubstitution",
+  parse(cx: InlineContext, next: number, pos: number): number {
+    if (next !== Ch.Dollar) return -1
+    if (cx.char(pos + 1) !== 40) return -1 // '('
+
+    const text = cx.slice(pos, cx.end)
+    const match = variableRe.exec(text)
+    if (!match) return -1
+
+    const end = pos + match[0].length
+    const varName = match[1]
+    const varNameStart = pos + 2 // After $(
+    const varNameEnd = varNameStart + varName.length
+
+    const children: Element[] = [
+      cx.elt(Type.VariableMark, pos, pos + 2),           // $(
+      cx.elt(Type.VariableName, varNameStart, varNameEnd),
+      cx.elt(Type.VariableMark, varNameEnd, end)         // )$
+    ]
+
+    return cx.addElement(cx.elt(Type.Variable, pos, end, children))
+  }
+}
+
+// ============================================================================
+// Placeholder Parser $param$ (in macro definitions)
+// ============================================================================
+
+const placeholderRe = /^\$([a-zA-Z][a-zA-Z0-9\-_]*)\$/
+
+export const PlaceholderParam: InlineParser = {
+  name: "PlaceholderParam",
+  parse(cx: InlineContext, next: number, pos: number): number {
+    if (next !== Ch.Dollar) return -1
+
+    const text = cx.slice(pos, cx.end)
+    const match = placeholderRe.exec(text)
+    if (!match) return -1
+
+    const end = pos + match[0].length
+    const paramName = match[1]
+    const paramNameStart = pos + 1 // After $
+    const paramNameEnd = paramNameStart + paramName.length
+
+    const children: Element[] = [
+      cx.elt(Type.PlaceholderMark, pos, pos + 1),              // $
+      cx.elt(Type.VariableName, paramNameStart, paramNameEnd),
+      cx.elt(Type.PlaceholderMark, paramNameEnd, end)          // $
+    ]
+
+    return cx.addElement(cx.elt(Type.Placeholder, pos, end, children))
   }
 }
 
@@ -606,7 +1339,9 @@ export const DefaultInlineParsers: InlineParser[] = [
   Widget,
   HTMLTag,
   Dash,
+  VariableSubstitution,  // $(var)$ - must come before SystemLink and PlaceholderParam
   SystemLink,
+  PlaceholderParam,      // $param$ - must come after VariableSubstitution
   CamelCaseLink,
   URLAutoLink,
 ]

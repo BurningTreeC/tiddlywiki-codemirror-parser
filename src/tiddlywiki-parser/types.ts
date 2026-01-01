@@ -179,6 +179,30 @@ export enum Type {
   HardBreak,            // """ or line break
   Dash,                 // -- or ---
   Variable,             // $(var)$ in macro bodies
+  VariableMark,         // $( and )$
+  VariableName,         // var in $(var)$
+  Placeholder,          // $param$ in macro definitions
+  PlaceholderMark,      // $ in $param$
+
+  // Filter expression components
+  FilterRun,            // A run in a filter (space-separated)
+  FilterOperator,       // [operator[operand]]
+  FilterOperatorName,   // operator name
+  FilterOperand,        // operand in [operator[operand]]
+  FilterVariable,       // <varname> in filters
+  FilterTextRef,        // {textref} in filters
+  FilterRegexp,         // /regexp/ in filters
+
+  // Styled blocks (.class prefix)
+  StyledBlock,
+  StyledBlockMark,      // The . prefix
+  StyledBlockClass,     // The class name
+
+  // Conditionals (<%if%>, <%elseif%>, <%else%>, <%endif%>)
+  ConditionalBlock,
+  ConditionalMark,      // <% and %>
+  ConditionalKeyword,   // if, elseif, else, endif
+  ConditionalBranch,    // Each branch (if/elseif/else content)
 
   // Text
   Text,

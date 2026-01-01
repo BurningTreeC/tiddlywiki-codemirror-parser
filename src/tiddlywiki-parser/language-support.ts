@@ -168,6 +168,21 @@ export interface TiddlyWikiLanguageConfig {
   getWidgetNames?: () => string[]
 
   /**
+   * Whether to enable filter operator completion (default: true)
+   */
+  completeFilterOperators?: boolean
+
+  /**
+   * Whether to enable filter run prefix completion (default: true)
+   */
+  completeFilterRunPrefixes?: boolean
+
+  /**
+   * Function to get filter operator names for completion
+   */
+  getFilterOperators?: () => string[]
+
+  /**
    * Language support for HTML tags (default: html without tag matching)
    */
   htmlTagLanguage?: LanguageSupport
@@ -200,9 +215,12 @@ export function tiddlywiki(config: TiddlyWikiLanguageConfig = {}): LanguageSuppo
     completeWidgets = true,
     completeMacros = true,
     completeTiddlers = true,
+    completeFilterOperators = true,
+    completeFilterRunPrefixes = true,
     getTiddlerTitles,
     getMacroNames,
     getWidgetNames,
+    getFilterOperators,
     htmlTagLanguage = htmlNoMatch,
   } = config
 
@@ -277,6 +295,18 @@ export function tiddlywiki(config: TiddlyWikiLanguageConfig = {}): LanguageSuppo
     }))
   }
 
+  if (completeFilterOperators) {
+    support.push(lang.data.of({
+      autocomplete: filterOperatorCompletion(getFilterOperators)
+    }))
+  }
+
+  if (completeFilterRunPrefixes) {
+    support.push(lang.data.of({
+      autocomplete: filterRunPrefixCompletion
+    }))
+  }
+
   return new LanguageSupport(lang, support)
 }
 
@@ -338,6 +368,59 @@ const commonMacros = [
   "list-links", "list-links-draggable", "list-tagged-draggable", "copy-to-clipboard",
   "colour-picker", "image-picker", "keyboard-shortcut", "dumpvariables", "qualify",
   "csvtiddlers", "jsontiddlers", "datauri", "makedatauri", "translink"
+]
+
+// TiddlyWiki Filter Operators
+const coreFilterOperators = [
+  // Selection constructors
+  "all", "title", "field", "tag", "has", "is", "indexes", "fields", "tags", "links",
+  "backlinks", "list", "listed", "tagging", "untagged",
+  // String operators
+  "prefix", "suffix", "contains", "match", "regexp", "search", "trim", "lowercase",
+  "uppercase", "titlecase", "sentencecase", "splitbefore", "split", "join", "stringify",
+  // Comparison
+  "compare", "minlength", "maxlength",
+  // List operators
+  "first", "last", "nth", "limit", "rest", "butlast", "range", "sort", "nsort", "sortby",
+  "nsortby", "reverse", "count", "unique", "duplicates", "allafter", "allbefore",
+  "after", "before", "prepend", "append", "insertbefore", "move", "putafter",
+  "putbefore", "putfirst", "putlast", "remove", "replace", "toggle", "cycle",
+  // Math operators
+  "add", "subtract", "multiply", "divide", "negate", "abs", "ceil", "floor", "round",
+  "trunc", "sign", "min", "max", "average", "sum", "product", "log", "power", "sqrt",
+  "exp", "fixed", "precision", "remainder", "random", "sin", "cos", "tan", "asin",
+  "acos", "atan", "atan2",
+  // Date operators
+  "now", "format", "days", "weeks", "months", "years", "hours", "minutes", "seconds",
+  "milliseconds", "adddays", "subtractdays", "year", "month", "day", "hour", "minute", "second",
+  // Transclusion
+  "get", "getindex", "getvariable", "lookup", "jsonget", "jsonindexes", "jsontype",
+  "jsonextract", "jsonstringify",
+  // Encoding
+  "encodehtml", "decodehtml", "encodeuri", "encodeuricomponent", "decodeuri",
+  "decodeuricomponent", "escaperegexp", "escapecss", "base64encode", "base64decode",
+  // Others
+  "each", "eachday", "filter", "reduce", "map", "subfilter", "else", "then",
+  "variables", "modules", "plugintiddlers", "shadowsource", "storyviews", "editions",
+  "lengths", "commands", "sha256hash", "md5hash", "encryptbase64", "decryptbase64",
+  "draft.of", "draft.for", "draft", "draftof", "draftfor"
+]
+
+// Filter Run Prefixes (including named prefixes)
+const filterRunPrefixes = [
+  { label: "+", detail: "intersection - filter the input" },
+  { label: "-", detail: "subtraction - remove from results" },
+  { label: "~", detail: "else - use if previous was empty" },
+  { label: "=", detail: "literal - add title literally" },
+  { label: ":filter", detail: "named - filter each title" },
+  { label: ":map", detail: "named - transform each title" },
+  { label: ":reduce", detail: "named - reduce to single value" },
+  { label: ":intersection", detail: "named - keep common titles" },
+  { label: ":cascade", detail: "named - cascade through filters" },
+  { label: ":all", detail: "named - pass to all runs" },
+  { label: ":some", detail: "named - pass to any matching run" },
+  { label: ":sort", detail: "named - sort by subfilter result" },
+  { label: ":flat", detail: "named - flatten list output" },
 ]
 
 /**
@@ -465,5 +548,141 @@ function htmlTagCompletion(context: CompletionContext): CompletionResult | null 
     to: pos,
     options: htmlTagCompletions(),
     validFor: /^<[:\-\.\w\u00b7-\uffff]*$/
+  }
+}
+
+/**
+ * Filter operator completion source (inside [...])
+ * Triggers when typing inside filter brackets, e.g., [tag or [has[
+ */
+function filterOperatorCompletion(getFilterOperators?: () => string[]) {
+  return (context: CompletionContext): CompletionResult | null => {
+    const { state, pos } = context
+
+    // Look for filter operator context: after [ and optional ! or other prefix
+    // Match patterns like: [tag, [!has, [tag[value]tag, etc.
+    const textBefore = state.sliceDoc(Math.max(0, pos - 100), pos)
+
+    // Check if we're inside a filter expression (inside brackets [])
+    // and after a position where an operator would go
+    const filterOperatorMatch = /\[(!?)(\w*)$/.exec(textBefore)
+    if (!filterOperatorMatch) {
+      // Also match after a closing bracket of a previous operator: [tag[value]op
+      const chainedMatch = /\][:\w]*(\w+)$/.exec(textBefore)
+      if (!chainedMatch) return null
+
+      // For chained operators, use the partial match
+      const partial = chainedMatch[1]
+      return createFilterOperatorResult(context, partial, partial.length, getFilterOperators)
+    }
+
+    // Check we're in a filter context (inside FilterExpression, FilteredTransclusion, etc.)
+    const tree = syntaxTree(state).resolveInner(pos, -1)
+    let node = tree
+    let inFilter = false
+    while (node && !node.type.isTop) {
+      if (node.name === "FencedCode" || node.name === "CodeBlock" ||
+          node.name === "TypedBlock" || node.name === "CommentBlock") {
+        return null
+      }
+      if (node.name === "FilterExpression" || node.name === "FilteredTransclusion" ||
+          node.name === "FilteredTransclusionBlock" || node.name === "AttributeFiltered" ||
+          node.name === "ConditionalBlock") {
+        inFilter = true
+      }
+      node = node.parent!
+    }
+
+    // Also check if we see {{{ before (filtered transclusion)
+    const hasFilterContext = inFilter || /\{\{\{[^}]*$/.test(textBefore) ||
+                             /<%(?:if|elseif)\s+[^%]*$/.test(textBefore)
+
+    if (!hasFilterContext) return null
+
+    const prefix = filterOperatorMatch[1]  // ! or empty
+    const partial = filterOperatorMatch[2] // partial operator name
+
+    return createFilterOperatorResult(context, partial, partial.length + prefix.length + 1, getFilterOperators)
+  }
+}
+
+function createFilterOperatorResult(
+  context: CompletionContext,
+  partial: string,
+  matchLength: number,
+  getFilterOperators?: () => string[]
+): CompletionResult {
+  const { pos } = context
+
+  // Use provided operators, fall back to core operators if empty
+  const customOperators = getFilterOperators ? getFilterOperators() : []
+  const operators = customOperators.length > 0 ? customOperators : coreFilterOperators
+
+  const options: Completion[] = operators.map(op => ({
+    label: op,
+    type: "function",
+    detail: "filter operator",
+    apply: op + "["
+  }))
+
+  return {
+    from: pos - partial.length,
+    to: pos,
+    options,
+    validFor: /^\w*$/
+  }
+}
+
+/**
+ * Filter run prefix completion source
+ * Triggers at the start of filter runs (after space or at start of filter)
+ */
+function filterRunPrefixCompletion(context: CompletionContext): CompletionResult | null {
+  const { state, pos } = context
+
+  const textBefore = state.sliceDoc(Math.max(0, pos - 100), pos)
+
+  // Match at start of a filter run: after {{{ or after space/newline in filter
+  // Patterns: {{{ :, {{{ +, or after ] followed by space then prefix
+  const runPrefixMatch = /(?:\{\{\{|[\]\s])\s*([:+\-~=][\w]*)$/.exec(textBefore)
+  if (!runPrefixMatch) return null
+
+  // Check we're in a filter context
+  const tree = syntaxTree(state).resolveInner(pos, -1)
+  let node = tree
+  let inFilter = false
+  while (node && !node.type.isTop) {
+    if (node.name === "FencedCode" || node.name === "CodeBlock" ||
+        node.name === "TypedBlock" || node.name === "CommentBlock") {
+      return null
+    }
+    if (node.name === "FilterExpression" || node.name === "FilteredTransclusion" ||
+        node.name === "FilteredTransclusionBlock" || node.name === "AttributeFiltered" ||
+        node.name === "ConditionalBlock") {
+      inFilter = true
+    }
+    node = node.parent!
+  }
+
+  // Also check for {{{ pattern
+  const hasFilterContext = inFilter || /\{\{\{[^}]*$/.test(textBefore) ||
+                           /<%(?:if|elseif)\s+[^%]*$/.test(textBefore)
+
+  if (!hasFilterContext) return null
+
+  const partial = runPrefixMatch[1]
+
+  const options: Completion[] = filterRunPrefixes.map(p => ({
+    label: p.label,
+    type: "keyword",
+    detail: p.detail,
+    apply: p.label + (p.label.startsWith(":") ? "[" : "")
+  }))
+
+  return {
+    from: pos - partial.length,
+    to: pos,
+    options,
+    validFor: /^[:+\-~=][\w]*$/
   }
 }
