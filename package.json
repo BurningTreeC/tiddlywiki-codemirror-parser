@@ -27,10 +27,12 @@
     "build": "rollup -c rollup.config.js",
     "build:tiddlywiki": "rollup -c rollup.config.tiddlywiki.js",
     "build:cm6-libs": "rollup -c rollup.config.cm6-libs.js",
+    "build:cm6-languages": "rollup -c rollup.config.cm6-languages.js",
     "prepublishOnly": "npm run clean && npm run typecheck && npm run build",
     "test": "echo \"No tests yet\" && exit 0"
   },
   "dependencies": {
+    "@codemirror/language-data": "^6.5.2",
     "@lezer/common": "^1.2.1",
     "@lezer/highlight": "^1.2.0"
   },
@@ -45,7 +47,15 @@
   "devDependencies": {
     "@codemirror/autocomplete": "^6.18.0",
     "@codemirror/commands": "^6.6.0",
+    "@codemirror/lang-css": "^6.3.1",
     "@codemirror/lang-html": "^6.4.0",
+    "@codemirror/lang-javascript": "^6.2.4",
+    "@codemirror/lang-json": "^6.0.2",
+    "@codemirror/lang-markdown": "^6.5.0",
+    "@codemirror/lang-python": "^6.2.1",
+    "@codemirror/lang-sql": "^6.10.0",
+    "@codemirror/lang-xml": "^6.1.0",
+    "@codemirror/lang-yaml": "^6.1.2",
     "@codemirror/language": "^6.10.0",
     "@codemirror/state": "^6.4.0",
     "@codemirror/view": "^6.33.0",

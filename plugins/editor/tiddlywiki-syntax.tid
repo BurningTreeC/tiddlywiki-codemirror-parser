@@ -43,6 +43,7 @@ tags: $:/tags/Stylesheet
     --cm-tw-comment-color: #8b949e;
     --cm-tw-pragma-color: #d2a8ff;
     --cm-tw-pragma-keyword-color: #ff7b72;
+    --cm-tw-conditional-color: #ff7b72;
 
     --cm-tw-escape-color: #79c0ff;
     --cm-tw-entity-color: #79c0ff;
@@ -99,6 +100,7 @@ tags: $:/tags/Stylesheet
   --cm-tw-comment-color: #6e7781;
   --cm-tw-pragma-color: #8250df;
   --cm-tw-pragma-keyword-color: #cf222e;
+  --cm-tw-conditional-color: #cf222e;
 
   /* Special */
   --cm-tw-escape-color: #0550ae;
@@ -319,6 +321,11 @@ tags: $:/tags/Stylesheet
 .cm-tw-pragma-keyword {
   color: var(--cm-tw-pragma-keyword-color);
   font-weight: 500;
+}
+
+.cm-tw-conditional {
+  color: var(--cm-tw-conditional-color);
+  font-weight: 600;
 }
 
 /* ============================================================================

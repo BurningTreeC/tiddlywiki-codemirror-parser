@@ -63,3 +63,49 @@ exports.EditorState = state.EditorState;
 exports.Compartment = state.Compartment;
 exports.EditorView = view.EditorView;
 exports.keymap = view.keymap;
+
+// ============================================================================
+// Language Registration API
+// ============================================================================
+
+// Registered languages array
+var registeredLanguages = [];
+
+/**
+ * Register a language for code block syntax highlighting.
+ * Language plugins should call this during initialization.
+ *
+ * @param {LanguageDescription} langDesc - A LanguageDescription from @codemirror/language
+ *
+ * Example usage in a language plugin:
+ *   var core = require("$:/plugins/BurningTreeC/tiddlywiki-codemirror/lib/core.js");
+ *   var langJs = require("$:/plugins/.../lang-javascript.js");
+ *   core.registerLanguage(core.language.LanguageDescription.of({
+ *     name: "JavaScript",
+ *     alias: ["js", "ecmascript", "node"],
+ *     extensions: ["js", "mjs", "cjs"],
+ *     support: langJs.javascript()
+ *   }));
+ */
+exports.registerLanguage = function(langDesc) {
+	if (langDesc && registeredLanguages.indexOf(langDesc) === -1) {
+		registeredLanguages.push(langDesc);
+	}
+};
+
+/**
+ * Get all registered languages.
+ * The engine uses this to pass languages to the parser plugin.
+ *
+ * @returns {LanguageDescription[]} Array of registered LanguageDescriptions
+ */
+exports.getLanguages = function() {
+	return registeredLanguages.slice(); // Return a copy
+};
+
+/**
+ * Clear all registered languages (mainly for testing).
+ */
+exports.clearLanguages = function() {
+	registeredLanguages = [];
+};

@@ -1524,10 +1524,10 @@ export const StyledBlock: BlockParser = {
 // Conditional Block (<%if%> <%elseif%> <%else%> <%endif%>)
 // ============================================================================
 
-const conditionalIfRe = /^<%if\s+(.+?)\s*%>\s*$/
-const conditionalElseifRe = /^<%elseif\s+(.+?)\s*%>\s*$/
-const conditionalElseRe = /^<%else\s*%>\s*$/
-const conditionalEndifRe = /^<%endif\s*%>\s*$/
+const conditionalIfRe = /^\s*<%if\s+(.+?)\s*%>/
+const conditionalElseifRe = /^\s*<%elseif\s+(.+?)\s*%>/
+const conditionalElseRe = /^\s*<%\s*else\s*%>/
+const conditionalEndifRe = /^\s*<%\s*endif\s*%>/
 
 export const ConditionalBlock: BlockParser = {
   name: "ConditionalBlock",
@@ -1540,25 +1540,60 @@ export const ConditionalBlock: BlockParser = {
     const children: Element[] = []
 
     // Parse opening <%if [filter] %>
-    const openMarkEnd = line.text.indexOf('if')
-    children.push(elt(Type.ConditionalMark, start, start + 2))  // <%
-    children.push(elt(Type.ConditionalKeyword, start + 2, start + 4))  // if
+    const openMarkStart = start + line.text.indexOf('<%')
+    children.push(elt(Type.ConditionalMark, openMarkStart, openMarkStart + 2))  // <%
+    children.push(elt(Type.ConditionalKeyword, openMarkStart + 2, openMarkStart + 4))  // if
 
     // Parse the filter expression
     const filterStart = start + line.text.indexOf(filter)
     const filterChildren = parseFilterExpressionBlock(filter, filterStart)
     children.push(elt(Type.FilterExpression, filterStart, filterStart + filter.length, filterChildren))
 
-    children.push(elt(Type.ConditionalMark, start + line.text.length - 2, start + line.text.length))  // %>
+    // Find the closing %> of the if tag
+    const closeMarkPos = start + line.text.indexOf('%>')
+    children.push(elt(Type.ConditionalMark, closeMarkPos, closeMarkPos + 2))  // %>
 
     const openingLineEnd = start + line.text.length
 
     // Track branches and find <%endif%>
-    let currentPos = openingLineEnd + 1
-    let branchStart = currentPos
+    // Content can start right after %> on the same line
+    let branchStart = closeMarkPos + 2
+    let currentPos = branchStart
     let depth = 1
     let endPos = -1
     let endifLineStart = -1
+
+    // First check the rest of the opening line for inline closing tags
+    const restOfLine = line.text.slice(closeMarkPos + 2 - start)
+    const inlineEndifMatch = /<%\s*endif\s*%>/.exec(restOfLine)
+    if (inlineEndifMatch) {
+      // Found <%endif%> on the same line
+      const contentBeforeEndif = restOfLine.slice(0, inlineEndifMatch.index)
+      if (contentBeforeEndif.trim()) {
+        // Parse inline content as branch
+        const contentStart = closeMarkPos + 2
+        const contentEnd = closeMarkPos + 2 + inlineEndifMatch.index
+        const branchContent = cx.parser.parseInline(contentBeforeEndif, contentStart)
+        children.push(elt(Type.ConditionalBranch, contentStart, contentEnd, branchContent))
+      }
+
+      // Parse <% endif %> on same line
+      const endifStart = closeMarkPos + 2 + inlineEndifMatch.index
+      const endifKeywordPos = restOfLine.indexOf('endif', inlineEndifMatch.index)
+      const endifKeywordStart = closeMarkPos + 2 + endifKeywordPos
+      const endifClosePos = restOfLine.indexOf('%>', inlineEndifMatch.index)
+      const endifClose = closeMarkPos + 2 + endifClosePos
+      children.push(elt(Type.ConditionalMark, endifStart, endifStart + 2))
+      children.push(elt(Type.ConditionalKeyword, endifKeywordStart, endifKeywordStart + 5))
+      children.push(elt(Type.ConditionalMark, endifClose, endifClose + 2))
+
+      endPos = endifClose + 2
+      cx.addElement(elt(Type.ConditionalBlock, start, endPos, children))
+      return true
+    }
+
+    // Move to next line for scanning
+    currentPos = openingLineEnd + 1
 
     while (currentPos < cx.input.length && depth > 0) {
       // Read until end of line
@@ -1583,11 +1618,13 @@ export const ConditionalBlock: BlockParser = {
             }
           }
 
-          // Parse <%endif%>
+          // Parse <% endif %> (with optional whitespace)
           const endifStart = currentPos + lineText.indexOf('<%')
+          const endifKeywordStart = currentPos + lineText.indexOf('endif')
+          const endifClose = currentPos + lineText.indexOf('%>')
           children.push(elt(Type.ConditionalMark, endifStart, endifStart + 2))
-          children.push(elt(Type.ConditionalKeyword, endifStart + 2, endifStart + 7))  // endif
-          children.push(elt(Type.ConditionalMark, endifStart + lineText.indexOf('%>'), endifStart + lineText.indexOf('%>') + 2))
+          children.push(elt(Type.ConditionalKeyword, endifKeywordStart, endifKeywordStart + 5))  // endif
+          children.push(elt(Type.ConditionalMark, endifClose, endifClose + 2))
 
           endifLineStart = currentPos
           endPos = lineEnd
@@ -1627,11 +1664,13 @@ export const ConditionalBlock: BlockParser = {
           }
         }
 
-        // Parse <%else%>
+        // Parse <% else %> (with optional whitespace)
         const elseStart = currentPos + lineText.indexOf('<%')
+        const elseKeywordStart = currentPos + lineText.indexOf('else')
+        const elseClose = currentPos + lineText.indexOf('%>')
         children.push(elt(Type.ConditionalMark, elseStart, elseStart + 2))
-        children.push(elt(Type.ConditionalKeyword, elseStart + 2, elseStart + 6))  // else
-        children.push(elt(Type.ConditionalMark, currentPos + lineText.indexOf('%>'), currentPos + lineText.indexOf('%>') + 2))
+        children.push(elt(Type.ConditionalKeyword, elseKeywordStart, elseKeywordStart + 4))  // else
+        children.push(elt(Type.ConditionalMark, elseClose, elseClose + 2))
 
         branchStart = lineEnd + 1
       }
@@ -1640,8 +1679,20 @@ export const ConditionalBlock: BlockParser = {
     }
 
     if (endPos === -1) {
-      // No closing <%endif%> found
-      return false
+      // No closing <%endif%> found - extend block to end of document for indentation support
+      // Always create a branch for content after the last opening tag (<%if%>, <%else%>, <%elseif%>)
+      // This ensures proper indentation even when the branch is empty
+      if (branchStart <= cx.input.length) {
+        const branchContent = cx.parseContentRange(branchStart, cx.input.length)
+        // Create branch even if empty for indentation purposes
+        children.push(elt(Type.ConditionalBranch, branchStart, cx.input.length, branchContent))
+      }
+      cx.addElement(elt(Type.ConditionalBlock, start, cx.input.length, children))
+      // Move to end of document
+      while (!cx.atEnd) {
+        cx.nextLine()
+      }
+      return true
     }
 
     cx.addElement(elt(Type.ConditionalBlock, start, endPos, children))

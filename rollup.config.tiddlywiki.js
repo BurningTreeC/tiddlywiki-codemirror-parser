@@ -51,7 +51,7 @@ export default {
   input: "src/tiddlywiki-plugin-entry.ts",
   external,
   output: {
-    file: "dist/plugins/lang-tiddlywiki/lang-tiddlywiki.js",
+    file: "plugins/lang-tiddlywiki/lang-tiddlywiki.js",
     format: "cjs", // <- CommonJS (no (function(){ ... })(); IIFE)
     exports: "named",
     sourcemap: false,

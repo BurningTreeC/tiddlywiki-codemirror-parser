@@ -9,6 +9,7 @@
 
 import {Extension, Compartment, Prec} from "@codemirror/state"
 import {keymap, EditorView} from "@codemirror/view"
+import {LanguageDescription} from "@codemirror/language"
 import {tiddlywikiLanguage, headerIndent, tiddlywiki} from "./tiddlywiki-parser"
 import {
   insertNewlineContinueMarkup,
@@ -83,6 +84,7 @@ interface CM6Engine {
 // ============================================================================
 
 let _core: any = null
+let _currentEngine: CM6Engine | null = null
 
 // ============================================================================
 // Constants
@@ -149,12 +151,15 @@ declare const $tw: any
 
 /**
  * Get tiddler titles for autocompletion
+ * Uses widget.wiki for proper context
  */
 function getTiddlerTitles(): string[] {
-  if (typeof $tw === "undefined" || !$tw.wiki) return []
+  if (typeof $tw === "undefined") return []
   try {
+    const wiki = _currentEngine?.widget?.wiki || $tw.wiki
+    if (!wiki) return []
     // Get non-system tiddlers for link completion
-    return $tw.wiki.filterTiddlers("[!is[system]sort[title]]") || []
+    return wiki.filterTiddlers("[!is[system]sort[title]]") || []
   } catch (e) {
     return []
   }
@@ -162,6 +167,7 @@ function getTiddlerTitles(): string[] {
 
 /**
  * Get macro names for autocompletion
+ * Uses widget.wiki for proper context
  */
 function getMacroNames(): string[] {
   if (typeof $tw === "undefined") return []
@@ -171,17 +177,19 @@ function getMacroNames(): string[] {
     if ($tw.macros) {
       names.push(...Object.keys($tw.macros))
     }
-    // Get macro tiddlers
-    if ($tw.wiki) {
-      const macroTiddlers = $tw.wiki.filterTiddlers("[all[tiddlers+shadows]tag[$:/tags/Macro]]") || []
+    // Get macro tiddlers (both $:/tags/Macro and $:/tags/Global)
+    const wiki = _currentEngine?.widget?.wiki || $tw.wiki
+    if (wiki) {
+      const macroTiddlers = wiki.filterTiddlers("[all[tiddlers+shadows]tag[$:/tags/Macro]] [all[tiddlers+shadows]tag[$:/tags/Global]]") || []
       for (const title of macroTiddlers) {
-        // Extract macro name from tiddler (usually in the title or defined with \define)
-        const tiddler = $tw.wiki.getTiddler(title)
+        // Extract macro/procedure/function names from tiddler
+        const tiddler = wiki.getTiddler(title)
         if (tiddler) {
           const text = tiddler.fields.text || ""
-          const defineMatch = text.match(/\\define\s+([^\s(]+)/)
-          if (defineMatch) {
-            names.push(defineMatch[1])
+          // Match \define, \procedure, \function declarations
+          const defineMatches = text.matchAll(/\\(?:define|procedure|function)\s+([^\s(]+)/g)
+          for (const match of defineMatches) {
+            names.push(match[1])
           }
         }
       }
@@ -213,13 +221,15 @@ function getWidgetNames(): string[] {
 
 /**
  * Get filter operator names for autocompletion
+ * Uses widget.wiki for proper context
  */
 function getFilterOperators(): string[] {
-  if (typeof $tw === "undefined" || !$tw.wiki) return []
+  if (typeof $tw === "undefined") return []
   try {
-    // Filter operators are registered in $tw.wiki.filterOperators
-    if ($tw.wiki.filterOperators) {
-      return Object.keys($tw.wiki.filterOperators).sort()
+    const wiki = _currentEngine?.widget?.wiki || $tw.wiki
+    // Filter operators are registered in wiki.filterOperators
+    if (wiki?.filterOperators) {
+      return Object.keys(wiki.filterOperators).sort()
     }
     return []
   } catch (e) {
@@ -228,13 +238,60 @@ function getFilterOperators(): string[] {
 }
 
 /**
+ * Get macro/procedure/function parameters for autocompletion
+ * Uses widget.wiki for proper context (locally defined macros/procedures)
+ */
+function getMacroParams(macroName: string): string[] | null {
+  if (typeof $tw === "undefined") return null
+  try {
+    // First check built-in JavaScript macros ($tw.macros)
+    if ($tw.macros && $tw.macros[macroName] && $tw.macros[macroName].params) {
+      const params = $tw.macros[macroName].params
+      if (Array.isArray(params)) {
+        return params.map((p: any) => p.name)
+      }
+    }
+    // Use widget.getVariableInfo for context-aware variable lookup
+    const widget = _currentEngine?.widget
+    if (widget?.getVariableInfo) {
+      const info = widget.getVariableInfo(macroName)
+      if (info && info.params && Array.isArray(info.params)) {
+        return info.params.map((p: any) => p.name)
+      }
+    }
+    return null
+  } catch (e) {
+    return null
+  }
+}
+
+/**
+ * Get code languages from context or return empty array
+ * The CM6 engine can pass available languages via context.options.codeLanguages
+ * These should be LanguageDescription objects from @codemirror/language-data
+ */
+function getCodeLanguages(): readonly LanguageDescription[] {
+  // Try to get languages from the engine's context
+  const engine = _currentEngine as any
+  if (engine?.options?.codeLanguages) {
+    return engine.options.codeLanguages
+  }
+  // Fallback: empty array (no mixed parsing)
+  return []
+}
+
+/**
  * Build language support with options from context
  */
 function buildLanguageSupport(context: CM6PluginContext): Extension {
   const options = context.options || {}
 
+  // Store engine reference for context-aware completions
+  _currentEngine = context.engine as CM6Engine | null
+
   return tiddlywiki({
     addKeymap: false, // We add our own keymap separately
+    codeLanguages: getCodeLanguages(), // Enable mixed parsing for code blocks (from engine.options.codeLanguages)
     completeHTMLTags: options.completeHTMLTags !== false,
     completeWidgets: options.completeWidgets !== false,
     completeMacros: options.completeMacros !== false,
@@ -243,6 +300,7 @@ function buildLanguageSupport(context: CM6PluginContext): Extension {
     completeFilterRunPrefixes: options.completeFilterRunPrefixes !== false,
     getTiddlerTitles,
     getMacroNames,
+    getMacroParams,
     getWidgetNames,
     getFilterOperators
   })

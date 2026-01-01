@@ -7,7 +7,8 @@
 
 import {
   Language, defineLanguageFacet, languageDataProp, foldNodeProp,
-  indentNodeProp, foldService, syntaxTree, LanguageDescription, ParseContext
+  indentNodeProp, foldService, syntaxTree, LanguageDescription, ParseContext,
+  TreeIndentContext, getIndentUnit
 } from "@codemirror/language"
 import { SyntaxNode, NodeType, NodeProp } from "@lezer/common"
 import { TiddlyWikiParser, parser as baseParser } from "./parser"
@@ -51,6 +52,115 @@ function isBlock(type: NodeType): boolean {
 }
 
 /**
+ * Check if a node type is a container that should indent its contents
+ */
+function isIndentingContainer(name: string): boolean {
+  return /^(Widget|HTMLBlock|ConditionalBlock|ConditionalBranch|BlockQuote|MacroDefinition|ProcedureDefinition|FunctionDefinition|WidgetDefinition)$/.test(name)
+}
+
+/**
+ * Get the base indentation of a line
+ */
+function getLineIndent(context: TreeIndentContext, pos: number): number {
+  const line = context.state.doc.lineAt(pos)
+  let indent = 0
+  for (let i = 0; i < line.text.length; i++) {
+    const ch = line.text.charCodeAt(i)
+    if (ch === 32) indent++ // space
+    else if (ch === 9) indent += context.unit // tab
+    else break
+  }
+  return indent
+}
+
+// Debug flag - set to true to enable logging
+const DEBUG_INDENT = false
+
+/**
+ * Calculate indentation for container nodes
+ */
+function containerIndent(context: TreeIndentContext): number | null {
+  // Get the node at the current position
+  const node = context.node
+
+  if (DEBUG_INDENT) {
+    console.log(`containerIndent called for ${node.name} [${node.from}-${node.to}] at pos ${context.pos}`)
+  }
+
+  // Find the opening line of this container
+  const openLine = context.state.doc.lineAt(node.from)
+  const closeLine = context.state.doc.lineAt(node.to)
+  const baseIndent = getLineIndent(context, node.from)
+
+  if (DEBUG_INDENT) {
+    console.log(`  openLine: ${openLine.number}, closeLine: ${closeLine.number}, baseIndent: ${baseIndent}`)
+  }
+
+  // If node spans only a single line, check if it's an opening container that should indent
+  // ConditionalBlock, Widget, HTMLBlock should still indent even when incomplete
+  if (openLine.number === closeLine.number) {
+    // Allow indentation for opening tags that expect content
+    const openingContainers = /^(ConditionalBlock|Widget|HTMLBlock)$/
+    if (!openingContainers.test(node.name)) {
+      if (DEBUG_INDENT) console.log(`  -> null (single line, not opening container)`)
+      return null
+    }
+  }
+
+  // Check if cursor is on the same line as opening tag
+  const cursorLine = context.state.doc.lineAt(context.pos)
+  if (DEBUG_INDENT) {
+    console.log(`  cursorLine: ${cursorLine.number}`)
+  }
+  if (cursorLine.number === openLine.number) {
+    // If cursor is after %> on an opening line, indent
+    const lineText = cursorLine.text
+    const closeTagMatch = /%>\s*$/.exec(lineText.slice(0, context.pos - cursorLine.from))
+    if (closeTagMatch) {
+      // Check if this line has <%if or <%elseif or <%else (openers that need indent)
+      if (/<%\s*(if|elseif|else)\s/.test(lineText) || /<%\s*else\s*%>/.test(lineText)) {
+        if (DEBUG_INDENT) console.log(`  -> ${baseIndent + context.unit} (cursor on opening line, after %>)`)
+        return baseIndent + context.unit
+      }
+    }
+    if (DEBUG_INDENT) console.log(`  -> null (cursor on opening line, default)`)
+    return null // Let default behavior handle it
+  }
+
+  // Check if previous line is a branch opener (<%if%>, <%else%>, <%elseif%>)
+  if (cursorLine.number > 1) {
+    const prevLine = context.state.doc.line(cursorLine.number - 1)
+    const prevText = prevLine.text.trim()
+    if (DEBUG_INDENT) {
+      console.log(`  prevLine text: "${prevText}"`)
+      console.log(`  if/elseif regex: ${/<%\s*(if|elseif)\s+.+%>\s*$/.test(prevText)}`)
+      console.log(`  else regex: ${/<%\s*else\s*%>\s*$/.test(prevText)}`)
+    }
+    if (/<%\s*(if|elseif)\s+.+%>\s*$/.test(prevText) || /<%\s*else\s*%>\s*$/.test(prevText)) {
+      if (DEBUG_INDENT) console.log(`  -> ${baseIndent + context.unit} (prev line is opener)`)
+      return baseIndent + context.unit
+    }
+  }
+
+  // Check if this is a pure closing line (<%endif%> or closing tags)
+  const lineText = cursorLine.text.trim()
+  if (/^<\/[$a-zA-Z]|^<%\s*endif\s*%>|^\\end(?:\s|$)/.test(lineText)) {
+    if (DEBUG_INDENT) console.log(`  -> ${baseIndent} (closing line)`)
+    return baseIndent // Same indent as opening
+  }
+
+  // Check if this is a branch opener line (<%else%> or <%elseif%>) - these outdent but their content indents
+  if (/^<%\s*(else|elseif)\s/.test(lineText) || /^<%\s*else\s*%>/.test(lineText)) {
+    if (DEBUG_INDENT) console.log(`  -> ${baseIndent} (branch opener line)`)
+    return baseIndent // The line itself is at base indent
+  }
+
+  // Content inside: indent one level
+  if (DEBUG_INDENT) console.log(`  -> ${baseIndent + context.unit} (content inside)`)
+  return baseIndent + context.unit
+}
+
+/**
  * Configure the base parser with CodeMirror-specific props
  * NOTE: languageDataProp is NOT configured here because it must use
  * the same instance at runtime as the one used for lookups.
@@ -74,9 +184,46 @@ const configured = baseParser.configure({
     // Add heading level prop
     headingProp.add(isHeading),
 
-    // Indentation
+    // Indentation for container nodes
     indentNodeProp.add({
-      Document: () => null
+      Document: (context: TreeIndentContext) => {
+        // Handle edge case: cursor at document end (position equals doc length)
+        // This happens when all nodes end at doc length and cursor is at boundary
+        const docLength = context.state.doc.length
+        if (context.pos === docLength && docLength > 0) {
+          // Check if previous line is a conditional opener that needs indentation
+          const cursorLine = context.state.doc.lineAt(context.pos)
+          if (cursorLine.number > 1) {
+            const prevLine = context.state.doc.line(cursorLine.number - 1)
+            const prevText = prevLine.text.trim()
+            if (DEBUG_INDENT) {
+              console.log(`Document indent at doc end: prevLine = "${prevText}"`)
+            }
+            // Check for <%if%>, <%elseif%>, <%else%>
+            if (/<%\s*(if|elseif)\s+.+%>\s*$/.test(prevText) || /<%\s*else\s*%>\s*$/.test(prevText)) {
+              const baseIndent = getLineIndent(context, prevLine.from)
+              if (DEBUG_INDENT) console.log(`  -> ${baseIndent + context.unit} (prev line is opener)`)
+              return baseIndent + context.unit
+            }
+            // Check for widget/HTML opening tags: <$widget> or <div>
+            if (/<[$a-zA-Z][^>]*>\s*$/.test(prevText) && !/<\//.test(prevText)) {
+              const baseIndent = getLineIndent(context, prevLine.from)
+              if (DEBUG_INDENT) console.log(`  -> ${baseIndent + context.unit} (prev line is opening tag)`)
+              return baseIndent + context.unit
+            }
+          }
+        }
+        return null
+      },
+      Widget: containerIndent,
+      HTMLBlock: containerIndent,
+      ConditionalBlock: containerIndent,
+      ConditionalBranch: containerIndent,
+      BlockQuote: containerIndent,
+      MacroDefinition: containerIndent,
+      ProcedureDefinition: containerIndent,
+      FunctionDefinition: containerIndent,
+      WidgetDefinition: containerIndent
     })
 
     // NOTE: languageDataProp is added at runtime in mkLang()

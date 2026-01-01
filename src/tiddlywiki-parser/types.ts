@@ -83,6 +83,7 @@ export enum Type {
   WidgetEnd,            // Closing </$widget>
   WidgetName,           // The $name part
   TagName,              // HTML tag name
+  TagMark,              // < and > in HTML/Widget tags
   TagAttributes,        // All attributes as a group
   Attribute,
   AttributeName,
@@ -202,6 +203,7 @@ export enum Type {
 
   // Conditionals (<%if%>, <%elseif%>, <%else%>, <%endif%>)
   ConditionalBlock,
+  Conditional,          // Inline conditional (for progressive highlighting)
   ConditionalMark,      // <% and %>
   ConditionalKeyword,   // if, elseif, else, endif
   ConditionalBranch,    // Each branch (if/elseif/else content)

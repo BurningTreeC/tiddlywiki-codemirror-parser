@@ -1586,10 +1586,79 @@ export const URLAutoLink: InlineParser = {
 }
 
 // ============================================================================
+// Conditional Syntax Parser (<%if, <%else, <%elseif, <%endif, %>)
+// Progressive highlighting - highlights as you type
+// ============================================================================
+
+export const ConditionalSyntax: InlineParser = {
+  name: "ConditionalSyntax",
+  parse(cx: InlineContext, next: number, pos: number): number {
+    // Match <% at current position
+    if (next !== Ch.LessThan) return -1
+    if (cx.char(pos + 1) !== Ch.Percent) return -1
+
+    const text = cx.slice(pos, cx.end)
+    const children: Element[] = []
+
+    // Always add the <% mark
+    children.push(cx.elt(Type.ConditionalMark, pos, pos + 2))
+
+    // Try to match a keyword after <%
+    // Check for <%if, <%elseif, <%else, <%endif (with optional whitespace)
+    const keywordMatch = /^<%\s*(if|elseif|else|endif)\b/.exec(text)
+
+    if (keywordMatch) {
+      const keyword = keywordMatch[1]
+      const keywordStart = pos + text.indexOf(keyword, 2)
+      const keywordEnd = keywordStart + keyword.length
+      children.push(cx.elt(Type.ConditionalKeyword, keywordStart, keywordEnd))
+
+      // For <%if and <%elseif, try to parse filter expression
+      if (keyword === 'if' || keyword === 'elseif') {
+        // Look for filter after keyword
+        const afterKeyword = text.slice(keywordEnd - pos)
+        const filterMatch = /^\s+(.+?)(?:\s*%>|$)/.exec(afterKeyword)
+        if (filterMatch) {
+          const filterContent = filterMatch[1]
+          const filterStart = keywordEnd + afterKeyword.indexOf(filterContent)
+          const filterEnd = filterStart + filterContent.length
+          // Parse filter expression for nested highlighting
+          const filterChildren = parseFilterExpression(cx, filterContent, filterStart)
+          children.push(cx.elt(Type.FilterExpression, filterStart, filterEnd, filterChildren))
+        }
+      }
+
+      // Look for closing %>
+      const closeIdx = text.indexOf('%>')
+      if (closeIdx !== -1) {
+        children.push(cx.elt(Type.ConditionalMark, pos + closeIdx, pos + closeIdx + 2))
+        return cx.addElement(cx.elt(Type.Conditional, pos, pos + closeIdx + 2, children))
+      } else {
+        // Incomplete - highlight what we have so far
+        return cx.addElement(cx.elt(Type.Conditional, pos, keywordEnd, children))
+      }
+    }
+
+    // Just <% with no recognized keyword yet - still highlight it
+    // Check if there's a closing %>
+    const closeIdx = text.indexOf('%>')
+    if (closeIdx !== -1 && closeIdx > 2) {
+      // There's content between <% and %> - might be unrecognized keyword
+      children.push(cx.elt(Type.ConditionalMark, pos + closeIdx, pos + closeIdx + 2))
+      return cx.addElement(cx.elt(Type.Conditional, pos, pos + closeIdx + 2, children))
+    }
+
+    // Just <% alone - highlight it
+    return cx.addElement(cx.elt(Type.ConditionalMark, pos, pos + 2))
+  }
+}
+
+// ============================================================================
 // Export all default inline parsers
 // ============================================================================
 
 export const DefaultInlineParsers: InlineParser[] = [
+  ConditionalSyntax,  // Must come early to catch <%
   Escape,
   Entity,
   InlineCode,

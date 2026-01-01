@@ -18,3 +18,9 @@ dist/parser.*
 
 # Test scripts
 test-*.mjs
+test-*.ts
+debug-*.ts
+browser-diagnostic.js
+
+# TiddlyWiki plugin build outputs
+dist/plugins/

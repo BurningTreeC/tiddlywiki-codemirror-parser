@@ -273,6 +273,12 @@ function CodeMirrorEngine(options) {
 	this.parentNode = options.parentNode;
 	this.nextSibling = options.nextSibling || null;
 	this.options = options;
+
+	// Add registered languages to options for mixed parsing in code blocks
+	var core = getCM6Core();
+	if (core.getLanguages) {
+		this.options.codeLanguages = core.getLanguages();
+	}
 	
 	this._destroyed = false;
 	this._pendingChange = false;

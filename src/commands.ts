@@ -5,7 +5,7 @@
  */
 
 import {StateCommand, Text, EditorState, EditorSelection, ChangeSpec, countColumn, Line} from "@codemirror/state"
-import {syntaxTree, indentUnit} from "@codemirror/language"
+import {syntaxTree, indentUnit, getIndentation} from "@codemirror/language"
 import {SyntaxNode, Tree} from "@lezer/common"
 import {tiddlywikiLanguage} from "./tiddlywiki-parser/language"
 
@@ -164,8 +164,32 @@ export const insertNewlineContinueMarkupCommand = (config: {
     while (context.length && context[context.length - 1].from > pos - line.from) {
       context.pop()
     }
-    
-    if (!context.length) return dont = {range}
+
+    // No list/quote context - fall back to language indentation
+    if (!context.length) {
+      // Get the indentation for the next line from the language
+      const indent = getIndentation(state, pos)
+      if (indent != null) {
+        // Build the indentation string
+        const unit = state.facet(indentUnit)
+        let indentStr = ""
+        if (unit === "\t") {
+          // Tab indentation
+          indentStr = "\t".repeat(Math.floor(indent / state.tabSize))
+          const remainder = indent % state.tabSize
+          if (remainder > 0) indentStr += " ".repeat(remainder)
+        } else {
+          // Space indentation
+          indentStr = " ".repeat(indent)
+        }
+        const insert = state.lineBreak + indentStr
+        return {
+          range: EditorSelection.cursor(pos + insert.length),
+          changes: {from: pos, insert}
+        }
+      }
+      return dont = {range}
+    }
     
     let inner = context[context.length - 1]
     if (inner.to - inner.spaceAfter.length > pos - line.from) return dont = {range}

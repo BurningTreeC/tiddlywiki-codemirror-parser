@@ -61,6 +61,7 @@ tags: $:/tags/Stylesheet
 .cm-tw-pragma { color: #7f007f; font-weight: 500; }
 .cm-tw-pragma-name { color: #9f009f; }
 .cm-tw-pragma-keyword { color: #7f007f; font-weight: bold; }
+.cm-tw-conditional { color: #b48ead; font-weight: 600; }
 .cm-tw-define { color: #7f007f; }
 .cm-tw-procedure { color: #7f007f; }
 .cm-tw-function { color: #7f007f; }
@@ -294,6 +295,7 @@ tags: $:/tags/Stylesheet
 
     /* Pragmas */
     .cm-tw-pragma { color: #c678dd; }
+    .cm-tw-conditional { color: #c678dd; }
 
     /* Tables */
     .cm-tw-tableheader { background: rgba(255, 255, 255, 0.05); }

@@ -73,7 +73,7 @@ export default libs.map((lib) => {
     input: lib.input,
     external: externalsFor(lib.name),
     output: {
-      file: `dist/plugins/editor/files/lib/${lib.name}.js`,
+      file: `plugins/editor/files/lib/${lib.name}.js`,
       format: "cjs",
       exports: "named",
       banner: twBanner(`$:/plugins/BurningTreeC/tiddlywiki-codemirror/lib/${lib.name}.js`),

@@ -171,6 +171,7 @@ const defaultStyleTags = styleTags({
 
   // Conditionals
   ConditionalBlock: t.content,
+  Conditional: t.content,
   ConditionalMark: t.processingInstruction,
   ConditionalKeyword: t.controlKeyword,
   ConditionalBranch: t.content,
