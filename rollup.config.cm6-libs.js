@@ -1,5 +1,6 @@
 import resolve from "@rollup/plugin-node-resolve";
 import commonjs from "@rollup/plugin-commonjs";
+import terser from "@rollup/plugin-terser";
 
 function twBanner(title) {
   return `/*\\
@@ -81,7 +82,15 @@ export default libs.map((lib) => {
     },
     plugins: [
       resolve({ browser: true }),
-      commonjs()
+      commonjs(),
+      terser({
+        format: {
+          comments: function(node, comment) {
+            // Keep TiddlyWiki metadata comments (/*\ ... \*/)
+            return comment.type === "comment2" && /^\\/.test(comment.value);
+          }
+        }
+      })
     ]
   };
 });

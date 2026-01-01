@@ -7,6 +7,7 @@
 import resolve from "@rollup/plugin-node-resolve";
 import commonjs from "@rollup/plugin-commonjs";
 import typescript from "@rollup/plugin-typescript";
+import terser from "@rollup/plugin-terser";
 
 // Banner for TiddlyWiki module
 const banner = `/*\\
@@ -68,6 +69,14 @@ export default {
       tsconfig: "./tsconfig.json",
       declaration: false,
       declarationMap: false
+    }),
+    terser({
+      format: {
+        comments: function(node, comment) {
+          // Keep TiddlyWiki metadata comments (/*\ ... \*/)
+          return comment.type === "comment2" && /^\\/.test(comment.value);
+        }
+      }
     })
   ]
 };
