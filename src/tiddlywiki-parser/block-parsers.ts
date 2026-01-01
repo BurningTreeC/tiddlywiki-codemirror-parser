@@ -1119,11 +1119,15 @@ export const HTMLBlock: BlockParser = {
       const start = cx.lineStart
 
       const children: Element[] = []
+      const openBracketPos = start + indent
+      children.push(elt(Type.TagMark, openBracketPos, openBracketPos + 1)) // <
+      children.push(elt(Type.TagMark, openBracketPos + 1, openBracketPos + 2)) // /
       const tagStart = start + indent + 2  // After "</"
       children.push(elt(isWidget ? Type.WidgetName : Type.TagName, tagStart, tagStart + tagName.length))
 
       // End the closing tag element at the actual tag end, not end of line
       const closeTagEnd = start + closeMatch[0].length
+      children.push(elt(Type.TagMark, closeTagEnd - 1, closeTagEnd)) // >
       cx.addElement(elt(isWidget ? Type.WidgetEnd : Type.HTMLEndTag, start, closeTagEnd, children))
 
       // Parse any inline content after the closing tag on the same line
@@ -1147,6 +1151,8 @@ export const HTMLBlock: BlockParser = {
     const start = cx.lineStart
 
     const children: Element[] = []
+    const openBracketPos = start + indent
+    children.push(elt(Type.TagMark, openBracketPos, openBracketPos + 1)) // Opening <
     const tagStart = start + indent + 1  // After "<"
     children.push(elt(isWidget ? Type.WidgetName : Type.TagName, tagStart, tagStart + tagName.length))
 
@@ -1196,6 +1202,14 @@ export const HTMLBlock: BlockParser = {
               pos++
             }
           }
+        } else if (ch === '<') {
+          // Check if this is the start of another tag (not a macro/transclusion)
+          const nextCh = text[pos + 1]
+          if (nextCh && /[a-zA-Z$\/]/.test(nextCh)) {
+            // Found another tag - stop searching, this opening tag is incomplete
+            return null
+          }
+          pos++
         } else if (ch === '{' && text[pos + 1] === '{' && text[pos + 2] === '{') {
           // Skip filtered {{{...}}}
           pos += 3
@@ -1229,16 +1243,13 @@ export const HTMLBlock: BlockParser = {
     let tagEndResult = findOpeningTagEnd(afterTagName)
     let accumulatedText = afterTagName
 
-    // If not found on current line, keep reading lines (but limit to avoid runaway parsing)
+    // If not found on current line, keep reading lines until end of document
     // Save position so we can restore if we don't find the tag end
     const savedPos = cx.savePosition()
-    let linesSearched = 0
-    const maxLinesForTagEnd = 20
-    while (!tagEndResult && linesSearched < maxLinesForTagEnd) {
+    while (!tagEndResult) {
       if (!cx.nextLine()) break
       accumulatedText += '\n' + cx.line.text
       tagEndResult = findOpeningTagEnd(accumulatedText)
-      linesSearched++
     }
 
     // If we didn't find the tag end, restore position to just after the first line
@@ -1260,6 +1271,14 @@ export const HTMLBlock: BlockParser = {
       if (attrContent.trim()) {
         const attrElements = parseAttributes(attrContent, attrsStart, isWidget)
         children.push(...attrElements)
+      }
+
+      // Add closing marks for the opening tag
+      if (selfClose) {
+        children.push(elt(Type.SelfClosingMarker, openingTagEnd - 2, openingTagEnd - 1)) // /
+        children.push(elt(Type.TagMark, openingTagEnd - 1, openingTagEnd)) // >
+      } else {
+        children.push(elt(Type.TagMark, openingTagEnd - 1, openingTagEnd)) // >
       }
     } else {
       // No > found, treat as incomplete - only include the first line
@@ -1308,11 +1327,15 @@ export const HTMLBlock: BlockParser = {
             children.push(...(inlineElements as Element[]))
           }
 
-          // Add closing tag element
+          // Add closing tag element with marks
+          const closingTagOpenBracket = openingTagEnd + sameLineClose.index
+          children.push(elt(Type.TagMark, closingTagOpenBracket, closingTagOpenBracket + 1)) // <
+          children.push(elt(Type.TagMark, closingTagOpenBracket + 1, closingTagOpenBracket + 2)) // /
           const closeTagStart = openingTagEnd + sameLineClose.index + 2 // After </
           children.push(elt(isWidget ? Type.WidgetName : Type.TagName, closeTagStart, closeTagStart + tagName.length))
 
           const closeTagEnd = openingTagEnd + sameLineClose.index + sameLineClose[0].length
+          children.push(elt(Type.TagMark, closeTagEnd - 1, closeTagEnd)) // >
 
           // Parse any inline content AFTER the closing tag on the same line
           const afterCloseTag = restOfLine.slice(sameLineClose.index + sameLineClose[0].length)
@@ -1367,13 +1390,18 @@ export const HTMLBlock: BlockParser = {
                 children.push(...contentElements)
               }
 
-              // Add closing tag element
+              // Add closing tag element with marks
               const closeIndent = (closeMatch[1] || '').length
+              const closingTagOpenBracket = cx.lineStart + closeIndent
+              children.push(elt(Type.TagMark, closingTagOpenBracket, closingTagOpenBracket + 1)) // <
+              children.push(elt(Type.TagMark, closingTagOpenBracket + 1, closingTagOpenBracket + 2)) // /
               const closeTagStart = cx.lineStart + closeIndent + 2
               children.push(elt(isWidget ? Type.WidgetName : Type.TagName, closeTagStart, closeTagStart + tagName.length))
 
               // Parse any inline content AFTER the closing tag on the same line
               const closeTagFullEnd = closeIndent + closeMatch[0].length
+              const closingTagEndPos = cx.lineStart + closeTagFullEnd
+              children.push(elt(Type.TagMark, closingTagEndPos - 1, closingTagEndPos)) // >
               const afterCloseTag = lineText.slice(closeTagFullEnd)
               if (afterCloseTag.trim()) {
                 const afterCloseStart = cx.lineStart + closeTagFullEnd

@@ -808,9 +808,12 @@ export const FilteredTransclusion: InlineParser = {
 function parseMacroParams(cx: InlineContext, paramsStr: string, offset: number): Element[] {
   const elements: Element[] = []
   let pos = 0
-  const len = paramsStr.length
+  const len = Math.min(paramsStr.length, 5000)  // Safety limit
+  let iterations = 0
+  const maxIterations = 200  // Safety limit on number of parameters
 
-  while (pos < len) {
+  while (pos < len && iterations < maxIterations) {
+    iterations++
     // Skip whitespace
     while (pos < len && /\s/.test(paramsStr[pos])) pos++
     if (pos >= len) break
@@ -844,13 +847,13 @@ function parseMacroParams(cx: InlineContext, paramsStr: string, offset: number):
         // Triple bracket: [[[value]]]
         pos += 3
         while (pos < len && paramsStr.slice(pos, pos + 3) !== ']]]') pos++
-        pos += 3
+        if (pos < len) pos += 3  // Only skip if we found the closing
         valueEnd = pos
       } else if (paramsStr.slice(pos, pos + 2) === '[[') {
         // Double bracket: [[value]]
         pos += 2
         while (pos < len && paramsStr.slice(pos, pos + 2) !== ']]') pos++
-        pos += 2
+        if (pos < len) pos += 2  // Only skip if we found the closing
         valueEnd = pos
       } else {
         // Unquoted value
@@ -878,11 +881,11 @@ function parseMacroParams(cx: InlineContext, paramsStr: string, offset: number):
       } else if (paramsStr.slice(pos, pos + 3) === '[[[') {
         pos += 3
         while (pos < len && paramsStr.slice(pos, pos + 3) !== ']]]') pos++
-        pos += 3
+        if (pos < len) pos += 3
       } else if (paramsStr.slice(pos, pos + 2) === '[[') {
         pos += 2
         while (pos < len && paramsStr.slice(pos, pos + 2) !== ']]') pos++
-        pos += 2
+        if (pos < len) pos += 2
       } else {
         while (pos < len && !/[\s>]/.test(paramsStr[pos])) pos++
       }
@@ -905,9 +908,14 @@ export const MacroCall: InlineParser = {
     const text = cx.slice(pos, cx.end)
 
     // Find closing >> handling nested macros
+    const maxSearch = text.length - 1
     let closePos = -1
     let depth = 1
-    for (let i = 2; i < text.length - 1; i++) {
+    let lineEnd = -1  // Track end of first line for incomplete macros
+    for (let i = 2; i < maxSearch; i++) {
+      if (lineEnd === -1 && text[i] === '\n') {
+        lineEnd = i
+      }
       if (text[i] === '<' && text[i + 1] === '<') {
         depth++
         i++
@@ -920,9 +928,27 @@ export const MacroCall: InlineParser = {
         i++
       }
     }
-    if (closePos === -1) return -1
 
-    const end = pos + closePos + 2
+    // Handle incomplete macro (no closing >>) - only on same line
+    const isIncomplete = closePos === -1
+    if (isIncomplete) {
+      // Only parse incomplete macros on the same line (for typing experience)
+      if (lineEnd === -1) {
+        // No newline found, use end of text
+        closePos = text.length
+      } else {
+        closePos = lineEnd
+      }
+      // Must have at least a name
+      let nameEnd = 2
+      while (nameEnd < closePos && !/[\s\n]/.test(text[nameEnd])) nameEnd++
+      if (nameEnd === 2) return -1  // No name found
+    }
+
+    const end = pos + closePos + (isIncomplete ? 0 : 2)
+
+    // Sanity check: end must be greater than pos and within document bounds
+    if (end <= pos || end > cx.end) return -1
 
     // Parse macro name
     let nameEnd = 2
@@ -935,14 +961,18 @@ export const MacroCall: InlineParser = {
       cx.elt(Type.MacroName, pos + 2, pos + 2 + name.length),
     ]
 
-    // Parse parameters
-    const paramsStr = text.slice(nameEnd, closePos)
-    if (paramsStr.trim()) {
-      const paramElements = parseMacroParams(cx, paramsStr, pos + nameEnd)
-      children.push(...paramElements)
+    // Parse parameters - only if we have valid range
+    if (nameEnd < closePos) {
+      const paramsStr = text.slice(nameEnd, closePos)
+      if (paramsStr.trim()) {
+        const paramElements = parseMacroParams(cx, paramsStr, pos + nameEnd)
+        children.push(...paramElements)
+      }
     }
 
-    children.push(cx.elt(Type.MacroCallMark, end - 2, end))
+    if (!isIncomplete) {
+      children.push(cx.elt(Type.MacroCallMark, end - 2, end))
+    }
 
     return cx.addElement(cx.elt(Type.MacroCall, pos, end, children))
   }
@@ -1339,6 +1369,7 @@ export const Widget: InlineParser = {
     const attrString = text.slice(afterName, afterName + tagResult.end - (tagResult.selfClose ? 2 : 1))
 
     const children: Element[] = [
+      cx.elt(Type.TagMark, pos, pos + 1), // <
       cx.elt(Type.WidgetName, pos + 1, pos + 1 + name.length),
     ]
 
@@ -1351,6 +1382,7 @@ export const Widget: InlineParser = {
     if (tagResult.selfClose) {
       children.push(cx.elt(Type.SelfClosingMarker, end - 2, end - 1))
     }
+    children.push(cx.elt(Type.TagMark, end - 1, end)) // >
 
     return cx.addElement(cx.elt(Type.InlineWidget, pos, end, children))
   }
@@ -1384,6 +1416,7 @@ export const HTMLTag: InlineParser = {
     const attrString = text.slice(afterName, afterName + tagResult.end - (tagResult.selfClose ? 2 : 1))
 
     const children: Element[] = [
+      cx.elt(Type.TagMark, pos, pos + 1), // <
       cx.elt(Type.TagName, pos + 1, pos + 1 + name.length),
     ]
 
@@ -1396,6 +1429,7 @@ export const HTMLTag: InlineParser = {
     if (tagResult.selfClose) {
       children.push(cx.elt(Type.SelfClosingMarker, end - 2, end - 1))
     }
+    children.push(cx.elt(Type.TagMark, end - 1, end)) // >
 
     return cx.addElement(cx.elt(Type.HTMLTag, pos, end, children))
   }

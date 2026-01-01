@@ -302,6 +302,45 @@ export const MacroDefPragma: PragmaParser = {
       const paramStr = singleMatch[2]
       const body = singleMatch[3]
 
+      // Check if body looks incomplete (e.g., starts with << but no >>)
+      // In that case, try to find \end and treat as multi-line
+      const bodyLooksIncomplete = body && (
+        (body.includes("<<") && !body.includes(">>")) ||
+        (body.includes("{{") && !body.includes("}}")) ||
+        (body.includes("{{{") && !body.includes("}}}"))
+      )
+
+      if (bodyLooksIncomplete) {
+        const savedPos = cx.savePosition()
+        const endInfo = findEnd(cx, name)
+        if (endInfo) {
+          // Found \end - treat as multi-line
+          const children: Element[] = [
+            elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
+            elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 7),
+            elt(Type.PragmaName, pragmaStart + text.indexOf(name), pragmaStart + text.indexOf(name) + name.length),
+          ]
+
+          if (paramStr) {
+            const paramStart = pragmaStart + text.indexOf("(") + 1
+            children.push(...parseParams(paramStr, paramStart))
+          }
+
+          // Parse body content recursively (includes the incomplete part from first line)
+          const bodyStart = pragmaStart + text.length - body.length
+          if (endInfo.bodyEnd > bodyStart) {
+            const bodyElements = cx.parseContentRange(bodyStart, endInfo.bodyEnd, true)
+            children.push(...bodyElements)
+          }
+          children.push(elt(Type.PragmaEnd, endInfo.endStart, endInfo.endEnd))
+          cx.nextLine()
+
+          return [elt(Type.MacroDefinition, pragmaStart, cx.prevLineEnd(), children)]
+        }
+        // No \end found - restore and fall through to single-line handling
+        cx.restorePosition(savedPos)
+      }
+
       const children: Element[] = [
         elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
         elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 7),
@@ -370,10 +409,18 @@ export const FnProcDefPragma: PragmaParser = {
           children.push(...parseParams(paramStr, paramStart))
         }
 
-        // Parse body content recursively
+        // Parse body content
         if (endInfo.bodyEnd > endInfo.bodyStart) {
-          const bodyElements = cx.parseContentRange(endInfo.bodyStart, endInfo.bodyEnd, true)
-          children.push(...bodyElements)
+          if (keyword === "function") {
+            // Function body is a filter expression
+            const bodyContent = cx.input.read(endInfo.bodyStart, endInfo.bodyEnd)
+            const filterElements = parseFilterBody(bodyContent, endInfo.bodyStart)
+            children.push(elt(Type.FilterExpression, endInfo.bodyStart, endInfo.bodyEnd, filterElements))
+          } else {
+            // Procedure/widget body is wikitext - parse recursively
+            const bodyElements = cx.parseContentRange(endInfo.bodyStart, endInfo.bodyEnd, true)
+            children.push(...bodyElements)
+          }
         }
         children.push(elt(Type.PragmaEnd, endInfo.endStart, endInfo.endEnd))
         cx.nextLine()
@@ -400,6 +447,53 @@ export const FnProcDefPragma: PragmaParser = {
         case "procedure": nodeType = Type.ProcedureDefinition; break
         case "widget": nodeType = Type.WidgetDefinition; break
         default: return null
+      }
+
+      // Check if body looks incomplete (e.g., starts with << but no >>)
+      // In that case, try to find \end and treat as multi-line
+      const bodyLooksIncomplete = body && (
+        (body.includes("<<") && !body.includes(">>")) ||
+        (body.includes("{{") && !body.includes("}}")) ||
+        (body.includes("{{{") && !body.includes("}}}"))
+      )
+
+      if (bodyLooksIncomplete) {
+        const savedPos = cx.savePosition()
+        const endInfo = findEnd(cx, name)
+        if (endInfo) {
+          // Found \end - treat as multi-line
+          const children: Element[] = [
+            elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
+            elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 1 + keyword.length),
+            elt(Type.PragmaName, pragmaStart + text.indexOf(name), pragmaStart + text.indexOf(name) + name.length),
+          ]
+
+          if (paramStr) {
+            const paramStart = pragmaStart + text.indexOf("(") + 1
+            children.push(...parseParams(paramStr, paramStart))
+          }
+
+          // Parse body content (includes the incomplete part from first line)
+          const bodyStart = pragmaStart + text.length - body.length
+          if (endInfo.bodyEnd > bodyStart) {
+            if (keyword === "function") {
+              // Function body is a filter expression
+              const bodyContent = cx.input.read(bodyStart, endInfo.bodyEnd)
+              const filterElements = parseFilterBody(bodyContent, bodyStart)
+              children.push(elt(Type.FilterExpression, bodyStart, endInfo.bodyEnd, filterElements))
+            } else {
+              // Procedure/widget body is wikitext
+              const bodyElements = cx.parseContentRange(bodyStart, endInfo.bodyEnd, true)
+              children.push(...bodyElements)
+            }
+          }
+          children.push(elt(Type.PragmaEnd, endInfo.endStart, endInfo.endEnd))
+          cx.nextLine()
+
+          return [elt(nodeType, pragmaStart, cx.prevLineEnd(), children)]
+        }
+        // No \end found - restore and fall through to single-line handling
+        cx.restorePosition(savedPos)
       }
 
       const children: Element[] = [
@@ -473,11 +567,14 @@ export const ImportPragma: PragmaParser = {
 
     const pragmaStart = cx.lineStart
     const filter = match[1]
+    const filterStart = pragmaStart + 8  // After "\import "
 
+    // Parse filter with detailed structure
+    const filterElements = parseFilterBody(filter, filterStart)
     const children: Element[] = [
       elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
       elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 7), // "import"
-      elt(Type.FilterExpression, pragmaStart + 8, pragmaStart + 8 + filter.length),
+      elt(Type.FilterExpression, filterStart, filterStart + filter.length, filterElements),
     ]
 
     cx.nextLine()
@@ -541,33 +638,36 @@ export const WhitespacePragma: PragmaParser = {
  */
 
 // Partial \define - matches incomplete define statements (including partial keyword)
-const definePartialRe = /^\\define(?:\s+([^(\s]+))?(?:\s*\(([^)]*)?)?$/
-const defineKeywordPartialRe = /^\\(d|de|def|defi|defin)$/
+// Note: \s* at end handles trailing whitespace like "\define "
+const definePartialRe = /^\\define(?:\s+([^(\s]+))?(?:\s*\(([^)]*)\)?)?\s*$/
+// Partial define keyword - with optional name and params
+const defineKeywordPartialRe = /^\\(d|de|def|defi|defin)(?:\s+([^(\s]+))?(?:\s*\(([^)]*)\)?)?\s*$/
 
 // Partial \function/\procedure/\widget (including partial keywords)
-const fnprocPartialRe = /^\\(function|procedure|widget)(?:\s+([^(\s]+))?(?:\s*\(([^)]*)?)?$/
-const functionKeywordPartialRe = /^\\(f|fu|fun|func|funct|functi|functio)$/
-const procedureKeywordPartialRe = /^\\(p|pr|pro|proc|proce|proced|procedu|procedur)$/
-const widgetKeywordPartialRe = /^\\(wi|wid|widg|widge)$/
+const fnprocPartialRe = /^\\(function|procedure|widget)(?:\s+([^(\s]+))?(?:\s*\(([^)]*)\)?)?\s*$/
+// Partial keywords - with optional name and params
+const functionKeywordPartialRe = /^\\(f|fu|fun|func|funct|functi|functio)(?:\s+([^(\s]+))?(?:\s*\(([^)]*)\)?)?\s*$/
+const procedureKeywordPartialRe = /^\\(p|pr|pro|proc|proce|proced|procedu|procedur)(?:\s+([^(\s]+))?(?:\s*\(([^)]*)\)?)?\s*$/
+const widgetKeywordPartialRe = /^\\(w|wi|wid|widg|widge)(?:\s+([^(\s]+))?(?:\s*\(([^)]*)\)?)?\s*$/
 
 // Partial \rules - just the keyword or with only/except (including partial keyword)
 const rulesPartialRe = /^\\rules(?:\s+(only|except)?)?(?:\s+(.*))?$/
-const rulesKeywordPartialRe = /^\\(r|ru|rul|rule)$/
+const rulesKeywordPartialRe = /^\\(r|ru|rul|rule)\s*$/
 
 // Partial \import - just the keyword (including partial keyword)
-const importPartialRe = /^\\import(?:\s*(.*))?$/
-const importKeywordPartialRe = /^\\(i|im|imp|impo|impor)$/
+const importPartialRe = /^\\import\s*(.*)$/
+const importKeywordPartialRe = /^\\(i|im|imp|impo|impor)\s*$/
 
 // Partial \parameters - incomplete (including partial keyword)
-const parametersPartialRe = /^\\parameters(?:\s*\(([^)]*)?)?$/
-const parametersKeywordPartialRe = /^\\(pa|par|para|param|parame|paramet|paramete|parameter)$/
+const parametersPartialRe = /^\\parameters(?:\s*\(([^)]*)?)?\s*$/
+const parametersKeywordPartialRe = /^\\(pa|par|para|param|parame|paramet|paramete|parameter)\s*$/
 
 // Partial \whitespace - just the keyword (including partial keyword)
 const whitespacePartialRe = /^\\whitespace(?:\s+(.*))?$/
-const whitespaceKeywordPartialRe = /^\\(wh|whi|whit|white|whites|whitesp|whitespa|whitespac)$/
+const whitespaceKeywordPartialRe = /^\\(wh|whi|whit|white|whites|whitesp|whitespa|whitespac)\s*$/
 
 // Partial \end
-const endKeywordPartialRe = /^\\(e|en|end)(?:\s+.*)?$/
+const endKeywordPartialRe = /^\\(e|en|end)(?:\s+.*)?\s*$/
 
 /**
  * Partial pragma parser - catches incomplete pragmas while typing
@@ -703,50 +803,98 @@ export const PartialPragma: PragmaParser = {
     }
 
     // Try partial keywords (typing in progress)
-    // \d, \de, \def, \defi, \defin -> partial define
+    // \d, \de, \def, \defi, \defin -> partial define (with optional name and params)
     match = defineKeywordPartialRe.exec(text)
     if (match) {
       const keyword = match[1]
+      const name = match[2]
+      const paramStr = match[3]
       const children: Element[] = [
         elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
         elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 1 + keyword.length),
       ]
+      if (name) {
+        const nameStart = pragmaStart + text.indexOf(name)
+        children.push(elt(Type.PragmaName, nameStart, nameStart + name.length))
+      }
+      if (paramStr !== undefined) {
+        const paramStart = pragmaStart + text.indexOf("(") + 1
+        if (paramStr) {
+          children.push(...parseParams(paramStr, paramStart))
+        }
+      }
       cx.nextLine()
       return [elt(Type.MacroDefinition, pragmaStart, cx.prevLineEnd(), children)]
     }
 
-    // \f, \fu, \fun, etc. -> partial function
+    // \f, \fu, \fun, etc. -> partial function (with optional name and params)
     match = functionKeywordPartialRe.exec(text)
     if (match) {
       const keyword = match[1]
+      const name = match[2]
+      const paramStr = match[3]
       const children: Element[] = [
         elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
         elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 1 + keyword.length),
       ]
+      if (name) {
+        const nameStart = pragmaStart + text.indexOf(name)
+        children.push(elt(Type.PragmaName, nameStart, nameStart + name.length))
+      }
+      if (paramStr !== undefined) {
+        const paramStart = pragmaStart + text.indexOf("(") + 1
+        if (paramStr) {
+          children.push(...parseParams(paramStr, paramStart))
+        }
+      }
       cx.nextLine()
       return [elt(Type.FunctionDefinition, pragmaStart, cx.prevLineEnd(), children)]
     }
 
-    // \p, \pr, \pro, etc. -> partial procedure
+    // \p, \pr, \pro, etc. -> partial procedure (with optional name and params)
     match = procedureKeywordPartialRe.exec(text)
     if (match) {
       const keyword = match[1]
+      const name = match[2]
+      const paramStr = match[3]
       const children: Element[] = [
         elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
         elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 1 + keyword.length),
       ]
+      if (name) {
+        const nameStart = pragmaStart + text.indexOf(name)
+        children.push(elt(Type.PragmaName, nameStart, nameStart + name.length))
+      }
+      if (paramStr !== undefined) {
+        const paramStart = pragmaStart + text.indexOf("(") + 1
+        if (paramStr) {
+          children.push(...parseParams(paramStr, paramStart))
+        }
+      }
       cx.nextLine()
       return [elt(Type.ProcedureDefinition, pragmaStart, cx.prevLineEnd(), children)]
     }
 
-    // \wi, \wid, etc. -> partial widget
+    // \w, \wi, \wid, etc. -> partial widget (with optional name and params)
     match = widgetKeywordPartialRe.exec(text)
     if (match) {
       const keyword = match[1]
+      const name = match[2]
+      const paramStr = match[3]
       const children: Element[] = [
         elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
         elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 1 + keyword.length),
       ]
+      if (name) {
+        const nameStart = pragmaStart + text.indexOf(name)
+        children.push(elt(Type.PragmaName, nameStart, nameStart + name.length))
+      }
+      if (paramStr !== undefined) {
+        const paramStart = pragmaStart + text.indexOf("(") + 1
+        if (paramStr) {
+          children.push(...parseParams(paramStr, paramStart))
+        }
+      }
       cx.nextLine()
       return [elt(Type.WidgetDefinition, pragmaStart, cx.prevLineEnd(), children)]
     }

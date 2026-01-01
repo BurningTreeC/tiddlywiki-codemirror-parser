@@ -6,7 +6,7 @@
 
 import {
   Parser, Tree, TreeFragment, Input, PartialParse,
-  NodeType, NodeSet, NodeProp
+  NodeType, NodeSet, NodeProp, ParseWrapper
 } from "@lezer/common"
 import { styleTags, tags as t, Tag } from "@lezer/highlight"
 import { Type } from "./types"
@@ -102,6 +102,7 @@ const defaultStyleTags = styleTags({
   "Widget InlineWidget HTMLBlock HTMLTag": t.tagName,
   WidgetName: t.tagName,
   TagName: t.tagName,
+  // TagMark intentionally unstyled - < and > brackets should be default text color
   Attribute: t.attributeName,
   AttributeName: t.attributeName,
   "AttributeValue AttributeString": t.attributeValue,
@@ -133,9 +134,7 @@ const defaultStyleTags = styleTags({
   // Comments
   "CommentBlock CommentMarker": t.comment,
 
-  // Pragmas
-  "MacroDefinition ProcedureDefinition FunctionDefinition WidgetDefinition": t.definitionKeyword,
-  "RulesPragma ImportPragma ParametersPragma WhitespacePragma": t.definitionKeyword,
+  // Pragmas - parent nodes intentionally unstyled to avoid styling gaps between children
   PragmaMark: t.processingInstruction,
   PragmaKeyword: t.keyword,
   PragmaName: t.definition(t.macroName),
@@ -219,18 +218,21 @@ export class TiddlyWikiParser extends Parser {
   readonly pragmaParsers: readonly PragmaParser[]
   readonly blockParsers: readonly BlockParser[]
   readonly inlineParsers: readonly InlineParser[]
+  private wrapFn?: ParseWrapper
 
   constructor(
     nodeSet?: NodeSet,
     pragmaParsers?: readonly PragmaParser[],
     blockParsers?: readonly BlockParser[],
-    inlineParsers?: readonly InlineParser[]
+    inlineParsers?: readonly InlineParser[],
+    wrapFn?: ParseWrapper
   ) {
     super()
     this.nodeSet = nodeSet || createNodeSet()
     this.pragmaParsers = pragmaParsers || DefaultPragmaParsers
     this.blockParsers = blockParsers || DefaultBlockParsers
     this.inlineParsers = inlineParsers || DefaultInlineParsers
+    this.wrapFn = wrapFn
   }
 
   /**
@@ -241,7 +243,11 @@ export class TiddlyWikiParser extends Parser {
     fragments: readonly TreeFragment[],
     ranges: readonly { from: number, to: number }[]
   ): PartialParse {
-    return new BlockContext(this, input, fragments, ranges)
+    const inner = new BlockContext(this, input, fragments, ranges)
+    if (this.wrapFn) {
+      return this.wrapFn(inner, input, fragments, ranges)
+    }
+    return inner
   }
 
   /**
@@ -252,6 +258,7 @@ export class TiddlyWikiParser extends Parser {
     let pragmaParsers = [...this.pragmaParsers]
     let blockParsers = [...this.blockParsers]
     let inlineParsers = [...this.inlineParsers]
+    let wrapFn = config.wrap || this.wrapFn
 
     // Remove specified parsers
     if (config.remove) {
@@ -298,7 +305,7 @@ export class TiddlyWikiParser extends Parser {
       }
     }
 
-    return new TiddlyWikiParser(nodeSet, pragmaParsers, blockParsers, inlineParsers)
+    return new TiddlyWikiParser(nodeSet, pragmaParsers, blockParsers, inlineParsers, wrapFn)
   }
 
   /**

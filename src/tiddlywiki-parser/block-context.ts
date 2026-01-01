@@ -298,6 +298,12 @@ export class BlockContext implements PartialParse {
 
   /**
    * Parse pragmas at document start
+   *
+   * For better editor UX, we're forgiving about malformed pragma bodies:
+   * - If a line doesn't start with \, but a subsequent line does, we skip
+   *   the non-pragma lines and continue parsing pragmas
+   * - This handles cases like `\define foo() <<` where the body is malformed
+   *   but subsequent \procedure/\function lines should still be recognized
    */
   private parsePragmas() {
     while (!this.atEnd) {
@@ -311,7 +317,20 @@ export class BlockContext implements PartialParse {
 
       // Check if this line starts with a pragma
       if (lineText.charCodeAt(this._line.skipSpace(0)) !== Ch.Backslash) {
+        // This line doesn't start with \
+        // Check if there's a pragma line coming up - if so, skip this orphan content
+        if (this.hasUpcomingPragma()) {
+          // Skip this non-pragma line and continue looking for pragmas
+          this.nextLine()
+          continue
+        }
         break
+      }
+
+      // Handle lone backslash (line continuation) - skip and continue pragma parsing
+      if (trimmed === "\\") {
+        this.nextLine()
+        continue
       }
 
       // Try each pragma parser
@@ -327,8 +346,39 @@ export class BlockContext implements PartialParse {
         }
       }
 
-      if (!matched) break
+      if (!matched) {
+        // Unknown \something - skip and continue if more pragmas are coming
+        if (this.hasUpcomingPragma()) {
+          this.nextLine()
+          continue
+        }
+        break
+      }
     }
+  }
+
+  /**
+   * Check if there's a pragma line anywhere in the remaining document
+   * Used to be forgiving about malformed pragma bodies
+   */
+  private hasUpcomingPragma(): boolean {
+    const savedPos = this.savePosition()
+    let foundPragma = false
+
+    while (this.nextLine()) {
+      const text = this._line.text.trim()
+      if (text === "") continue  // Skip blank lines
+
+      // Check if this line starts with backslash (potential pragma)
+      if (text.charCodeAt(0) === Ch.Backslash) {
+        foundPragma = true
+        break
+      }
+      // Continue looking through non-pragma lines
+    }
+
+    this.restorePosition(savedPos)
+    return foundPragma
   }
 
   /**
