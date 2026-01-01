@@ -620,9 +620,11 @@ function filterOperatorCompletion(getFilterOperators?: () => string[]) {
       node = node.parent!
     }
 
-    // Also check if we see {{{ before (filtered transclusion)
-    const hasFilterContext = inFilter || /\{\{\{[^}]*$/.test(textBefore) ||
-                             /<%(?:if|elseif)\s+[^%]*$/.test(textBefore)
+    // Also check text patterns for filter context
+    const hasFilterContext = inFilter ||
+                             /\{\{\{[^}]*$/.test(textBefore) ||  // {{{ filtered transclusion
+                             /<%(?:if|elseif)\s+[^%]*$/.test(textBefore) ||  // <%if filter%>
+                             /filter\s*=\s*["'][^"']*$/.test(textBefore)  // filter="..."
 
     if (!hasFilterContext) return null
 
@@ -691,9 +693,11 @@ function filterRunPrefixCompletion(context: CompletionContext): CompletionResult
     node = node.parent!
   }
 
-  // Also check for {{{ pattern
-  const hasFilterContext = inFilter || /\{\{\{[^}]*$/.test(textBefore) ||
-                           /<%(?:if|elseif)\s+[^%]*$/.test(textBefore)
+  // Also check text patterns for filter context
+  const hasFilterContext = inFilter ||
+                           /\{\{\{[^}]*$/.test(textBefore) ||  // {{{ filtered transclusion
+                           /<%(?:if|elseif)\s+[^%]*$/.test(textBefore) ||  // <%if filter%>
+                           /filter\s*=\s*["'][^"']*$/.test(textBefore)  // filter="..."
 
   if (!hasFilterContext) return null
 

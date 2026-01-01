@@ -868,6 +868,24 @@ function parseAttributes(attrString: string, offset: number, isWidget: boolean):
       if (pos < len) pos++ // skip closing quote
       valueEnd = pos
       valueType = Type.AttributeString
+
+      // Check if this is a filter attribute - parse content as filter expression
+      const attrName = attrString.slice(nameStart, nameEnd).toLowerCase()
+      if (attrName === 'filter' || attrName === '$filter') {
+        const filterContent = attrString.slice(stringStart, stringEnd)
+        const filterChildren = parseFilterExpressionBlock(filterContent, offset + stringStart)
+        const valueChildren: Element[] = [
+          elt(Type.Mark, offset + valueStart, offset + stringStart),  // Opening quote
+          elt(Type.FilterExpression, offset + stringStart, offset + stringEnd, filterChildren),
+          elt(Type.Mark, offset + stringEnd, offset + valueEnd)  // Closing quote
+        ]
+        const attrChildren: Element[] = [
+          elt(Type.AttributeName, offset + nameStart, offset + nameEnd),
+          elt(Type.AttributeFiltered, offset + valueStart, offset + valueEnd, valueChildren)
+        ]
+        elements.push(elt(Type.Attribute, offset + nameStart, offset + valueEnd, attrChildren))
+        continue
+      }
     } else if (ch === '{') {
       // Could be {{indirect}} or {{{filtered}}}
       if (attrString.slice(pos, pos + 3) === '{{{') {

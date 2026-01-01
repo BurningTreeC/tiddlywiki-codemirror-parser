@@ -947,14 +947,34 @@ function parseInlineAttributes(cx: InlineContext, attrString: string, offset: nu
 
     if (ch === '"' || ch === "'") {
       const quote = ch
+      const stringStart = pos + 1
       pos++
       while (pos < len && attrString[pos] !== quote) {
         if (attrString[pos] === '\\' && pos + 1 < len) pos++
         pos++
       }
+      const stringEnd = pos
       if (pos < len) pos++
       valueEnd = pos
       valueType = Type.AttributeString
+
+      // Check if this is a filter attribute - parse content as filter expression
+      const attrName = attrString.slice(nameStart, nameEnd).toLowerCase()
+      if (attrName === 'filter' || attrName === '$filter') {
+        const filterContent = attrString.slice(stringStart, stringEnd)
+        const filterChildren = parseFilterExpression(cx, filterContent, offset + stringStart)
+        const valueChildren: Element[] = [
+          cx.elt(Type.Mark, offset + valueStart, offset + stringStart),  // Opening quote
+          cx.elt(Type.FilterExpression, offset + stringStart, offset + stringEnd, filterChildren),
+          cx.elt(Type.Mark, offset + stringEnd, offset + valueEnd)  // Closing quote
+        ]
+        const attrChildren: Element[] = [
+          cx.elt(Type.AttributeName, offset + nameStart, offset + nameEnd),
+          cx.elt(Type.AttributeFiltered, offset + valueStart, offset + valueEnd, valueChildren)
+        ]
+        elements.push(cx.elt(Type.Attribute, offset + nameStart, offset + valueEnd, attrChildren))
+        continue
+      }
     } else if (ch === '{') {
       if (attrString.slice(pos, pos + 3) === '{{{') {
         // Filtered: {{{filter}}}
