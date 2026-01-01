@@ -7,7 +7,7 @@
  * module-type: codemirror6-plugin
  */
 
-import {Extension, Compartment} from "@codemirror/state"
+import {Extension, Compartment, Prec} from "@codemirror/state"
 import {keymap, EditorView} from "@codemirror/view"
 import {tiddlywikiLanguage, headerIndent, tiddlywiki} from "./tiddlywiki-parser"
 import {
@@ -109,7 +109,7 @@ const COMPARTMENT_NAME = "tiddlywikiLanguage"
 /**
  * Standard TiddlyWiki keymap
  */
-const tiddlywikiKeymap = keymap.of([
+const tiddlywikiKeymap = Prec.high(keymap.of([
   {key: "Enter", run: insertNewlineContinueMarkup},
   {key: "Backspace", run: deleteMarkupBackward},
   {key: "Mod-b", run: toggleBold},
@@ -128,7 +128,7 @@ const tiddlywikiKeymap = keymap.of([
   {key: "Mod-Shift-8", run: toggleBulletList},
   {key: "Mod-Shift-7", run: toggleNumberedList},
   {key: "Mod-Shift-c", run: insertCodeBlock},
-])
+]))
 
 // ============================================================================
 // Helper Functions

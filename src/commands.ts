@@ -38,7 +38,7 @@ class Context {
 
   marker(doc: Text, add: number): string {
     let marker = ""
-    if (this.node.name == "NumberedList") {
+    if (this.node.name == "OrderedList") {
       // Find current number and increment
       let text = doc.sliceString(this.item!.from, this.item!.from + 10)
       let match = /^(#+)/.exec(text)
@@ -49,6 +49,9 @@ class Context {
       if (match) marker = match[1]
     } else if (this.node.name == "DefinitionList") {
       marker = this.type
+    } else if (this.node.name == "BlockQuote" && this.type == ">") {
+      // Single-line > quote style
+      marker = ">"
     }
     return this.spaceBefore + marker + this.spaceAfter
   }
@@ -81,7 +84,7 @@ function getContext(node: SyntaxNode, doc: Text): Context[] {
       if (match) {
         context.push(new Context(node, startPos, startPos + match[0].length, match[1], match[3], "<<<", null))
       }
-    } else if (node.name == "ListItem" && node.parent?.name == "NumberedList") {
+    } else if (node.name == "ListItem" && node.parent?.name == "OrderedList") {
       match = /^(\s*)(#+)(\s+)/.exec(line.text.slice(startPos))
       if (match) {
         context.push(new Context(node.parent!, startPos, startPos + match[0].length, match[1], match[3], match[2], node))
@@ -90,6 +93,12 @@ function getContext(node: SyntaxNode, doc: Text): Context[] {
       match = /^(\s*)(\*+)(\s+)/.exec(line.text.slice(startPos))
       if (match) {
         context.push(new Context(node.parent!, startPos, startPos + match[0].length, match[1], match[3], match[2], node))
+      }
+    } else if (node.name == "ListItem" && node.parent?.name == "BlockQuote") {
+      // Single-line > quote style
+      match = /^(\s*)(>)(\s*)/.exec(line.text.slice(startPos))
+      if (match) {
+        context.push(new Context(node.parent!, startPos, startPos + match[0].length, match[1], match[3], ">", node))
       }
     } else if (node.name == "DefinitionTerm") {
       match = /^(\s*)(;)(\s*)/.exec(line.text.slice(startPos))
@@ -144,7 +153,13 @@ export const insertNewlineContinueMarkupCommand = (config: {
     
     let pos = range.from
     let line = doc.lineAt(pos)
-    let context = getContext(tree.resolveInner(pos, -1), doc)
+    // Try to resolve node at cursor position; if at end of document/line with no
+    // trailing newline, resolveInner may return Document - try pos-1 in that case
+    let node = tree.resolveInner(pos, -1)
+    if (node.name === "Document" && pos > 0) {
+      node = tree.resolveInner(pos - 1, -1)
+    }
+    let context = getContext(node, doc)
     
     while (context.length && context[context.length - 1].from > pos - line.from) {
       context.pop()
@@ -226,7 +241,7 @@ function contextNodeForDelete(tree: Tree, pos: number): SyntaxNode {
   for (let prev; prev = node.childBefore(scan);) {
     if (isMark(prev)) {
       scan = prev.from
-    } else if (prev.name == "NumberedList" || prev.name == "BulletList" || prev.name == "DefinitionList") {
+    } else if (prev.name == "OrderedList" || prev.name == "BulletList" || prev.name == "DefinitionList") {
       node = prev.lastChild!
       scan = node.to
     } else {

@@ -16,6 +16,29 @@ import { html, htmlCompletionSource } from "@codemirror/lang-html"
 import { TiddlyWikiParser } from "./parser"
 import { TiddlyWikiConfig } from "./core"
 import { tiddlywikiLanguage, mkLang, getCodeParser, headerIndent } from "./language"
+import {
+  insertNewlineContinueMarkup,
+  deleteMarkupBackward,
+  toggleBold,
+  toggleItalic,
+  toggleUnderline,
+  toggleStrikethrough,
+  toggleSuperscript,
+  toggleSubscript,
+  toggleInlineCode,
+  insertWikiLink,
+  insertTransclusion,
+  setHeading1,
+  setHeading2,
+  setHeading3,
+  setHeading4,
+  setHeading5,
+  setHeading6,
+  removeHeading,
+  toggleBulletList,
+  toggleNumberedList,
+  insertCodeBlock
+} from "../commands"
 
 // Re-export core language
 export { tiddlywikiLanguage, headerIndent }
@@ -92,8 +115,24 @@ export const tiddlywikiHighlightStyle = HighlightStyle.define([
  * Keymap with TiddlyWiki-specific bindings
  */
 export const tiddlywikiKeymap: readonly KeyBinding[] = [
-  // TODO: Add TiddlyWiki-specific keybindings
-  // e.g., Enter to continue lists, Backspace to delete list markers
+  {key: "Enter", run: insertNewlineContinueMarkup},
+  {key: "Backspace", run: deleteMarkupBackward},
+  {key: "Mod-b", run: toggleBold},
+  {key: "Mod-i", run: toggleItalic},
+  {key: "Mod-u", run: toggleUnderline},
+  {key: "Mod-`", run: toggleInlineCode},
+  {key: "Mod-k", run: insertWikiLink},
+  {key: "Mod-Shift-k", run: insertTransclusion},
+  {key: "Mod-1", run: setHeading1},
+  {key: "Mod-2", run: setHeading2},
+  {key: "Mod-3", run: setHeading3},
+  {key: "Mod-4", run: setHeading4},
+  {key: "Mod-5", run: setHeading5},
+  {key: "Mod-6", run: setHeading6},
+  {key: "Mod-0", run: removeHeading},
+  {key: "Mod-Shift-8", run: toggleBulletList},
+  {key: "Mod-Shift-7", run: toggleNumberedList},
+  {key: "Mod-Shift-c", run: insertCodeBlock},
 ]
 
 /**

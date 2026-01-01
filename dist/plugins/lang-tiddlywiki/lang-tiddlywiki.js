@@ -16,11 +16,11 @@ Built with Rollup - DO NOT EDIT DIRECTLY
 
 'use strict';
 
+var state = require('$:/plugins/BurningTreeC/tiddlywiki-codemirror/lib/codemirror-state.js');
 var view = require('$:/plugins/BurningTreeC/tiddlywiki-codemirror/lib/codemirror-view.js');
 var common = require('$:/plugins/BurningTreeC/tiddlywiki-codemirror/lib/lezer-common.js');
 var highlight = require('$:/plugins/BurningTreeC/tiddlywiki-codemirror/lib/lezer-highlight.js');
 var language = require('$:/plugins/BurningTreeC/tiddlywiki-codemirror/lib/codemirror-language.js');
-var state = require('$:/plugins/BurningTreeC/tiddlywiki-codemirror/lib/codemirror-state.js');
 var autocomplete = require('$:/plugins/BurningTreeC/tiddlywiki-codemirror/lib/codemirror-autocomplete.js');
 var langHtml = require('$:/plugins/BurningTreeC/tiddlywiki-codemirror/lib/codemirror-lang-html.js');
 
@@ -185,11 +185,34 @@ var Type;
     Type[Type["HardBreak"] = 130] = "HardBreak";
     Type[Type["Dash"] = 131] = "Dash";
     Type[Type["Variable"] = 132] = "Variable";
+    Type[Type["VariableMark"] = 133] = "VariableMark";
+    Type[Type["VariableName"] = 134] = "VariableName";
+    Type[Type["FilterSubstitution"] = 135] = "FilterSubstitution";
+    Type[Type["FilterSubstitutionMark"] = 136] = "FilterSubstitutionMark";
+    Type[Type["Placeholder"] = 137] = "Placeholder";
+    Type[Type["PlaceholderMark"] = 138] = "PlaceholderMark";
+    // Filter expression components
+    Type[Type["FilterRun"] = 139] = "FilterRun";
+    Type[Type["FilterOperator"] = 140] = "FilterOperator";
+    Type[Type["FilterOperatorName"] = 141] = "FilterOperatorName";
+    Type[Type["FilterOperand"] = 142] = "FilterOperand";
+    Type[Type["FilterVariable"] = 143] = "FilterVariable";
+    Type[Type["FilterTextRef"] = 144] = "FilterTextRef";
+    Type[Type["FilterRegexp"] = 145] = "FilterRegexp";
+    // Styled blocks (.class prefix)
+    Type[Type["StyledBlock"] = 146] = "StyledBlock";
+    Type[Type["StyledBlockMark"] = 147] = "StyledBlockMark";
+    Type[Type["StyledBlockClass"] = 148] = "StyledBlockClass";
+    // Conditionals (<%if%>, <%elseif%>, <%else%>, <%endif%>)
+    Type[Type["ConditionalBlock"] = 149] = "ConditionalBlock";
+    Type[Type["ConditionalMark"] = 150] = "ConditionalMark";
+    Type[Type["ConditionalKeyword"] = 151] = "ConditionalKeyword";
+    Type[Type["ConditionalBranch"] = 152] = "ConditionalBranch";
     // Text
-    Type[Type["Text"] = 133] = "Text";
+    Type[Type["Text"] = 153] = "Text";
     // Marks (for processing instructions/delimiters that shouldn't render)
-    Type[Type["ProcessingInstruction"] = 134] = "ProcessingInstruction";
-    Type[Type["Mark"] = 135] = "Mark";
+    Type[Type["ProcessingInstruction"] = 154] = "ProcessingInstruction";
+    Type[Type["Mark"] = 155] = "Mark";
 })(Type || (Type = {}));
 // Block-level types
 new Set([
@@ -1926,6 +1949,32 @@ const CommentBlock = {
 // Block Transclusion ({{...}})
 // ============================================================================
 const transclusionBlockRe = /^\{\{([^{}|]*)(?:\|\|([^{}|]+))?(?:\|([^{}]+))?\}\}\s*$/;
+/**
+ * Parse transclusion target details: tiddler!!field or tiddler##index
+ */
+function parseTransclusionTargetBlock(target, offset) {
+    const children = [];
+    const fieldIdx = target.indexOf("!!");
+    const indexIdx = target.indexOf("##");
+    if (fieldIdx !== -1 && (indexIdx === -1 || fieldIdx < indexIdx)) {
+        const tiddlerPart = target.slice(0, fieldIdx);
+        if (tiddlerPart) {
+            children.push(elt(Type.TransclusionTarget, offset, offset + tiddlerPart.length));
+        }
+        children.push(elt(Type.TransclusionField, offset + fieldIdx, offset + target.length));
+    }
+    else if (indexIdx !== -1) {
+        const tiddlerPart = target.slice(0, indexIdx);
+        if (tiddlerPart) {
+            children.push(elt(Type.TransclusionTarget, offset, offset + tiddlerPart.length));
+        }
+        children.push(elt(Type.TransclusionIndex, offset + indexIdx, offset + target.length));
+    }
+    else {
+        children.push(elt(Type.TransclusionTarget, offset, offset + target.length));
+    }
+    return children;
+}
 const TransclusionBlock = {
     name: "TransclusionBlock",
     parse(cx, line) {
@@ -1938,8 +1987,10 @@ const TransclusionBlock = {
         match[3];
         const children = [
             elt(Type.TransclusionMark, start, start + 2),
-            elt(Type.TransclusionTarget, start + 2, start + 2 + target.length),
         ];
+        // Parse target details (tiddler!!field or tiddler##index)
+        const targetChildren = parseTransclusionTargetBlock(target, start + 2);
+        children.push(...targetChildren);
         let pos = start + 2 + target.length;
         if (template) {
             children.push(elt(Type.TransclusionTemplate, pos + 2, pos + 2 + template.length));
@@ -1953,23 +2004,143 @@ const TransclusionBlock = {
 // ============================================================================
 // Filtered Transclusion Block ({{{...}}})
 // ============================================================================
-const filteredBlockRe = /^\{\{\{([^{}]*)\}\}\}(?:\|\|([^{}]+))?\s*$/;
+/**
+ * Parse filter expression content into detailed elements
+ * Handles chained operators like [<var>operator{ref}]
+ */
+function parseFilterExpressionBlock(filterContent, offset) {
+    const elements = [];
+    let pos = 0;
+    const len = filterContent.length;
+    while (pos < len) {
+        const ch = filterContent[pos];
+        if (/\s/.test(ch)) {
+            pos++;
+            continue;
+        }
+        // Filter step: [operators...]
+        if (ch === '[') {
+            const stepStart = pos;
+            pos++; // skip [
+            const stepChildren = [];
+            while (pos < len && filterContent[pos] !== ']') {
+                if (filterContent[pos] === '!') {
+                    pos++;
+                }
+                const operandCh = filterContent[pos];
+                if (operandCh === '[') {
+                    pos++;
+                    const operandStart = pos;
+                    let depth = 1;
+                    while (pos < len && depth > 0) {
+                        if (filterContent[pos] === '[')
+                            depth++;
+                        else if (filterContent[pos] === ']')
+                            depth--;
+                        if (depth > 0)
+                            pos++;
+                    }
+                    stepChildren.push(elt(Type.FilterOperand, offset + operandStart, offset + pos));
+                    if (pos < len && filterContent[pos] === ']')
+                        pos++;
+                }
+                else if (operandCh === '<') {
+                    pos++;
+                    const operandStart = pos;
+                    while (pos < len && filterContent[pos] !== '>')
+                        pos++;
+                    stepChildren.push(elt(Type.FilterVariable, offset + operandStart, offset + pos));
+                    if (pos < len)
+                        pos++;
+                }
+                else if (operandCh === '{') {
+                    pos++;
+                    const operandStart = pos;
+                    while (pos < len && filterContent[pos] !== '}')
+                        pos++;
+                    stepChildren.push(elt(Type.FilterTextRef, offset + operandStart, offset + pos));
+                    if (pos < len)
+                        pos++;
+                }
+                else if (operandCh === '/') {
+                    pos++;
+                    const operandStart = pos;
+                    while (pos < len && filterContent[pos] !== '/') {
+                        if (filterContent[pos] === '\\')
+                            pos++;
+                        pos++;
+                    }
+                    stepChildren.push(elt(Type.FilterRegexp, offset + operandStart, offset + pos));
+                    if (pos < len)
+                        pos++;
+                    while (pos < len && /[gimsuy]/.test(filterContent[pos]))
+                        pos++;
+                }
+                else if (/[a-zA-Z]/.test(operandCh)) {
+                    const opStart = pos;
+                    while (pos < len && /[a-zA-Z0-9\-_:!]/.test(filterContent[pos]))
+                        pos++;
+                    stepChildren.push(elt(Type.FilterOperatorName, offset + opStart, offset + pos));
+                }
+                else {
+                    pos++;
+                }
+            }
+            if (pos < len && filterContent[pos] === ']')
+                pos++;
+            const stepEnd = pos;
+            elements.push(elt(Type.FilterOperator, offset + stepStart, offset + stepEnd, stepChildren));
+            continue;
+        }
+        // Standalone title: [[Title]]
+        if (ch === '[' && filterContent[pos + 1] === '[') {
+            const start = pos;
+            pos += 2;
+            while (pos < len && !(filterContent[pos] === ']' && filterContent[pos + 1] === ']'))
+                pos++;
+            pos += 2;
+            elements.push(elt(Type.FilterOperand, offset + start, offset + pos));
+            continue;
+        }
+        // Run prefix
+        if (ch === '+' || ch === '-' || ch === '~' || ch === ':') {
+            pos++;
+            while (pos < len && /[a-zA-Z]/.test(filterContent[pos]))
+                pos++;
+            continue;
+        }
+        pos++;
+    }
+    return elements;
+}
 const FilteredTransclusionBlock = {
     name: "FilteredTransclusionBlock",
     parse(cx, line) {
-        const match = filteredBlockRe.exec(line.text);
-        if (!match)
+        if (!line.text.startsWith("{{{"))
             return false;
+        // Find closing }}}
+        const closeIdx = line.text.indexOf("}}}", 3);
+        if (closeIdx === -1)
+            return false;
+        // Check that rest of line is empty or has template
+        const afterClose = line.text.slice(closeIdx + 3).trim();
+        let template = "";
+        if (afterClose) {
+            if (!afterClose.startsWith("||"))
+                return false;
+            template = afterClose.slice(2);
+        }
         const start = cx.lineStart;
-        const filter = match[1];
-        const template = match[2];
+        const filter = line.text.slice(3, closeIdx);
+        // Parse filter expression details
+        const filterChildren = parseFilterExpressionBlock(filter, start + 3);
         const children = [
             elt(Type.FilteredTransclusionMark, start, start + 3),
-            elt(Type.FilterExpression, start + 3, start + 3 + filter.length),
+            elt(Type.FilterExpression, start + 3, start + 3 + filter.length, filterChildren),
             elt(Type.FilteredTransclusionMark, start + 3 + filter.length, start + 6 + filter.length),
         ];
         if (template) {
-            children.push(elt(Type.TransclusionTemplate, start + 8 + filter.length, start + 8 + filter.length + template.length));
+            children.push(elt(Type.TransclusionTemplate, start + closeIdx + 5, start + closeIdx + 5 + template.length));
         }
         cx.addElement(elt(Type.FilteredTransclusionBlock, start, start + line.text.length, children));
         return true;
@@ -1978,25 +2149,128 @@ const FilteredTransclusionBlock = {
 // ============================================================================
 // Macro Call Block (<<...>>)
 // ============================================================================
-const macroBlockRe = /^<<([^\s>]+)([^>]*)>>\s*$/;
+/**
+ * Parse macro parameters into individual MacroParam elements
+ */
+function parseMacroParamsBlock(paramsStr, offset) {
+    const elements = [];
+    let pos = 0;
+    const len = paramsStr.length;
+    while (pos < len) {
+        while (pos < len && /\s/.test(paramsStr[pos]))
+            pos++;
+        if (pos >= len)
+            break;
+        const paramStart = pos;
+        // Check if it's a named parameter (name:value)
+        let nameEnd = pos;
+        while (nameEnd < len && /[a-zA-Z0-9\-_]/.test(paramsStr[nameEnd]))
+            nameEnd++;
+        if (nameEnd > pos && paramsStr[nameEnd] === ':') {
+            const nameStart = pos;
+            pos = nameEnd + 1;
+            const valueStart = pos;
+            if (paramsStr[pos] === '"' || paramsStr[pos] === "'") {
+                const quote = paramsStr[pos];
+                pos++;
+                while (pos < len && paramsStr[pos] !== quote) {
+                    if (paramsStr[pos] === '\\')
+                        pos++;
+                    pos++;
+                }
+                if (pos < len)
+                    pos++;
+            }
+            else if (paramsStr.slice(pos, pos + 3) === '[[[') {
+                pos += 3;
+                while (pos < len && paramsStr.slice(pos, pos + 3) !== ']]]')
+                    pos++;
+                pos += 3;
+            }
+            else if (paramsStr.slice(pos, pos + 2) === '[[') {
+                pos += 2;
+                while (pos < len && paramsStr.slice(pos, pos + 2) !== ']]')
+                    pos++;
+                pos += 2;
+            }
+            else {
+                while (pos < len && !/[\s>]/.test(paramsStr[pos]))
+                    pos++;
+            }
+            const paramChildren = [
+                elt(Type.MacroParamName, offset + nameStart, offset + nameEnd),
+                elt(Type.MacroParamValue, offset + valueStart, offset + pos)
+            ];
+            elements.push(elt(Type.MacroParam, offset + paramStart, offset + pos, paramChildren));
+        }
+        else {
+            const valueStart = pos;
+            if (paramsStr[pos] === '"' || paramsStr[pos] === "'") {
+                const quote = paramsStr[pos];
+                pos++;
+                while (pos < len && paramsStr[pos] !== quote) {
+                    if (paramsStr[pos] === '\\')
+                        pos++;
+                    pos++;
+                }
+                if (pos < len)
+                    pos++;
+            }
+            else if (paramsStr.slice(pos, pos + 3) === '[[[') {
+                pos += 3;
+                while (pos < len && paramsStr.slice(pos, pos + 3) !== ']]]')
+                    pos++;
+                pos += 3;
+            }
+            else if (paramsStr.slice(pos, pos + 2) === '[[') {
+                pos += 2;
+                while (pos < len && paramsStr.slice(pos, pos + 2) !== ']]')
+                    pos++;
+                pos += 2;
+            }
+            else {
+                while (pos < len && !/[\s>]/.test(paramsStr[pos]))
+                    pos++;
+            }
+            const paramChildren = [
+                elt(Type.MacroParamValue, offset + valueStart, offset + pos)
+            ];
+            elements.push(elt(Type.MacroParam, offset + paramStart, offset + pos, paramChildren));
+        }
+    }
+    return elements;
+}
 const MacroCallBlock = {
     name: "MacroCallBlock",
     parse(cx, line) {
-        const match = macroBlockRe.exec(line.text);
-        if (!match)
+        if (!line.text.startsWith("<<"))
+            return false;
+        // Find closing >>
+        const closeIdx = line.text.indexOf(">>", 2);
+        if (closeIdx === -1)
+            return false;
+        // Check rest of line is empty
+        if (line.text.slice(closeIdx + 2).trim())
             return false;
         const start = cx.lineStart;
-        const name = match[1];
-        const params = match[2];
+        // Parse macro name
+        let nameEnd = 2;
+        while (nameEnd < closeIdx && !/\s/.test(line.text[nameEnd]))
+            nameEnd++;
+        const name = line.text.slice(2, nameEnd);
+        if (!name)
+            return false;
         const children = [
             elt(Type.MacroCallMark, start, start + 2),
             elt(Type.MacroName, start + 2, start + 2 + name.length),
         ];
-        // TODO: Parse parameters properly
-        if (params.trim()) {
-            children.push(elt(Type.MacroParam, start + 2 + name.length, start + line.text.length - 2));
+        // Parse parameters
+        const paramsStr = line.text.slice(nameEnd, closeIdx);
+        if (paramsStr.trim()) {
+            const paramElements = parseMacroParamsBlock(paramsStr, start + nameEnd);
+            children.push(...paramElements);
         }
-        children.push(elt(Type.MacroCallMark, start + line.text.length - 2, start + line.text.length));
+        children.push(elt(Type.MacroCallMark, start + closeIdx, start + closeIdx + 2));
         cx.addElement(elt(Type.MacroCallBlock, start, start + line.text.length, children));
         return true;
     }
@@ -2067,15 +2341,34 @@ function parseAttributes(attrString, offset, isWidget) {
             // Quoted string: "value" or 'value'
             const quote = ch;
             pos++; // skip opening quote
+            const stringStart = pos;
             while (pos < len && attrString[pos] !== quote) {
                 if (attrString[pos] === '\\' && pos + 1 < len)
                     pos++; // skip escaped char
                 pos++;
             }
+            const stringEnd = pos;
             if (pos < len)
                 pos++; // skip closing quote
             valueEnd = pos;
             valueType = Type.AttributeString;
+            // Check if this is a filter attribute - parse content as filter expression
+            const attrName = attrString.slice(nameStart, nameEnd).toLowerCase();
+            if (attrName === 'filter' || attrName === '$filter') {
+                const filterContent = attrString.slice(stringStart, stringEnd);
+                const filterChildren = parseFilterExpressionBlock(filterContent, offset + stringStart);
+                const valueChildren = [
+                    elt(Type.Mark, offset + valueStart, offset + stringStart), // Opening quote
+                    elt(Type.FilterExpression, offset + stringStart, offset + stringEnd, filterChildren),
+                    elt(Type.Mark, offset + stringEnd, offset + valueEnd) // Closing quote
+                ];
+                const attrChildren = [
+                    elt(Type.AttributeName, offset + nameStart, offset + nameEnd),
+                    elt(Type.AttributeFiltered, offset + valueStart, offset + valueEnd, valueChildren)
+                ];
+                elements.push(elt(Type.Attribute, offset + nameStart, offset + valueEnd, attrChildren));
+                continue;
+            }
         }
         else if (ch === '{') {
             // Could be {{indirect}} or {{{filtered}}}
@@ -2182,22 +2475,94 @@ function parseAttributes(attrString, offset, isWidget) {
         }
         else if (ch === '`') {
             // Substituted string: `value` or ```value```
+            let openMarkEnd;
+            let closeMarkStart;
             if (attrString.slice(pos, pos + 3) === '```') {
+                openMarkEnd = pos + 3;
                 pos += 3;
                 while (pos < len && attrString.slice(pos, pos + 3) !== '```')
                     pos++;
+                closeMarkStart = pos;
                 if (attrString.slice(pos, pos + 3) === '```')
                     pos += 3;
             }
             else {
+                openMarkEnd = pos + 1;
                 pos++; // skip opening `
                 while (pos < len && attrString[pos] !== '`')
                     pos++;
+                closeMarkStart = pos;
                 if (pos < len)
                     pos++; // skip closing `
             }
             valueEnd = pos;
             valueType = Type.AttributeSubstituted;
+            // Parse $(variable)$ and ${ filter }$ patterns inside the substituted string
+            const valueChildren = [
+                elt(Type.Mark, offset + valueStart, offset + openMarkEnd) // Opening `
+            ];
+            const content = attrString.slice(openMarkEnd, closeMarkStart);
+            let contentPos = 0;
+            const contentOffset = offset + openMarkEnd;
+            while (contentPos < content.length) {
+                // Check for ${ filter }$ pattern first (filter expressions are substituted before variables)
+                // Note: can't use simple regex since filter may contain } characters
+                if (content.slice(contentPos, contentPos + 2) === '${') {
+                    // Find the closing }$
+                    const searchStart = contentPos + 2;
+                    let filterEndPos = -1;
+                    for (let i = searchStart; i < content.length - 1; i++) {
+                        if (content[i] === '}' && content[i + 1] === '$') {
+                            filterEndPos = i;
+                            break;
+                        }
+                    }
+                    if (filterEndPos !== -1) {
+                        const filterMatch = [
+                            content.slice(contentPos, filterEndPos + 2),
+                            content.slice(contentPos + 2, filterEndPos)
+                        ];
+                        const filterStart = contentOffset + contentPos;
+                        const filterEnd = filterStart + filterMatch[0].length;
+                        const filterExprStart = filterStart + 2;
+                        const filterExprEnd = filterEnd - 2;
+                        // Parse the filter expression inside
+                        const filterContent = filterMatch[1].trim();
+                        const filterChildren = parseFilterExpressionBlock(filterContent, filterExprStart + (filterMatch[1].length - filterMatch[1].trimStart().length));
+                        valueChildren.push(elt(Type.FilterSubstitution, filterStart, filterEnd, [
+                            elt(Type.FilterSubstitutionMark, filterStart, filterStart + 2),
+                            elt(Type.FilterExpression, filterExprStart, filterExprEnd, filterChildren),
+                            elt(Type.FilterSubstitutionMark, filterEnd - 2, filterEnd)
+                        ]));
+                        contentPos += filterMatch[0].length;
+                        continue;
+                    }
+                }
+                // Check for $(variable)$ pattern
+                const varMatch = content.slice(contentPos).match(/^\$\(([^)]+)\)\$/);
+                if (varMatch) {
+                    const varStart = contentOffset + contentPos;
+                    const varEnd = varStart + varMatch[0].length;
+                    const varNameStart = varStart + 2;
+                    const varNameEnd = varNameStart + varMatch[1].length;
+                    valueChildren.push(elt(Type.Variable, varStart, varEnd, [
+                        elt(Type.VariableMark, varStart, varStart + 2),
+                        elt(Type.VariableName, varNameStart, varNameEnd),
+                        elt(Type.VariableMark, varNameEnd, varEnd)
+                    ]));
+                    contentPos += varMatch[0].length;
+                }
+                else {
+                    contentPos++;
+                }
+            }
+            valueChildren.push(elt(Type.Mark, offset + closeMarkStart, offset + valueEnd)); // Closing `
+            const attrChildren = [
+                elt(Type.AttributeName, offset + nameStart, offset + nameEnd),
+                elt(valueType, offset + valueStart, offset + valueEnd, valueChildren)
+            ];
+            elements.push(elt(Type.Attribute, offset + nameStart, offset + valueEnd, attrChildren));
+            continue;
         }
         else {
             // Unquoted value - read until whitespace or >
@@ -2452,7 +2817,190 @@ const HTMLBlock = {
 // ============================================================================
 // Export all default block parsers
 // ============================================================================
+// ============================================================================
+// Multi-line Styled Block (@@.className ... @@)
+// ============================================================================
+const styledBlockOpenRe = /^@@(\.[a-zA-Z_][a-zA-Z0-9_\-]*)*\s*$/;
+const StyledBlock = {
+    name: "StyledBlock",
+    parse(cx, line) {
+        // Match opening line: @@ or @@.className
+        const match = styledBlockOpenRe.exec(line.text);
+        if (!match)
+            return false;
+        const start = cx.lineStart;
+        const children = [
+            elt(Type.HighlightMark, start, start + 2), // Opening @@
+        ];
+        // Parse class names after @@
+        let pos = 2;
+        while (pos < line.text.length) {
+            if (line.text[pos] === '.') {
+                const markStart = pos;
+                pos++;
+                const classStart = pos;
+                while (pos < line.text.length && /[a-zA-Z0-9_\-]/.test(line.text[pos]))
+                    pos++;
+                if (pos > classStart) {
+                    children.push(elt(Type.StyledBlockMark, start + markStart, start + markStart + 1));
+                    children.push(elt(Type.StyledBlockClass, start + classStart, start + pos));
+                }
+            }
+            else {
+                pos++;
+            }
+        }
+        const openingLineEnd = start + line.text.length;
+        // Find closing @@ on its own line
+        let closingLine = cx.lineStart + line.text.length + 1;
+        let contentEnd = closingLine;
+        while (closingLine < cx.input.length) {
+            // Read until end of line
+            let lineEnd = closingLine;
+            while (lineEnd < cx.input.length && cx.input.read(lineEnd, lineEnd + 1) !== '\n') {
+                lineEnd++;
+            }
+            const lineText = cx.input.read(closingLine, lineEnd);
+            if (lineText.trim() === '@@') {
+                contentEnd = closingLine;
+                // Parse content between opening and closing
+                if (contentEnd > openingLineEnd + 1) {
+                    const contentElements = cx.parseContentRange(openingLineEnd + 1, contentEnd);
+                    children.push(...contentElements);
+                }
+                // Add closing mark
+                const closeStart = closingLine + lineText.indexOf('@@');
+                children.push(elt(Type.HighlightMark, closeStart, closeStart + 2));
+                cx.addElement(elt(Type.Highlight, start, lineEnd, children));
+                // Advance to the closing @@ line (parseBlock will call nextLine() to move past it)
+                while (cx.lineStart < closingLine) {
+                    cx.nextLine();
+                }
+                return true;
+            }
+            closingLine = lineEnd + 1;
+        }
+        // No closing found - don't match
+        return false;
+    }
+};
+// ============================================================================
+// Conditional Block (<%if%> <%elseif%> <%else%> <%endif%>)
+// ============================================================================
+const conditionalIfRe = /^<%if\s+(.+?)\s*%>\s*$/;
+const conditionalElseifRe = /^<%elseif\s+(.+?)\s*%>\s*$/;
+const conditionalElseRe = /^<%else\s*%>\s*$/;
+const conditionalEndifRe = /^<%endif\s*%>\s*$/;
+const ConditionalBlock = {
+    name: "ConditionalBlock",
+    parse(cx, line) {
+        const ifMatch = conditionalIfRe.exec(line.text);
+        if (!ifMatch)
+            return false;
+        const start = cx.lineStart;
+        const filter = ifMatch[1];
+        const children = [];
+        // Parse opening <%if [filter] %>
+        line.text.indexOf('if');
+        children.push(elt(Type.ConditionalMark, start, start + 2)); // <%
+        children.push(elt(Type.ConditionalKeyword, start + 2, start + 4)); // if
+        // Parse the filter expression
+        const filterStart = start + line.text.indexOf(filter);
+        const filterChildren = parseFilterExpressionBlock(filter, filterStart);
+        children.push(elt(Type.FilterExpression, filterStart, filterStart + filter.length, filterChildren));
+        children.push(elt(Type.ConditionalMark, start + line.text.length - 2, start + line.text.length)); // %>
+        const openingLineEnd = start + line.text.length;
+        // Track branches and find <%endif%>
+        let currentPos = openingLineEnd + 1;
+        let branchStart = currentPos;
+        let depth = 1;
+        let endPos = -1;
+        let endifLineStart = -1;
+        while (currentPos < cx.input.length && depth > 0) {
+            // Read until end of line
+            let lineEnd = currentPos;
+            while (lineEnd < cx.input.length && cx.input.read(lineEnd, lineEnd + 1) !== '\n') {
+                lineEnd++;
+            }
+            const lineText = cx.input.read(currentPos, lineEnd);
+            // Check for nested <%if%>
+            if (conditionalIfRe.test(lineText)) {
+                depth++;
+            }
+            else if (conditionalEndifRe.test(lineText)) {
+                depth--;
+                if (depth === 0) {
+                    // Parse content before <%endif%>
+                    if (currentPos > branchStart) {
+                        const branchContent = cx.parseContentRange(branchStart, currentPos);
+                        if (branchContent.length > 0) {
+                            children.push(elt(Type.ConditionalBranch, branchStart, currentPos, branchContent));
+                        }
+                    }
+                    // Parse <%endif%>
+                    const endifStart = currentPos + lineText.indexOf('<%');
+                    children.push(elt(Type.ConditionalMark, endifStart, endifStart + 2));
+                    children.push(elt(Type.ConditionalKeyword, endifStart + 2, endifStart + 7)); // endif
+                    children.push(elt(Type.ConditionalMark, endifStart + lineText.indexOf('%>'), endifStart + lineText.indexOf('%>') + 2));
+                    endifLineStart = currentPos;
+                    endPos = lineEnd;
+                    break;
+                }
+            }
+            else if (depth === 1 && conditionalElseifRe.test(lineText)) {
+                // Parse content before <%elseif%>
+                if (currentPos > branchStart) {
+                    const branchContent = cx.parseContentRange(branchStart, currentPos);
+                    if (branchContent.length > 0) {
+                        children.push(elt(Type.ConditionalBranch, branchStart, currentPos, branchContent));
+                    }
+                }
+                // Parse <%elseif [filter] %>
+                const elseifMatch = conditionalElseifRe.exec(lineText);
+                if (elseifMatch) {
+                    const elseifStart = currentPos + lineText.indexOf('<%');
+                    children.push(elt(Type.ConditionalMark, elseifStart, elseifStart + 2));
+                    children.push(elt(Type.ConditionalKeyword, elseifStart + 2, elseifStart + 8)); // elseif
+                    const elseifFilter = elseifMatch[1];
+                    const elseifFilterStart = currentPos + lineText.indexOf(elseifFilter);
+                    const elseifFilterChildren = parseFilterExpressionBlock(elseifFilter, elseifFilterStart);
+                    children.push(elt(Type.FilterExpression, elseifFilterStart, elseifFilterStart + elseifFilter.length, elseifFilterChildren));
+                    children.push(elt(Type.ConditionalMark, currentPos + lineText.indexOf('%>'), currentPos + lineText.indexOf('%>') + 2));
+                }
+                branchStart = lineEnd + 1;
+            }
+            else if (depth === 1 && conditionalElseRe.test(lineText)) {
+                // Parse content before <%else%>
+                if (currentPos > branchStart) {
+                    const branchContent = cx.parseContentRange(branchStart, currentPos);
+                    if (branchContent.length > 0) {
+                        children.push(elt(Type.ConditionalBranch, branchStart, currentPos, branchContent));
+                    }
+                }
+                // Parse <%else%>
+                const elseStart = currentPos + lineText.indexOf('<%');
+                children.push(elt(Type.ConditionalMark, elseStart, elseStart + 2));
+                children.push(elt(Type.ConditionalKeyword, elseStart + 2, elseStart + 6)); // else
+                children.push(elt(Type.ConditionalMark, currentPos + lineText.indexOf('%>'), currentPos + lineText.indexOf('%>') + 2));
+                branchStart = lineEnd + 1;
+            }
+            currentPos = lineEnd + 1;
+        }
+        if (endPos === -1) {
+            // No closing <%endif%> found
+            return false;
+        }
+        cx.addElement(elt(Type.ConditionalBlock, start, endPos, children));
+        // Advance to the <%endif%> line (parseBlock will call nextLine() to move past it)
+        while (cx.lineStart < endifLineStart) {
+            cx.nextLine();
+        }
+        return true;
+    }
+};
 const DefaultBlockParsers = [
+    ConditionalBlock, // <%if%> ... <%endif%>
+    StyledBlock, // Multi-line @@...@@
     Heading,
     HorizontalRule,
     FencedCode,
@@ -2639,19 +3187,64 @@ const Subscript = {
     }
 };
 // ============================================================================
-// Highlight Parser (@@)
+// Highlight/Styled Parser (@@.className content@@ or @@color:red;content@@)
 // ============================================================================
-const HighlightDelim = { resolve: "Highlight", mark: "HighlightMark" };
 const Highlight = {
     name: "Highlight",
     parse(cx, next, pos) {
         if (next !== Ch.At || cx.char(pos + 1) !== Ch.At)
             return -1;
-        const before = cx.slice(pos - 1, pos);
-        const after = cx.slice(pos + 2, pos + 3);
-        const sBefore = /\s|^$/.test(before);
-        const sAfter = /\s|^$/.test(after);
-        return cx.addDelimiter(HighlightDelim, pos, pos + 2, !sAfter, !sBefore);
+        const text = cx.slice(pos, cx.end);
+        // Find closing @@
+        let closePos = -1;
+        for (let i = 2; i < text.length - 1; i++) {
+            if (text[i] === '@' && text[i + 1] === '@') {
+                closePos = i;
+                break;
+            }
+        }
+        if (closePos === -1)
+            return -1;
+        const end = pos + closePos + 2;
+        const content = text.slice(2, closePos);
+        const children = [
+            cx.elt(Type.HighlightMark, pos, pos + 2), // Opening @@
+        ];
+        // Check for .className or CSS styles at the start
+        let contentStart = 0;
+        let hasClasses = false;
+        // Parse .className(s)
+        while (contentStart < content.length && content[contentStart] === '.') {
+            hasClasses = true;
+            const classStart = contentStart;
+            contentStart++; // skip .
+            const classNameStart = contentStart;
+            while (contentStart < content.length && /[a-zA-Z0-9_\-]/.test(content[contentStart])) {
+                contentStart++;
+            }
+            if (contentStart > classNameStart) {
+                children.push(cx.elt(Type.StyledBlockMark, pos + 2 + classStart, pos + 2 + classStart + 1));
+                children.push(cx.elt(Type.StyledBlockClass, pos + 2 + classNameStart, pos + 2 + contentStart));
+            }
+        }
+        // Check for CSS styles (property:value;)
+        if (!hasClasses && content.includes(':') && content.includes(';')) {
+            const styleEnd = content.indexOf(';') + 1;
+            // The style part is implicitly included in Highlight
+            contentStart = styleEnd;
+        }
+        // Skip leading space after classes/styles
+        if (contentStart < content.length && /\s/.test(content[contentStart])) {
+            contentStart++;
+        }
+        // The rest is content - parse it as inline
+        if (contentStart < closePos) {
+            const innerContent = content.slice(contentStart);
+            const innerElements = cx.parser.parseInline(innerContent, pos + 2 + contentStart);
+            children.push(...innerElements);
+        }
+        children.push(cx.elt(Type.HighlightMark, end - 2, end)); // Closing @@
+        return cx.addElement(cx.elt(Type.Highlight, pos, end, children));
     }
 };
 // ============================================================================
@@ -2719,9 +3312,9 @@ const ExternalLink = {
     }
 };
 // ============================================================================
-// Image Link Parser ([img[src]] or [img width=x height=y [alt|src]])
+// Image Link Parser ([img[src]] or [img width=x height=y [tooltip|src]])
 // ============================================================================
-const imgLinkRe = /^\[img(?:\s+[^\[]+)?\[([^\]|]*?)(?:\|([^\]]*?))?\]\]/;
+const imgLinkRe = /^\[img(\s+[^\[]+)?\[([^\]|]*?)(?:\|([^\]]*?))?\]\]/;
 const ImageLink = {
     name: "ImageLink",
     parse(cx, next, pos) {
@@ -2732,11 +3325,47 @@ const ImageLink = {
         if (!match)
             return -1;
         const end = pos + match[0].length;
+        const attrs = match[1]; // attributes like " width=100 class=thumb"
+        const tooltipOrSource = match[2]; // tooltip if | present, otherwise source
+        const source = match[3]; // source after |
         const children = [
             cx.elt(Type.ImageMark, pos, pos + 4), // [img
         ];
-        // TODO: Parse width/height/class attributes
-        children.push(cx.elt(Type.ImageMark, end - 2, end));
+        let attrEnd = pos + 4;
+        // Parse attributes if present
+        if (attrs) {
+            const attrStart = pos + 4;
+            attrEnd = attrStart + attrs.length;
+            // Parse individual attributes
+            const attrElements = parseInlineAttributes(cx, attrs.trim(), attrStart + (attrs.length - attrs.trimStart().length));
+            children.push(...attrElements);
+        }
+        // Add the opening [ of the source bracket
+        const sourceBracketStart = attrEnd;
+        children.push(cx.elt(Type.ImageMark, sourceBracketStart, sourceBracketStart + 1)); // [
+        // Parse tooltip and source
+        const innerStart = sourceBracketStart + 1;
+        if (source !== undefined) {
+            // Has tooltip|source format
+            const tooltipEnd = innerStart + tooltipOrSource.length;
+            if (tooltipOrSource) {
+                children.push(cx.elt(Type.ImageTooltip, innerStart, tooltipEnd));
+            }
+            children.push(cx.elt(Type.LinkSeparator, tooltipEnd, tooltipEnd + 1)); // |
+            const sourceStart = tooltipEnd + 1;
+            const sourceEnd = sourceStart + source.length;
+            if (source) {
+                children.push(cx.elt(Type.ImageSource, sourceStart, sourceEnd));
+            }
+        }
+        else {
+            // Just source, no tooltip
+            const sourceEnd = innerStart + tooltipOrSource.length;
+            if (tooltipOrSource) {
+                children.push(cx.elt(Type.ImageSource, innerStart, sourceEnd));
+            }
+        }
+        children.push(cx.elt(Type.ImageMark, end - 2, end)); // ]]
         return cx.addElement(cx.elt(Type.ImageLink, pos, end, children));
     }
 };
@@ -2744,6 +3373,39 @@ const ImageLink = {
 // Transclusion Parser ({{ref}} or {{ref!!field}} etc)
 // ============================================================================
 const transclusionRe = /^\{\{([^{}|]*?)(?:\|\|([^{}|]+?))?(?:\|([^{}]+?))?\}\}/;
+/**
+ * Parse transclusion target details: tiddler!!field or tiddler##index
+ */
+function parseTransclusionTarget(cx, target, offset) {
+    const children = [];
+    // Check for !!field
+    const fieldIdx = target.indexOf("!!");
+    // Check for ##index
+    const indexIdx = target.indexOf("##");
+    if (fieldIdx !== -1 && (indexIdx === -1 || fieldIdx < indexIdx)) {
+        // Has field reference
+        const tiddlerPart = target.slice(0, fieldIdx);
+        target.slice(fieldIdx + 2);
+        if (tiddlerPart) {
+            children.push(cx.elt(Type.TransclusionTarget, offset, offset + tiddlerPart.length));
+        }
+        children.push(cx.elt(Type.TransclusionField, offset + fieldIdx, offset + target.length));
+    }
+    else if (indexIdx !== -1) {
+        // Has index reference
+        const tiddlerPart = target.slice(0, indexIdx);
+        target.slice(indexIdx + 2);
+        if (tiddlerPart) {
+            children.push(cx.elt(Type.TransclusionTarget, offset, offset + tiddlerPart.length));
+        }
+        children.push(cx.elt(Type.TransclusionIndex, offset + indexIdx, offset + target.length));
+    }
+    else {
+        // Just a tiddler reference
+        children.push(cx.elt(Type.TransclusionTarget, offset, offset + target.length));
+    }
+    return children;
+}
 const Transclusion = {
     name: "Transclusion",
     parse(cx, next, pos) {
@@ -2761,8 +3423,10 @@ const Transclusion = {
         const template = match[2];
         const children = [
             cx.elt(Type.TransclusionMark, pos, pos + 2),
-            cx.elt(Type.TransclusionTarget, pos + 2, pos + 2 + target.length),
         ];
+        // Parse target details (tiddler!!field or tiddler##index)
+        const targetChildren = parseTransclusionTarget(cx, target, pos + 2);
+        children.push(...targetChildren);
         if (template) {
             const templateStart = pos + 2 + target.length + 2;
             children.push(cx.elt(Type.TransclusionTemplate, templateStart, templateStart + template.length));
@@ -2772,28 +3436,169 @@ const Transclusion = {
     }
 };
 // ============================================================================
+// Filter Expression Parser Helper
+// ============================================================================
+/**
+ * Parse filter expression content into detailed elements
+ * Handles: [operator[operand]], [operator<variable>], [operator{textref}]
+ * Also handles chained operators like [<var>operator{ref}]
+ */
+function parseFilterExpression(cx, filterContent, offset) {
+    const elements = [];
+    let pos = 0;
+    const len = filterContent.length;
+    while (pos < len) {
+        const ch = filterContent[pos];
+        // Skip whitespace
+        if (/\s/.test(ch)) {
+            pos++;
+            continue;
+        }
+        // Filter step: [operators...]
+        if (ch === '[') {
+            const stepStart = pos;
+            pos++; // skip [
+            // Parse operators within this step (can be chained)
+            const stepChildren = [];
+            while (pos < len && filterContent[pos] !== ']') {
+                // Check for negation
+                if (filterContent[pos] === '!') {
+                    pos++;
+                }
+                // Check for operand-only (title selection): [literal], <variable>, {textref}
+                const operandCh = filterContent[pos];
+                if (operandCh === '[') {
+                    // Literal operand: [value]
+                    pos++;
+                    const operandStart = pos;
+                    let depth = 1;
+                    while (pos < len && depth > 0) {
+                        if (filterContent[pos] === '[')
+                            depth++;
+                        else if (filterContent[pos] === ']')
+                            depth--;
+                        if (depth > 0)
+                            pos++;
+                    }
+                    stepChildren.push(cx.elt(Type.FilterOperand, offset + operandStart, offset + pos));
+                    if (pos < len && filterContent[pos] === ']')
+                        pos++;
+                }
+                else if (operandCh === '<') {
+                    // Variable: <varname>
+                    pos++;
+                    const operandStart = pos;
+                    while (pos < len && filterContent[pos] !== '>')
+                        pos++;
+                    stepChildren.push(cx.elt(Type.FilterVariable, offset + operandStart, offset + pos));
+                    if (pos < len)
+                        pos++;
+                }
+                else if (operandCh === '{') {
+                    // Text reference: {textref}
+                    pos++;
+                    const operandStart = pos;
+                    while (pos < len && filterContent[pos] !== '}')
+                        pos++;
+                    stepChildren.push(cx.elt(Type.FilterTextRef, offset + operandStart, offset + pos));
+                    if (pos < len)
+                        pos++;
+                }
+                else if (operandCh === '/') {
+                    // Regexp: /regexp/flags
+                    pos++;
+                    const operandStart = pos;
+                    while (pos < len && filterContent[pos] !== '/') {
+                        if (filterContent[pos] === '\\')
+                            pos++;
+                        pos++;
+                    }
+                    stepChildren.push(cx.elt(Type.FilterRegexp, offset + operandStart, offset + pos));
+                    if (pos < len)
+                        pos++;
+                    while (pos < len && /[gimsuy]/.test(filterContent[pos]))
+                        pos++;
+                }
+                else if (/[a-zA-Z]/.test(operandCh)) {
+                    // Operator name (and optional :suffix)
+                    const opStart = pos;
+                    while (pos < len && /[a-zA-Z0-9\-_:!]/.test(filterContent[pos]))
+                        pos++;
+                    stepChildren.push(cx.elt(Type.FilterOperatorName, offset + opStart, offset + pos));
+                }
+                else {
+                    // Unknown character, skip
+                    pos++;
+                }
+            }
+            // Skip closing ]
+            if (pos < len && filterContent[pos] === ']')
+                pos++;
+            const stepEnd = pos;
+            elements.push(cx.elt(Type.FilterOperator, offset + stepStart, offset + stepEnd, stepChildren));
+            continue;
+        }
+        // Standalone title: [[Title]]
+        if (ch === '[' && filterContent[pos + 1] === '[') {
+            const start = pos;
+            pos += 2;
+            while (pos < len && !(filterContent[pos] === ']' && filterContent[pos + 1] === ']'))
+                pos++;
+            pos += 2;
+            elements.push(cx.elt(Type.FilterOperand, offset + start, offset + pos));
+            continue;
+        }
+        // Run prefix: + - ~ :prefix
+        if (ch === '+' || ch === '-' || ch === '~' || ch === ':') {
+            pos++;
+            while (pos < len && /[a-zA-Z]/.test(filterContent[pos]))
+                pos++;
+            continue;
+        }
+        pos++;
+    }
+    return elements;
+}
+// ============================================================================
 // Filtered Transclusion Parser ({{{filter}}})
 // ============================================================================
-const filteredRe = /^\{\{\{([^{}]*?)\}\}\}(?:\|\|([^{}]+?))?/;
 const FilteredTransclusion = {
     name: "FilteredTransclusion",
     parse(cx, next, pos) {
         if (next !== Ch.LeftBrace || cx.char(pos + 1) !== Ch.LeftBrace || cx.char(pos + 2) !== Ch.LeftBrace)
             return -1;
         const text = cx.slice(pos, cx.end);
-        const match = filteredRe.exec(text);
-        if (!match)
+        // Find closing }}} - need to handle nested braces properly
+        let filterEnd = -1;
+        for (let i = 3; i < text.length - 2; i++) {
+            if (text[i] === '}' && text[i + 1] === '}' && text[i + 2] === '}') {
+                filterEnd = i;
+                break;
+            }
+        }
+        if (filterEnd === -1)
             return -1;
-        const end = pos + match[0].length;
-        const filter = match[1];
-        const template = match[2];
+        const filter = text.slice(3, filterEnd);
+        let end = pos + filterEnd + 3;
+        // Check for template
+        let template = "";
+        if (text.slice(filterEnd + 3, filterEnd + 5) === "||") {
+            const templateStart = filterEnd + 5;
+            let templateEnd = templateStart;
+            while (templateEnd < text.length && !/[\s}]/.test(text[templateEnd]))
+                templateEnd++;
+            template = text.slice(templateStart, templateEnd);
+            end = pos + templateEnd;
+        }
+        // Parse filter expression details
+        const filterChildren = parseFilterExpression(cx, filter, pos + 3);
         const children = [
             cx.elt(Type.FilteredTransclusionMark, pos, pos + 3),
-            cx.elt(Type.FilterExpression, pos + 3, pos + 3 + filter.length),
-            cx.elt(Type.FilteredTransclusionMark, pos + 3 + filter.length, pos + 6 + filter.length),
+            cx.elt(Type.FilterExpression, pos + 3, pos + 3 + filter.length, filterChildren),
+            cx.elt(Type.FilteredTransclusionMark, pos + 3 + filter.length, pos + filterEnd + 3),
         ];
         if (template) {
-            children.push(cx.elt(Type.TransclusionTemplate, pos + 8 + filter.length, end));
+            children.push(cx.elt(Type.TransclusionTemplate, pos + filterEnd + 5, end));
         }
         return cx.addElement(cx.elt(Type.FilteredTransclusion, pos, end, children));
     }
@@ -2801,25 +3606,153 @@ const FilteredTransclusion = {
 // ============================================================================
 // Macro Call Parser (<<macro params>>)
 // ============================================================================
-const macroRe = /^<<([^\s>]+)([^>]*)>>/;
+/**
+ * Parse macro parameters into individual MacroParam elements
+ * Handles: name:"value", name:value, "value", value
+ */
+function parseMacroParams(cx, paramsStr, offset) {
+    const elements = [];
+    let pos = 0;
+    const len = paramsStr.length;
+    while (pos < len) {
+        // Skip whitespace
+        while (pos < len && /\s/.test(paramsStr[pos]))
+            pos++;
+        if (pos >= len)
+            break;
+        const paramStart = pos;
+        // Check if it's a named parameter (name:value)
+        let nameEnd = pos;
+        while (nameEnd < len && /[a-zA-Z0-9\-_]/.test(paramsStr[nameEnd]))
+            nameEnd++;
+        if (nameEnd > pos && paramsStr[nameEnd] === ':') {
+            // Named parameter
+            const nameStart = pos;
+            pos = nameEnd + 1; // skip the :
+            // Parse value
+            const valueStart = pos;
+            let valueEnd = pos;
+            if (paramsStr[pos] === '"' || paramsStr[pos] === "'") {
+                // Quoted value
+                const quote = paramsStr[pos];
+                pos++;
+                while (pos < len && paramsStr[pos] !== quote) {
+                    if (paramsStr[pos] === '\\')
+                        pos++;
+                    pos++;
+                }
+                if (pos < len)
+                    pos++;
+                valueEnd = pos;
+            }
+            else if (paramsStr.slice(pos, pos + 3) === '[[[') {
+                // Triple bracket: [[[value]]]
+                pos += 3;
+                while (pos < len && paramsStr.slice(pos, pos + 3) !== ']]]')
+                    pos++;
+                pos += 3;
+                valueEnd = pos;
+            }
+            else if (paramsStr.slice(pos, pos + 2) === '[[') {
+                // Double bracket: [[value]]
+                pos += 2;
+                while (pos < len && paramsStr.slice(pos, pos + 2) !== ']]')
+                    pos++;
+                pos += 2;
+                valueEnd = pos;
+            }
+            else {
+                // Unquoted value
+                while (pos < len && !/[\s>]/.test(paramsStr[pos]))
+                    pos++;
+                valueEnd = pos;
+            }
+            const paramChildren = [
+                cx.elt(Type.MacroParamName, offset + nameStart, offset + nameEnd),
+                cx.elt(Type.MacroParamValue, offset + valueStart, offset + valueEnd)
+            ];
+            elements.push(cx.elt(Type.MacroParam, offset + paramStart, offset + valueEnd, paramChildren));
+        }
+        else {
+            // Positional parameter (just a value)
+            const valueStart = pos;
+            if (paramsStr[pos] === '"' || paramsStr[pos] === "'") {
+                const quote = paramsStr[pos];
+                pos++;
+                while (pos < len && paramsStr[pos] !== quote) {
+                    if (paramsStr[pos] === '\\')
+                        pos++;
+                    pos++;
+                }
+                if (pos < len)
+                    pos++;
+            }
+            else if (paramsStr.slice(pos, pos + 3) === '[[[') {
+                pos += 3;
+                while (pos < len && paramsStr.slice(pos, pos + 3) !== ']]]')
+                    pos++;
+                pos += 3;
+            }
+            else if (paramsStr.slice(pos, pos + 2) === '[[') {
+                pos += 2;
+                while (pos < len && paramsStr.slice(pos, pos + 2) !== ']]')
+                    pos++;
+                pos += 2;
+            }
+            else {
+                while (pos < len && !/[\s>]/.test(paramsStr[pos]))
+                    pos++;
+            }
+            const paramChildren = [
+                cx.elt(Type.MacroParamValue, offset + valueStart, offset + pos)
+            ];
+            elements.push(cx.elt(Type.MacroParam, offset + paramStart, offset + pos, paramChildren));
+        }
+    }
+    return elements;
+}
 const MacroCall = {
     name: "MacroCall",
     parse(cx, next, pos) {
         if (next !== Ch.LessThan || cx.char(pos + 1) !== Ch.LessThan)
             return -1;
         const text = cx.slice(pos, cx.end);
-        const match = macroRe.exec(text);
-        if (!match)
+        // Find closing >> handling nested macros
+        let closePos = -1;
+        let depth = 1;
+        for (let i = 2; i < text.length - 1; i++) {
+            if (text[i] === '<' && text[i + 1] === '<') {
+                depth++;
+                i++;
+            }
+            else if (text[i] === '>' && text[i + 1] === '>') {
+                depth--;
+                if (depth === 0) {
+                    closePos = i;
+                    break;
+                }
+                i++;
+            }
+        }
+        if (closePos === -1)
             return -1;
-        const end = pos + match[0].length;
-        const name = match[1];
-        const params = match[2];
+        const end = pos + closePos + 2;
+        // Parse macro name
+        let nameEnd = 2;
+        while (nameEnd < closePos && !/\s/.test(text[nameEnd]))
+            nameEnd++;
+        const name = text.slice(2, nameEnd);
+        if (!name)
+            return -1;
         const children = [
             cx.elt(Type.MacroCallMark, pos, pos + 2),
             cx.elt(Type.MacroName, pos + 2, pos + 2 + name.length),
         ];
-        if (params.trim()) {
-            children.push(cx.elt(Type.MacroParam, pos + 2 + name.length, end - 2));
+        // Parse parameters
+        const paramsStr = text.slice(nameEnd, closePos);
+        if (paramsStr.trim()) {
+            const paramElements = parseMacroParams(cx, paramsStr, pos + nameEnd);
+            children.push(...paramElements);
         }
         children.push(cx.elt(Type.MacroCallMark, end - 2, end));
         return cx.addElement(cx.elt(Type.MacroCall, pos, end, children));
@@ -2958,16 +3891,35 @@ function parseInlineAttributes(cx, attrString, offset) {
         const ch = attrString[pos];
         if (ch === '"' || ch === "'") {
             const quote = ch;
+            const stringStart = pos + 1;
             pos++;
             while (pos < len && attrString[pos] !== quote) {
                 if (attrString[pos] === '\\' && pos + 1 < len)
                     pos++;
                 pos++;
             }
+            const stringEnd = pos;
             if (pos < len)
                 pos++;
             valueEnd = pos;
             valueType = Type.AttributeString;
+            // Check if this is a filter attribute - parse content as filter expression
+            const attrName = attrString.slice(nameStart, nameEnd).toLowerCase();
+            if (attrName === 'filter' || attrName === '$filter') {
+                const filterContent = attrString.slice(stringStart, stringEnd);
+                const filterChildren = parseFilterExpression(cx, filterContent, offset + stringStart);
+                const valueChildren = [
+                    cx.elt(Type.Mark, offset + valueStart, offset + stringStart), // Opening quote
+                    cx.elt(Type.FilterExpression, offset + stringStart, offset + stringEnd, filterChildren),
+                    cx.elt(Type.Mark, offset + stringEnd, offset + valueEnd) // Closing quote
+                ];
+                const attrChildren = [
+                    cx.elt(Type.AttributeName, offset + nameStart, offset + nameEnd),
+                    cx.elt(Type.AttributeFiltered, offset + valueStart, offset + valueEnd, valueChildren)
+                ];
+                elements.push(cx.elt(Type.Attribute, offset + nameStart, offset + valueEnd, attrChildren));
+                continue;
+            }
         }
         else if (ch === '{') {
             if (attrString.slice(pos, pos + 3) === '{{{') {
@@ -3071,22 +4023,95 @@ function parseInlineAttributes(cx, attrString, offset) {
             continue;
         }
         else if (ch === '`') {
+            // Substituted string: `value` or ```value```
+            let openMarkEnd;
+            let closeMarkStart;
             if (attrString.slice(pos, pos + 3) === '```') {
+                openMarkEnd = pos + 3;
                 pos += 3;
                 while (pos < len && attrString.slice(pos, pos + 3) !== '```')
                     pos++;
+                closeMarkStart = pos;
                 if (attrString.slice(pos, pos + 3) === '```')
                     pos += 3;
             }
             else {
+                openMarkEnd = pos + 1;
                 pos++;
                 while (pos < len && attrString[pos] !== '`')
                     pos++;
+                closeMarkStart = pos;
                 if (pos < len)
                     pos++;
             }
             valueEnd = pos;
             valueType = Type.AttributeSubstituted;
+            // Parse $(variable)$ and ${ filter }$ patterns inside the substituted string
+            const valueChildren = [
+                cx.elt(Type.Mark, offset + valueStart, offset + openMarkEnd) // Opening `
+            ];
+            const content = attrString.slice(openMarkEnd, closeMarkStart);
+            let contentPos = 0;
+            const contentOffset = offset + openMarkEnd;
+            while (contentPos < content.length) {
+                // Check for ${ filter }$ pattern first (filter expressions are substituted before variables)
+                // Note: can't use simple regex since filter may contain } characters
+                if (content.slice(contentPos, contentPos + 2) === '${') {
+                    // Find the closing }$
+                    const searchStart = contentPos + 2;
+                    let filterEndPos = -1;
+                    for (let i = searchStart; i < content.length - 1; i++) {
+                        if (content[i] === '}' && content[i + 1] === '$') {
+                            filterEndPos = i;
+                            break;
+                        }
+                    }
+                    if (filterEndPos !== -1) {
+                        const filterMatch = [
+                            content.slice(contentPos, filterEndPos + 2),
+                            content.slice(contentPos + 2, filterEndPos)
+                        ];
+                        const filterStart = contentOffset + contentPos;
+                        const filterEnd = filterStart + filterMatch[0].length;
+                        const filterExprStart = filterStart + 2;
+                        const filterExprEnd = filterEnd - 2;
+                        // Parse the filter expression inside
+                        const filterContent = filterMatch[1].trim();
+                        const filterChildren = parseFilterExpression(cx, filterContent, filterExprStart + (filterMatch[1].length - filterMatch[1].trimStart().length));
+                        valueChildren.push(cx.elt(Type.FilterSubstitution, filterStart, filterEnd, [
+                            cx.elt(Type.FilterSubstitutionMark, filterStart, filterStart + 2),
+                            cx.elt(Type.FilterExpression, filterExprStart, filterExprEnd, filterChildren),
+                            cx.elt(Type.FilterSubstitutionMark, filterEnd - 2, filterEnd)
+                        ]));
+                        contentPos += filterMatch[0].length;
+                        continue;
+                    }
+                }
+                // Check for $(variable)$ pattern
+                const varMatch = content.slice(contentPos).match(/^\$\(([^)]+)\)\$/);
+                if (varMatch) {
+                    const varStart = contentOffset + contentPos;
+                    const varEnd = varStart + varMatch[0].length;
+                    const varNameStart = varStart + 2;
+                    const varNameEnd = varNameStart + varMatch[1].length;
+                    valueChildren.push(cx.elt(Type.Variable, varStart, varEnd, [
+                        cx.elt(Type.VariableMark, varStart, varStart + 2),
+                        cx.elt(Type.VariableName, varNameStart, varNameEnd),
+                        cx.elt(Type.VariableMark, varNameEnd, varEnd)
+                    ]));
+                    contentPos += varMatch[0].length;
+                }
+                else {
+                    contentPos++;
+                }
+            }
+            valueChildren.push(cx.elt(Type.Mark, offset + closeMarkStart, offset + valueEnd)); // Closing `
+            const attrChildren = [
+                cx.elt(Type.AttributeName, offset + nameStart, offset + nameEnd),
+                cx.elt(valueType, offset + valueStart, offset + valueEnd, valueChildren)
+            ];
+            elements.push(cx.elt(Type.Attribute, offset + nameStart, offset + valueEnd, attrChildren));
+            continue;
         }
         else {
             while (pos < len && !/[\s>\/]/.test(attrString[pos]))
@@ -3204,6 +4229,58 @@ const Dash = {
     }
 };
 // ============================================================================
+// Variable Substitution Parser $(variable)$
+// ============================================================================
+const variableRe = /^\$\(([^)]+)\)\$/;
+const VariableSubstitution = {
+    name: "VariableSubstitution",
+    parse(cx, next, pos) {
+        if (next !== Ch.Dollar)
+            return -1;
+        if (cx.char(pos + 1) !== 40)
+            return -1; // '('
+        const text = cx.slice(pos, cx.end);
+        const match = variableRe.exec(text);
+        if (!match)
+            return -1;
+        const end = pos + match[0].length;
+        const varName = match[1];
+        const varNameStart = pos + 2; // After $(
+        const varNameEnd = varNameStart + varName.length;
+        const children = [
+            cx.elt(Type.VariableMark, pos, pos + 2), // $(
+            cx.elt(Type.VariableName, varNameStart, varNameEnd),
+            cx.elt(Type.VariableMark, varNameEnd, end) // )$
+        ];
+        return cx.addElement(cx.elt(Type.Variable, pos, end, children));
+    }
+};
+// ============================================================================
+// Placeholder Parser $param$ (in macro definitions)
+// ============================================================================
+const placeholderRe = /^\$([a-zA-Z][a-zA-Z0-9\-_]*)\$/;
+const PlaceholderParam = {
+    name: "PlaceholderParam",
+    parse(cx, next, pos) {
+        if (next !== Ch.Dollar)
+            return -1;
+        const text = cx.slice(pos, cx.end);
+        const match = placeholderRe.exec(text);
+        if (!match)
+            return -1;
+        const end = pos + match[0].length;
+        const paramName = match[1];
+        const paramNameStart = pos + 1; // After $
+        const paramNameEnd = paramNameStart + paramName.length;
+        const children = [
+            cx.elt(Type.PlaceholderMark, pos, pos + 1), // $
+            cx.elt(Type.VariableName, paramNameStart, paramNameEnd),
+            cx.elt(Type.PlaceholderMark, paramNameEnd, end) // $
+        ];
+        return cx.addElement(cx.elt(Type.Placeholder, pos, end, children));
+    }
+};
+// ============================================================================
 // CamelCase Link Parser
 // ============================================================================
 const camelCaseRe = /^[A-Z][a-z]+[A-Z][A-Za-z]*/;
@@ -3213,12 +4290,19 @@ const CamelCaseLink = {
         // Must start with uppercase
         if (next < 65 || next > 90)
             return -1;
+        // Must be at word boundary (previous char must not be a letter)
+        if (pos > cx.offset) {
+            const prev = cx.char(pos - 1);
+            // Check if previous char is a letter (a-z or A-Z)
+            if ((prev >= 65 && prev <= 90) || (prev >= 97 && prev <= 122))
+                return -1;
+            // Check it's not escaped with ~
+            if (prev === Ch.Tilde)
+                return -1;
+        }
         const text = cx.slice(pos, cx.end);
         const match = camelCaseRe.exec(text);
         if (!match)
-            return -1;
-        // Check it's not escaped with ~
-        if (pos > cx.offset && cx.char(pos - 1) === Ch.Tilde)
             return -1;
         return cx.addElement(cx.elt(Type.CamelCaseLink, pos, pos + match[0].length));
     }
@@ -3278,7 +4362,9 @@ const DefaultInlineParsers = [
     Widget,
     HTMLTag,
     Dash,
+    VariableSubstitution, // $(var)$ - must come before SystemLink and PlaceholderParam
     SystemLink,
+    PlaceholderParam, // $param$ - must come after VariableSubstitution
     CamelCaseLink,
     URLAutoLink,
 ];
@@ -3335,6 +4421,7 @@ const defaultStyleTags = highlight.styleTags({
     ImageLink: highlight.tags.link,
     ImageMark: highlight.tags.processingInstruction,
     ImageSource: highlight.tags.url,
+    ImageTooltip: highlight.tags.string,
     // URLs
     "URLLink SystemLink": highlight.tags.url,
     // Transclusions
@@ -3397,8 +4484,31 @@ const defaultStyleTags = highlight.styleTags({
     Escape: highlight.tags.escape,
     Entity: highlight.tags.character,
     Dash: highlight.tags.punctuation,
-    Variable: highlight.tags.variableName,
+    Variable: highlight.tags.special(highlight.tags.variableName),
+    VariableMark: highlight.tags.processingInstruction,
+    VariableName: highlight.tags.variableName,
+    FilterSubstitution: highlight.tags.special(highlight.tags.string),
+    FilterSubstitutionMark: highlight.tags.processingInstruction,
+    Placeholder: highlight.tags.special(highlight.tags.variableName),
+    PlaceholderMark: highlight.tags.processingInstruction,
     HardBreak: highlight.tags.processingInstruction,
+    // Filter expression components
+    FilterRun: highlight.tags.content,
+    FilterOperator: highlight.tags.operator,
+    FilterOperatorName: highlight.tags.operatorKeyword,
+    FilterOperand: highlight.tags.string,
+    FilterVariable: highlight.tags.variableName,
+    FilterTextRef: highlight.tags.special(highlight.tags.string),
+    FilterRegexp: highlight.tags.regexp,
+    // Styled blocks
+    StyledBlock: highlight.tags.content,
+    StyledBlockMark: highlight.tags.processingInstruction,
+    StyledBlockClass: highlight.tags.className,
+    // Conditionals
+    ConditionalBlock: highlight.tags.content,
+    ConditionalMark: highlight.tags.processingInstruction,
+    ConditionalKeyword: highlight.tags.controlKeyword,
+    ConditionalBranch: highlight.tags.content,
     // Generic
     Paragraph: highlight.tags.content,
     Text: highlight.tags.content,
@@ -3651,324 +4761,6 @@ function mkLang(parser) {
 const tiddlywikiLanguage = mkLang(configured);
 
 /**
- * TiddlyWiki Language Support - Main Entry Point
- *
- * Provides the tiddlywiki() function that creates a complete LanguageSupport
- * for CodeMirror 6, similar to markdown() in @codemirror/lang-markdown.
- */
-/**
- * TiddlyWiki-specific highlight style mapping semantic tags to CSS classes
- */
-const tiddlywikiHighlightStyle = language.HighlightStyle.define([
-    // Headings
-    { tag: highlight.tags.heading1, class: "cm-tw-heading1" },
-    { tag: highlight.tags.heading2, class: "cm-tw-heading2" },
-    { tag: highlight.tags.heading3, class: "cm-tw-heading3" },
-    { tag: highlight.tags.heading4, class: "cm-tw-heading4" },
-    { tag: highlight.tags.heading5, class: "cm-tw-heading5" },
-    { tag: highlight.tags.heading6, class: "cm-tw-heading6" },
-    { tag: highlight.tags.heading, class: "cm-tw-tableheader" },
-    // Text formatting
-    { tag: highlight.tags.strong, class: "cm-tw-bold" },
-    { tag: highlight.tags.emphasis, class: "cm-tw-italic" },
-    { tag: highlight.tags.strikethrough, class: "cm-tw-strikethrough" },
-    // Links
-    { tag: highlight.tags.link, class: "cm-tw-wikilink" },
-    { tag: highlight.tags.url, class: "cm-tw-url" },
-    { tag: highlight.tags.string, class: "cm-tw-linktext" },
-    // Transclusions and macros
-    { tag: highlight.tags.special(highlight.tags.link), class: "cm-tw-transclusion" },
-    { tag: highlight.tags.macroName, class: "cm-tw-macrocall" },
-    { tag: highlight.tags.variableName, class: "cm-tw-variable" },
-    // Widgets
-    { tag: highlight.tags.tagName, class: "cm-tw-widget" },
-    // Code
-    { tag: highlight.tags.monospace, class: "cm-tw-code" },
-    { tag: highlight.tags.labelName, class: "cm-tw-codeinfo" },
-    // Pragmas and definitions
-    { tag: highlight.tags.definitionKeyword, class: "cm-tw-pragma" },
-    { tag: highlight.tags.keyword, class: "cm-tw-pragma-keyword" },
-    // Lists
-    { tag: highlight.tags.list, class: "cm-tw-list" },
-    // Block elements
-    { tag: highlight.tags.quote, class: "cm-tw-blockquote" },
-    { tag: highlight.tags.contentSeparator, class: "cm-tw-hr" },
-    // Special characters
-    { tag: highlight.tags.comment, class: "cm-tw-comment" },
-    { tag: highlight.tags.escape, class: "cm-tw-escape" },
-    { tag: highlight.tags.character, class: "cm-tw-entity" },
-    // Processing marks
-    { tag: highlight.tags.processingInstruction, class: "cm-tw-mark" },
-    // Filters
-    { tag: highlight.tags.special(highlight.tags.string), class: "cm-tw-filter" },
-    // Attributes
-    { tag: highlight.tags.attributeValue, class: "cm-tw-attribute-value" },
-    { tag: highlight.tags.attributeName, class: "cm-tw-attribute" },
-    // Special emphasis (underline)
-    { tag: highlight.tags.special(highlight.tags.emphasis), class: "cm-tw-underline" },
-    // Special content (superscript, subscript, highlight)
-    { tag: highlight.tags.special(highlight.tags.content), class: "cm-tw-superscript" },
-]);
-/**
- * Keymap with TiddlyWiki-specific bindings
- */
-const tiddlywikiKeymap$1 = [
-// TODO: Add TiddlyWiki-specific keybindings
-// e.g., Enter to continue lists, Backspace to delete list markers
-];
-/**
- * HTML language support without tag matching (for embedded HTML)
- */
-const htmlNoMatch = langHtml.html({ matchClosingTags: false });
-/**
- * Create TiddlyWiki language support for CodeMirror 6
- *
- * @example
- * ```ts
- * import { tiddlywiki } from "@anthropic/lang-tiddlywiki"
- * import { javascript } from "@codemirror/lang-javascript"
- *
- * const extensions = [
- *   tiddlywiki({
- *     codeLanguages: [javascript()],
- *     completeWidgets: true,
- *     completeMacros: true,
- *   })
- * ]
- * ```
- */
-function tiddlywiki(config = {}) {
-    const { codeLanguages, defaultCodeLanguage, addKeymap = true, base: { parser } = tiddlywikiLanguage, completeHTMLTags = true, completeWidgets = true, completeMacros = true, completeTiddlers = true, getTiddlerTitles, getMacroNames, getWidgetNames, htmlTagLanguage = htmlNoMatch, } = config;
-    // Validate parser
-    if (!(parser instanceof TiddlyWikiParser)) {
-        throw new RangeError("Base parser provided to `tiddlywiki` should be a TiddlyWiki parser");
-    }
-    // Build extensions for the parser
-    const parserExtensions = config.extensions ? [config.extensions] : [];
-    // Build support extensions
-    const support = [
-        htmlTagLanguage.support,
-        headerIndent,
-        language.syntaxHighlighting(tiddlywikiHighlightStyle),
-        // Enable autocompletion with activate on typing
-        // Completion sources are registered via lang.data.of() and found via languageDataAt()
-        autocomplete.autocompletion({
-            activateOnTyping: true,
-        }),
-        view.keymap.of(autocomplete.completionKeymap),
-    ];
-    if (defaultCodeLanguage instanceof language.LanguageSupport) {
-        support.push(defaultCodeLanguage.support);
-        defaultCodeLanguage.language;
-    }
-    // Add keymap if requested
-    if (addKeymap && tiddlywikiKeymap$1.length > 0) {
-        support.push(state.Prec.high(view.keymap.of(tiddlywikiKeymap$1)));
-    }
-    // Configure the parser with extensions
-    let configuredParser = parser;
-    if (parserExtensions.length > 0) {
-        for (const ext of parserExtensions) {
-            configuredParser = configuredParser.configure(ext);
-        }
-    }
-    // Create the language
-    const lang = mkLang(configuredParser);
-    // Add completions via language data
-    if (completeWidgets) {
-        support.push(lang.data.of({
-            autocomplete: widgetCompletion(getWidgetNames)
-        }));
-    }
-    if (completeMacros) {
-        support.push(lang.data.of({
-            autocomplete: macroCompletion(getMacroNames)
-        }));
-    }
-    if (completeTiddlers) {
-        support.push(lang.data.of({
-            autocomplete: tiddlerCompletion(getTiddlerTitles)
-        }));
-    }
-    if (completeHTMLTags) {
-        support.push(lang.data.of({
-            autocomplete: htmlTagCompletion
-        }));
-    }
-    return new language.LanguageSupport(lang, support);
-}
-// TiddlyWiki Core Widgets (with $ prefix as stored)
-const coreWidgets = [
-    "$action-confirm", "$action-createtiddler", "$action-deletefield", "$action-deletetiddler",
-    "$action-listops", "$action-log", "$action-navigate", "$action-popup", "$action-sendmessage",
-    "$action-setfield", "$action-setmultiplefields", "$browse", "$button", "$checkbox",
-    "$codeblock", "$count", "$draggable", "$droppable", "$dropzone", "$edit", "$edit-bitmap",
-    "$edit-text", "$element", "$encrypt", "$eventcatcher", "$fieldmangler", "$fill",
-    "$genesis", "$image", "$importvariables", "$keyboard", "$let", "$link", "$linkcatcher",
-    "$list", "$log", "$macrocall", "$messagecatcher", "$navigator", "$password", "$qualify",
-    "$radio", "$range", "$raw", "$reveal", "$scrollable", "$select", "$set", "$setvariable",
-    "$slot", "$text", "$tiddler", "$transclude", "$type", "$vars", "$view", "$wikify"
-];
-/**
- * Widget completion source (<$widget)
- */
-function widgetCompletion(getWidgetNames) {
-    return (context) => {
-        const { state, pos } = context;
-        const m = /<\$[\w\-]*$/.exec(state.sliceDoc(pos - 30, pos));
-        if (!m)
-            return null;
-        // Don't complete inside code blocks or comments
-        const tree = language.syntaxTree(state).resolveInner(pos, -1);
-        let node = tree;
-        while (node && !node.type.isTop) {
-            if (node.name === "FencedCode" || node.name === "CodeBlock" ||
-                node.name === "TypedBlock" || node.name === "CommentBlock") {
-                return null;
-            }
-            node = node.parent;
-        }
-        // Use provided widget names, fall back to core widgets if empty
-        const customWidgets = getWidgetNames ? getWidgetNames() : [];
-        const widgets = customWidgets.length > 0 ? customWidgets : coreWidgets;
-        const options = widgets.map(w => ({
-            label: "<" + w,
-            type: "keyword",
-            detail: "widget",
-            apply: "<" + w + ">"
-        }));
-        return {
-            from: pos - m[0].length,
-            to: pos,
-            options,
-            validFor: /^<\$[\w\-]*$/
-        };
-    };
-}
-// Common TiddlyWiki Macros
-const commonMacros = [
-    "now", "tag", "tabs", "timeline", "toc", "toc-hierarchical", "toc-selective-expandable",
-    "list-links", "list-links-draggable", "list-tagged-draggable", "copy-to-clipboard",
-    "colour-picker", "image-picker", "keyboard-shortcut", "dumpvariables", "qualify",
-    "csvtiddlers", "jsontiddlers", "datauri", "makedatauri", "translink"
-];
-/**
- * Macro completion source (<<macro)
- */
-function macroCompletion(getMacroNames) {
-    return (context) => {
-        const { state, pos } = context;
-        const m = /<<[\w\-]*$/.exec(state.sliceDoc(pos - 30, pos));
-        if (!m)
-            return null;
-        // Don't complete inside code blocks or comments
-        const tree = language.syntaxTree(state).resolveInner(pos, -1);
-        let node = tree;
-        while (node && !node.type.isTop) {
-            if (node.name === "FencedCode" || node.name === "CodeBlock" ||
-                node.name === "TypedBlock" || node.name === "CommentBlock") {
-                return null;
-            }
-            node = node.parent;
-        }
-        // Use provided macro names, fall back to common macros if empty
-        const customMacros = getMacroNames ? getMacroNames() : [];
-        const macros = customMacros.length > 0 ? customMacros : commonMacros;
-        const options = macros.map(m => ({
-            label: "<<" + m,
-            type: "function",
-            detail: "macro",
-            apply: "<<" + m + ">>"
-        }));
-        return {
-            from: pos - m[0].length,
-            to: pos,
-            options,
-            validFor: /^<<[\w\-]*$/
-        };
-    };
-}
-/**
- * Tiddler title completion source ([[link or {{transclusion)
- */
-function tiddlerCompletion(getTiddlerTitles) {
-    return (context) => {
-        const { state, pos } = context;
-        // Match [[ for links
-        const linkMatch = /\[\[[^\]|]*$/.exec(state.sliceDoc(pos - 100, pos));
-        // Match {{ for transclusions
-        const transcludeMatch = /\{\{[^{}|]*$/.exec(state.sliceDoc(pos - 100, pos));
-        const match = linkMatch || transcludeMatch;
-        if (!match)
-            return null;
-        // Don't complete inside code blocks or comments
-        const tree = language.syntaxTree(state).resolveInner(pos, -1);
-        let node = tree;
-        while (node && !node.type.isTop) {
-            if (node.name === "FencedCode" || node.name === "CodeBlock" ||
-                node.name === "TypedBlock" || node.name === "CommentBlock") {
-                return null;
-            }
-            node = node.parent;
-        }
-        const titles = getTiddlerTitles ? getTiddlerTitles() : [];
-        if (titles.length === 0)
-            return null;
-        const prefix = linkMatch ? "[[" : "{{";
-        const suffix = linkMatch ? "]]" : "}}";
-        const options = titles.map(title => ({
-            label: prefix + title,
-            type: "variable",
-            detail: "tiddler",
-            apply: prefix + title + suffix
-        }));
-        return {
-            from: pos - match[0].length,
-            to: pos,
-            options,
-            validFor: linkMatch ? /^\[\[[^\]|]*$/ : /^\{\{[^{}|]*$/
-        };
-    };
-}
-// Cached HTML tag completions
-let _tagCompletions = null;
-function htmlTagCompletions() {
-    if (_tagCompletions)
-        return _tagCompletions;
-    const result = langHtml.htmlCompletionSource(new autocomplete.CompletionContext(state.EditorState.create({ extensions: htmlNoMatch }), 0, true));
-    return _tagCompletions = result ? result.options : [];
-}
-/**
- * HTML tag completion source
- */
-function htmlTagCompletion(context) {
-    const { state, pos } = context;
-    const m = /<[:\-\.\w\u00b7-\uffff]*$/.exec(state.sliceDoc(pos - 25, pos));
-    if (!m)
-        return null;
-    // Don't complete if it looks like a widget
-    if (m[0].startsWith("<$"))
-        return null;
-    // Check we're not in a code block, widget, or other non-completable context
-    const tree = language.syntaxTree(state).resolveInner(pos, -1);
-    let node = tree;
-    while (node && !node.type.isTop) {
-        if (node.name === "FencedCode" || node.name === "CodeBlock" ||
-            node.name === "TypedBlock" || node.name === "CommentBlock" ||
-            node.name === "Widget") {
-            return null;
-        }
-        node = node.parent;
-    }
-    return {
-        from: pos - m[0].length,
-        to: pos,
-        options: htmlTagCompletions(),
-        validFor: /^<[:\-\.\w\u00b7-\uffff]*$/
-    };
-}
-
-/**
  * @codemirror/lang-tiddlywiki - Commands
  *
  * TiddlyWiki-spezifische Editor-Befehle für CodeMirror 6.
@@ -4003,7 +4795,7 @@ class Context {
     }
     marker(doc, add) {
         let marker = "";
-        if (this.node.name == "NumberedList") {
+        if (this.node.name == "OrderedList") {
             // Find current number and increment
             let text = doc.sliceString(this.item.from, this.item.from + 10);
             let match = /^(#+)/.exec(text);
@@ -4018,6 +4810,10 @@ class Context {
         }
         else if (this.node.name == "DefinitionList") {
             marker = this.type;
+        }
+        else if (this.node.name == "BlockQuote" && this.type == ">") {
+            // Single-line > quote style
+            marker = ">";
         }
         return this.spaceBefore + marker + this.spaceAfter;
     }
@@ -4047,7 +4843,7 @@ function getContext(node, doc) {
                 context.push(new Context(node, startPos, startPos + match[0].length, match[1], match[3], "<<<", null));
             }
         }
-        else if (node.name == "ListItem" && node.parent?.name == "NumberedList") {
+        else if (node.name == "ListItem" && node.parent?.name == "OrderedList") {
             match = /^(\s*)(#+)(\s+)/.exec(line.text.slice(startPos));
             if (match) {
                 context.push(new Context(node.parent, startPos, startPos + match[0].length, match[1], match[3], match[2], node));
@@ -4057,6 +4853,13 @@ function getContext(node, doc) {
             match = /^(\s*)(\*+)(\s+)/.exec(line.text.slice(startPos));
             if (match) {
                 context.push(new Context(node.parent, startPos, startPos + match[0].length, match[1], match[3], match[2], node));
+            }
+        }
+        else if (node.name == "ListItem" && node.parent?.name == "BlockQuote") {
+            // Single-line > quote style
+            match = /^(\s*)(>)(\s*)/.exec(line.text.slice(startPos));
+            if (match) {
+                context.push(new Context(node.parent, startPos, startPos + match[0].length, match[1], match[3], ">", node));
             }
         }
         else if (node.name == "DefinitionTerm") {
@@ -4110,7 +4913,13 @@ const insertNewlineContinueMarkupCommand = (config = {}) => ({ state: state$1, d
         }
         let pos = range.from;
         let line = doc.lineAt(pos);
-        let context = getContext(tree.resolveInner(pos, -1), doc);
+        // Try to resolve node at cursor position; if at end of document/line with no
+        // trailing newline, resolveInner may return Document - try pos-1 in that case
+        let node = tree.resolveInner(pos, -1);
+        if (node.name === "Document" && pos > 0) {
+            node = tree.resolveInner(pos - 1, -1);
+        }
+        let context = getContext(node, doc);
         while (context.length && context[context.length - 1].from > pos - line.from) {
             context.pop();
         }
@@ -4180,7 +4989,7 @@ function contextNodeForDelete(tree, pos) {
         if (isMark(prev)) {
             scan = prev.from;
         }
-        else if (prev.name == "NumberedList" || prev.name == "BulletList" || prev.name == "DefinitionList") {
+        else if (prev.name == "OrderedList" || prev.name == "BulletList" || prev.name == "DefinitionList") {
             node = prev.lastChild;
             scan = node.to;
         }
@@ -4446,6 +5255,546 @@ const insertHorizontalRule = ({ state, dispatch }) => {
 };
 
 /**
+ * TiddlyWiki Language Support - Main Entry Point
+ *
+ * Provides the tiddlywiki() function that creates a complete LanguageSupport
+ * for CodeMirror 6, similar to markdown() in @codemirror/lang-markdown.
+ */
+/**
+ * TiddlyWiki-specific highlight style mapping semantic tags to CSS classes
+ */
+const tiddlywikiHighlightStyle = language.HighlightStyle.define([
+    // Headings
+    { tag: highlight.tags.heading1, class: "cm-tw-heading1" },
+    { tag: highlight.tags.heading2, class: "cm-tw-heading2" },
+    { tag: highlight.tags.heading3, class: "cm-tw-heading3" },
+    { tag: highlight.tags.heading4, class: "cm-tw-heading4" },
+    { tag: highlight.tags.heading5, class: "cm-tw-heading5" },
+    { tag: highlight.tags.heading6, class: "cm-tw-heading6" },
+    { tag: highlight.tags.heading, class: "cm-tw-tableheader" },
+    // Text formatting
+    { tag: highlight.tags.strong, class: "cm-tw-bold" },
+    { tag: highlight.tags.emphasis, class: "cm-tw-italic" },
+    { tag: highlight.tags.strikethrough, class: "cm-tw-strikethrough" },
+    // Links
+    { tag: highlight.tags.link, class: "cm-tw-wikilink" },
+    { tag: highlight.tags.url, class: "cm-tw-url" },
+    { tag: highlight.tags.string, class: "cm-tw-linktext" },
+    // Transclusions and macros
+    { tag: highlight.tags.special(highlight.tags.link), class: "cm-tw-transclusion" },
+    { tag: highlight.tags.macroName, class: "cm-tw-macrocall" },
+    { tag: highlight.tags.variableName, class: "cm-tw-variable" },
+    // Widgets
+    { tag: highlight.tags.tagName, class: "cm-tw-widget" },
+    // Code
+    { tag: highlight.tags.monospace, class: "cm-tw-code" },
+    { tag: highlight.tags.labelName, class: "cm-tw-codeinfo" },
+    // Pragmas and definitions
+    { tag: highlight.tags.definitionKeyword, class: "cm-tw-pragma" },
+    { tag: highlight.tags.keyword, class: "cm-tw-pragma-keyword" },
+    // Lists
+    { tag: highlight.tags.list, class: "cm-tw-list" },
+    // Block elements
+    { tag: highlight.tags.quote, class: "cm-tw-blockquote" },
+    { tag: highlight.tags.contentSeparator, class: "cm-tw-hr" },
+    // Special characters
+    { tag: highlight.tags.comment, class: "cm-tw-comment" },
+    { tag: highlight.tags.escape, class: "cm-tw-escape" },
+    { tag: highlight.tags.character, class: "cm-tw-entity" },
+    // Processing marks
+    { tag: highlight.tags.processingInstruction, class: "cm-tw-mark" },
+    // Filters
+    { tag: highlight.tags.special(highlight.tags.string), class: "cm-tw-filter" },
+    // Attributes
+    { tag: highlight.tags.attributeValue, class: "cm-tw-attribute-value" },
+    { tag: highlight.tags.attributeName, class: "cm-tw-attribute" },
+    // Special emphasis (underline)
+    { tag: highlight.tags.special(highlight.tags.emphasis), class: "cm-tw-underline" },
+    // Special content (superscript, subscript, highlight)
+    { tag: highlight.tags.special(highlight.tags.content), class: "cm-tw-superscript" },
+]);
+/**
+ * Keymap with TiddlyWiki-specific bindings
+ */
+const tiddlywikiKeymap$1 = [
+    { key: "Enter", run: insertNewlineContinueMarkup },
+    { key: "Backspace", run: deleteMarkupBackward },
+    { key: "Mod-b", run: toggleBold },
+    { key: "Mod-i", run: toggleItalic },
+    { key: "Mod-u", run: toggleUnderline },
+    { key: "Mod-`", run: toggleInlineCode },
+    { key: "Mod-k", run: insertWikiLink },
+    { key: "Mod-Shift-k", run: insertTransclusion },
+    { key: "Mod-1", run: setHeading1 },
+    { key: "Mod-2", run: setHeading2 },
+    { key: "Mod-3", run: setHeading3 },
+    { key: "Mod-4", run: setHeading4 },
+    { key: "Mod-5", run: setHeading5 },
+    { key: "Mod-6", run: setHeading6 },
+    { key: "Mod-0", run: removeHeading },
+    { key: "Mod-Shift-8", run: toggleBulletList },
+    { key: "Mod-Shift-7", run: toggleNumberedList },
+    { key: "Mod-Shift-c", run: insertCodeBlock },
+];
+/**
+ * HTML language support without tag matching (for embedded HTML)
+ */
+const htmlNoMatch = langHtml.html({ matchClosingTags: false });
+/**
+ * Create TiddlyWiki language support for CodeMirror 6
+ *
+ * @example
+ * ```ts
+ * import { tiddlywiki } from "@anthropic/lang-tiddlywiki"
+ * import { javascript } from "@codemirror/lang-javascript"
+ *
+ * const extensions = [
+ *   tiddlywiki({
+ *     codeLanguages: [javascript()],
+ *     completeWidgets: true,
+ *     completeMacros: true,
+ *   })
+ * ]
+ * ```
+ */
+function tiddlywiki(config = {}) {
+    const { codeLanguages, defaultCodeLanguage, addKeymap = true, base: { parser } = tiddlywikiLanguage, completeHTMLTags = true, completeWidgets = true, completeMacros = true, completeTiddlers = true, completeFilterOperators = true, completeFilterRunPrefixes = true, getTiddlerTitles, getMacroNames, getWidgetNames, getFilterOperators, htmlTagLanguage = htmlNoMatch, } = config;
+    // Validate parser
+    if (!(parser instanceof TiddlyWikiParser)) {
+        throw new RangeError("Base parser provided to `tiddlywiki` should be a TiddlyWiki parser");
+    }
+    // Build extensions for the parser
+    const parserExtensions = config.extensions ? [config.extensions] : [];
+    // Build support extensions
+    const support = [
+        htmlTagLanguage.support,
+        headerIndent,
+        language.syntaxHighlighting(tiddlywikiHighlightStyle),
+        // Enable autocompletion with activate on typing
+        // Completion sources are registered via lang.data.of() and found via languageDataAt()
+        autocomplete.autocompletion({
+            activateOnTyping: true,
+        }),
+        view.keymap.of(autocomplete.completionKeymap),
+    ];
+    if (defaultCodeLanguage instanceof language.LanguageSupport) {
+        support.push(defaultCodeLanguage.support);
+        defaultCodeLanguage.language;
+    }
+    // Add keymap if requested
+    if (addKeymap && tiddlywikiKeymap$1.length > 0) {
+        support.push(state.Prec.high(view.keymap.of(tiddlywikiKeymap$1)));
+    }
+    // Configure the parser with extensions
+    let configuredParser = parser;
+    if (parserExtensions.length > 0) {
+        for (const ext of parserExtensions) {
+            configuredParser = configuredParser.configure(ext);
+        }
+    }
+    // Create the language
+    const lang = mkLang(configuredParser);
+    // Add completions via language data
+    if (completeWidgets) {
+        support.push(lang.data.of({
+            autocomplete: widgetCompletion(getWidgetNames)
+        }));
+    }
+    if (completeMacros) {
+        support.push(lang.data.of({
+            autocomplete: macroCompletion(getMacroNames)
+        }));
+    }
+    if (completeTiddlers) {
+        support.push(lang.data.of({
+            autocomplete: tiddlerCompletion(getTiddlerTitles)
+        }));
+    }
+    if (completeHTMLTags) {
+        support.push(lang.data.of({
+            autocomplete: htmlTagCompletion
+        }));
+    }
+    if (completeFilterOperators) {
+        support.push(lang.data.of({
+            autocomplete: filterOperatorCompletion(getFilterOperators)
+        }));
+    }
+    if (completeFilterRunPrefixes) {
+        support.push(lang.data.of({
+            autocomplete: filterRunPrefixCompletion
+        }));
+    }
+    return new language.LanguageSupport(lang, support);
+}
+// TiddlyWiki Core Widgets (with $ prefix as stored)
+const coreWidgets = [
+    "$action-confirm", "$action-createtiddler", "$action-deletefield", "$action-deletetiddler",
+    "$action-listops", "$action-log", "$action-navigate", "$action-popup", "$action-sendmessage",
+    "$action-setfield", "$action-setmultiplefields", "$browse", "$button", "$checkbox",
+    "$codeblock", "$count", "$draggable", "$droppable", "$dropzone", "$edit", "$edit-bitmap",
+    "$edit-text", "$element", "$encrypt", "$eventcatcher", "$fieldmangler", "$fill",
+    "$genesis", "$image", "$importvariables", "$keyboard", "$let", "$link", "$linkcatcher",
+    "$list", "$log", "$macrocall", "$messagecatcher", "$navigator", "$password", "$qualify",
+    "$radio", "$range", "$raw", "$reveal", "$scrollable", "$select", "$set", "$setvariable",
+    "$slot", "$text", "$tiddler", "$transclude", "$type", "$vars", "$view", "$wikify"
+];
+/**
+ * Widget completion source (<$widget)
+ */
+function widgetCompletion(getWidgetNames) {
+    return (context) => {
+        const { state, pos } = context;
+        const m = /<\$[\w\-]*$/.exec(state.sliceDoc(pos - 30, pos));
+        if (!m)
+            return null;
+        // Don't complete inside code blocks or comments
+        const tree = language.syntaxTree(state).resolveInner(pos, -1);
+        let node = tree;
+        while (node && !node.type.isTop) {
+            if (node.name === "FencedCode" || node.name === "CodeBlock" ||
+                node.name === "TypedBlock" || node.name === "CommentBlock") {
+                return null;
+            }
+            node = node.parent;
+        }
+        // Use provided widget names, fall back to core widgets if empty
+        const customWidgets = getWidgetNames ? getWidgetNames() : [];
+        const widgets = customWidgets.length > 0 ? customWidgets : coreWidgets;
+        const options = widgets.map(w => ({
+            label: "<" + w,
+            type: "keyword",
+            detail: "widget",
+            apply: "<" + w + ">"
+        }));
+        return {
+            from: pos - m[0].length,
+            to: pos,
+            options,
+            validFor: /^<\$[\w\-]*$/
+        };
+    };
+}
+// Common TiddlyWiki Macros
+const commonMacros = [
+    "now", "tag", "tabs", "timeline", "toc", "toc-hierarchical", "toc-selective-expandable",
+    "list-links", "list-links-draggable", "list-tagged-draggable", "copy-to-clipboard",
+    "colour-picker", "image-picker", "keyboard-shortcut", "dumpvariables", "qualify",
+    "csvtiddlers", "jsontiddlers", "datauri", "makedatauri", "translink"
+];
+// TiddlyWiki Filter Operators
+const coreFilterOperators = [
+    // Selection constructors
+    "all", "title", "field", "tag", "has", "is", "indexes", "fields", "tags", "links",
+    "backlinks", "list", "listed", "tagging", "untagged",
+    // String operators
+    "prefix", "suffix", "contains", "match", "regexp", "search", "trim", "lowercase",
+    "uppercase", "titlecase", "sentencecase", "splitbefore", "split", "join", "stringify",
+    // Comparison
+    "compare", "minlength", "maxlength",
+    // List operators
+    "first", "last", "nth", "limit", "rest", "butlast", "range", "sort", "nsort", "sortby",
+    "nsortby", "reverse", "count", "unique", "duplicates", "allafter", "allbefore",
+    "after", "before", "prepend", "append", "insertbefore", "move", "putafter",
+    "putbefore", "putfirst", "putlast", "remove", "replace", "toggle", "cycle",
+    // Math operators
+    "add", "subtract", "multiply", "divide", "negate", "abs", "ceil", "floor", "round",
+    "trunc", "sign", "min", "max", "average", "sum", "product", "log", "power", "sqrt",
+    "exp", "fixed", "precision", "remainder", "random", "sin", "cos", "tan", "asin",
+    "acos", "atan", "atan2",
+    // Date operators
+    "now", "format", "days", "weeks", "months", "years", "hours", "minutes", "seconds",
+    "milliseconds", "adddays", "subtractdays", "year", "month", "day", "hour", "minute", "second",
+    // Transclusion
+    "get", "getindex", "getvariable", "lookup", "jsonget", "jsonindexes", "jsontype",
+    "jsonextract", "jsonstringify",
+    // Encoding
+    "encodehtml", "decodehtml", "encodeuri", "encodeuricomponent", "decodeuri",
+    "decodeuricomponent", "escaperegexp", "escapecss", "base64encode", "base64decode",
+    // Others
+    "each", "eachday", "filter", "reduce", "map", "subfilter", "else", "then",
+    "variables", "modules", "plugintiddlers", "shadowsource", "storyviews", "editions",
+    "lengths", "commands", "sha256hash", "md5hash", "encryptbase64", "decryptbase64",
+    "draft.of", "draft.for", "draft", "draftof", "draftfor"
+];
+// Filter Run Prefixes (including named prefixes)
+const filterRunPrefixes = [
+    // Symbol prefixes
+    { label: "+", detail: "intersection - filter the input (same as :and)" },
+    { label: "-", detail: "subtraction - remove from results (same as :except)" },
+    { label: "~", detail: "else - use if previous was empty (same as :else)" },
+    { label: "=", detail: "literal - add title literally (same as :all)" },
+    // Named equivalents of symbols
+    { label: ":and", detail: "intersection - same as +" },
+    { label: ":except", detail: "subtraction - same as -" },
+    { label: ":else", detail: "else - same as ~" },
+    { label: ":all", detail: "literal - same as =" },
+    // Other named prefixes
+    { label: ":filter", detail: "filter each title through subfilter" },
+    { label: ":map", detail: "transform each title via subfilter" },
+    { label: ":reduce", detail: "reduce to single value" },
+    { label: ":intersection", detail: "keep titles common to all runs" },
+    { label: ":cascade", detail: "cascade through filters" },
+    { label: ":some", detail: "pass to any matching run" },
+    { label: ":sort", detail: "sort by subfilter result" },
+    { label: ":flat", detail: "flatten list output" },
+];
+/**
+ * Macro completion source (<<macro)
+ */
+function macroCompletion(getMacroNames) {
+    return (context) => {
+        const { state, pos } = context;
+        const m = /<<[\w\-]*$/.exec(state.sliceDoc(pos - 30, pos));
+        if (!m)
+            return null;
+        // Don't complete inside code blocks or comments
+        const tree = language.syntaxTree(state).resolveInner(pos, -1);
+        let node = tree;
+        while (node && !node.type.isTop) {
+            if (node.name === "FencedCode" || node.name === "CodeBlock" ||
+                node.name === "TypedBlock" || node.name === "CommentBlock") {
+                return null;
+            }
+            node = node.parent;
+        }
+        // Use provided macro names, fall back to common macros if empty
+        const customMacros = getMacroNames ? getMacroNames() : [];
+        const macros = customMacros.length > 0 ? customMacros : commonMacros;
+        const options = macros.map(m => ({
+            label: "<<" + m,
+            type: "function",
+            detail: "macro",
+            apply: "<<" + m + ">>"
+        }));
+        return {
+            from: pos - m[0].length,
+            to: pos,
+            options,
+            validFor: /^<<[\w\-]*$/
+        };
+    };
+}
+/**
+ * Tiddler title completion source ([[link, {{transclusion, or [img[source)
+ */
+function tiddlerCompletion(getTiddlerTitles) {
+    return (context) => {
+        const { state, pos } = context;
+        const textBefore = state.sliceDoc(pos - 100, pos);
+        // Match [[ for links
+        const linkMatch = /\[\[[^\]|]*$/.exec(textBefore);
+        // Match {{ for transclusions
+        const transcludeMatch = /\{\{[^{}|]*$/.exec(textBefore);
+        // Match [img[ or [img ...attrs[ for images (source is inside the last [)
+        const imageMatch = /\[img(?:\s+[^\[]*)?\[[^\]|]*$/.exec(textBefore);
+        const match = linkMatch || transcludeMatch || imageMatch;
+        if (!match)
+            return null;
+        // Don't complete inside code blocks or comments
+        const tree = language.syntaxTree(state).resolveInner(pos, -1);
+        let node = tree;
+        while (node && !node.type.isTop) {
+            if (node.name === "FencedCode" || node.name === "CodeBlock" ||
+                node.name === "TypedBlock" || node.name === "CommentBlock") {
+                return null;
+            }
+            node = node.parent;
+        }
+        const titles = getTiddlerTitles ? getTiddlerTitles() : [];
+        if (titles.length === 0)
+            return null;
+        // Determine prefix and suffix based on match type
+        let prefix;
+        let suffix;
+        let validFor;
+        if (linkMatch) {
+            prefix = "[[";
+            suffix = "]]";
+            validFor = /^\[\[[^\]|]*$/;
+        }
+        else if (transcludeMatch) {
+            prefix = "{{";
+            suffix = "}}";
+            validFor = /^\{\{[^{}|]*$/;
+        }
+        else {
+            // Image match - we need to find where the [ starts for the source
+            const bracketPos = match[0].lastIndexOf('[');
+            prefix = match[0].slice(0, bracketPos + 1);
+            suffix = "]]";
+            validFor = /^\[img(?:\s+[^\[]*)?\[[^\]|]*$/;
+        }
+        const options = titles.map(title => ({
+            label: prefix + title,
+            type: "variable",
+            detail: imageMatch ? "image" : "tiddler",
+            apply: prefix + title + suffix
+        }));
+        return {
+            from: pos - match[0].length,
+            to: pos,
+            options,
+            validFor
+        };
+    };
+}
+// Cached HTML tag completions
+let _tagCompletions = null;
+function htmlTagCompletions() {
+    if (_tagCompletions)
+        return _tagCompletions;
+    const result = langHtml.htmlCompletionSource(new autocomplete.CompletionContext(state.EditorState.create({ extensions: htmlNoMatch }), 0, true));
+    return _tagCompletions = result ? result.options : [];
+}
+/**
+ * HTML tag completion source
+ */
+function htmlTagCompletion(context) {
+    const { state, pos } = context;
+    const m = /<[:\-\.\w\u00b7-\uffff]*$/.exec(state.sliceDoc(pos - 25, pos));
+    if (!m)
+        return null;
+    // Don't complete if it looks like a widget
+    if (m[0].startsWith("<$"))
+        return null;
+    // Check we're not in a code block, widget, or other non-completable context
+    const tree = language.syntaxTree(state).resolveInner(pos, -1);
+    let node = tree;
+    while (node && !node.type.isTop) {
+        if (node.name === "FencedCode" || node.name === "CodeBlock" ||
+            node.name === "TypedBlock" || node.name === "CommentBlock" ||
+            node.name === "Widget") {
+            return null;
+        }
+        node = node.parent;
+    }
+    return {
+        from: pos - m[0].length,
+        to: pos,
+        options: htmlTagCompletions(),
+        validFor: /^<[:\-\.\w\u00b7-\uffff]*$/
+    };
+}
+/**
+ * Filter operator completion source (inside [...])
+ * Triggers when typing inside filter brackets, e.g., [tag or [has[
+ */
+function filterOperatorCompletion(getFilterOperators) {
+    return (context) => {
+        const { state, pos } = context;
+        // Look for filter operator context: after [ and optional ! or other prefix
+        // Match patterns like: [tag, [!has, [tag[value]tag, etc.
+        const textBefore = state.sliceDoc(Math.max(0, pos - 100), pos);
+        // Check if we're inside a filter expression (inside brackets [])
+        // and after a position where an operator would go
+        const filterOperatorMatch = /\[(!?)(\w*)$/.exec(textBefore);
+        if (!filterOperatorMatch) {
+            // Also match after a closing bracket of a previous operator: [tag[value]op
+            const chainedMatch = /\][:\w]*(\w+)$/.exec(textBefore);
+            if (!chainedMatch)
+                return null;
+            // For chained operators, use the partial match
+            const partial = chainedMatch[1];
+            return createFilterOperatorResult(context, partial, partial.length, getFilterOperators);
+        }
+        // Check we're in a filter context (inside FilterExpression, FilteredTransclusion, etc.)
+        const tree = language.syntaxTree(state).resolveInner(pos, -1);
+        let node = tree;
+        let inFilter = false;
+        while (node && !node.type.isTop) {
+            if (node.name === "FencedCode" || node.name === "CodeBlock" ||
+                node.name === "TypedBlock" || node.name === "CommentBlock") {
+                return null;
+            }
+            if (node.name === "FilterExpression" || node.name === "FilteredTransclusion" ||
+                node.name === "FilteredTransclusionBlock" || node.name === "AttributeFiltered" ||
+                node.name === "ConditionalBlock") {
+                inFilter = true;
+            }
+            node = node.parent;
+        }
+        // Also check text patterns for filter context
+        const hasFilterContext = inFilter ||
+            /\{\{\{[^}]*$/.test(textBefore) || // {{{ filtered transclusion
+            /<%(?:if|elseif)\s+[^%]*$/.test(textBefore) || // <%if filter%>
+            /filter\s*=\s*["'][^"']*$/.test(textBefore); // filter="..."
+        if (!hasFilterContext)
+            return null;
+        const prefix = filterOperatorMatch[1]; // ! or empty
+        const partial = filterOperatorMatch[2]; // partial operator name
+        return createFilterOperatorResult(context, partial, partial.length + prefix.length + 1, getFilterOperators);
+    };
+}
+function createFilterOperatorResult(context, partial, matchLength, getFilterOperators) {
+    const { pos } = context;
+    // Use provided operators, fall back to core operators if empty
+    const customOperators = getFilterOperators ? getFilterOperators() : [];
+    const operators = customOperators.length > 0 ? customOperators : coreFilterOperators;
+    const options = operators.map(op => ({
+        label: op,
+        type: "function",
+        detail: "filter operator",
+        apply: op + "["
+    }));
+    return {
+        from: pos - partial.length,
+        to: pos,
+        options,
+        validFor: /^\w*$/
+    };
+}
+/**
+ * Filter run prefix completion source
+ * Triggers at the start of filter runs (after space or at start of filter)
+ */
+function filterRunPrefixCompletion(context) {
+    const { state, pos } = context;
+    const textBefore = state.sliceDoc(Math.max(0, pos - 100), pos);
+    // Match at start of a filter run: after {{{ or after space/newline in filter
+    // Patterns: {{{ :, {{{ +, or after ] followed by space then prefix
+    const runPrefixMatch = /(?:\{\{\{|[\]\s])\s*([:+\-~=][\w]*)$/.exec(textBefore);
+    if (!runPrefixMatch)
+        return null;
+    // Check we're in a filter context
+    const tree = language.syntaxTree(state).resolveInner(pos, -1);
+    let node = tree;
+    let inFilter = false;
+    while (node && !node.type.isTop) {
+        if (node.name === "FencedCode" || node.name === "CodeBlock" ||
+            node.name === "TypedBlock" || node.name === "CommentBlock") {
+            return null;
+        }
+        if (node.name === "FilterExpression" || node.name === "FilteredTransclusion" ||
+            node.name === "FilteredTransclusionBlock" || node.name === "AttributeFiltered" ||
+            node.name === "ConditionalBlock") {
+            inFilter = true;
+        }
+        node = node.parent;
+    }
+    // Also check text patterns for filter context
+    const hasFilterContext = inFilter ||
+        /\{\{\{[^}]*$/.test(textBefore) || // {{{ filtered transclusion
+        /<%(?:if|elseif)\s+[^%]*$/.test(textBefore) || // <%if filter%>
+        /filter\s*=\s*["'][^"']*$/.test(textBefore); // filter="..."
+    if (!hasFilterContext)
+        return null;
+    const partial = runPrefixMatch[1];
+    const options = filterRunPrefixes.map(p => ({
+        label: p.label,
+        type: "keyword",
+        detail: p.detail,
+        apply: p.label + (p.label.startsWith(":") ? "[" : "")
+    }));
+    return {
+        from: pos - partial.length,
+        to: pos,
+        options,
+        validFor: /^[:+\-~=][\w]*$/
+    };
+}
+
+/**
  * TiddlyWiki5 CodeMirror 6 Plugin Entry Point
  *
  * This module exports the plugin interface expected by the CM6 engine.
@@ -4482,7 +5831,7 @@ const COMPARTMENT_NAME = "tiddlywikiLanguage";
 /**
  * Standard TiddlyWiki keymap
  */
-const tiddlywikiKeymap = view.keymap.of([
+const tiddlywikiKeymap = state.Prec.high(view.keymap.of([
     { key: "Enter", run: insertNewlineContinueMarkup },
     { key: "Backspace", run: deleteMarkupBackward },
     { key: "Mod-b", run: toggleBold },
@@ -4501,7 +5850,7 @@ const tiddlywikiKeymap = view.keymap.of([
     { key: "Mod-Shift-8", run: toggleBulletList },
     { key: "Mod-Shift-7", run: toggleNumberedList },
     { key: "Mod-Shift-c", run: insertCodeBlock },
-]);
+]));
 // ============================================================================
 // Helper Functions
 // ============================================================================
@@ -4582,6 +5931,23 @@ function getWidgetNames() {
     }
 }
 /**
+ * Get filter operator names for autocompletion
+ */
+function getFilterOperators() {
+    if (typeof $tw === "undefined" || !$tw.wiki)
+        return [];
+    try {
+        // Filter operators are registered in $tw.wiki.filterOperators
+        if ($tw.wiki.filterOperators) {
+            return Object.keys($tw.wiki.filterOperators).sort();
+        }
+        return [];
+    }
+    catch (e) {
+        return [];
+    }
+}
+/**
  * Build language support with options from context
  */
 function buildLanguageSupport(context) {
@@ -4592,9 +5958,12 @@ function buildLanguageSupport(context) {
         completeWidgets: options.completeWidgets !== false,
         completeMacros: options.completeMacros !== false,
         completeTiddlers: options.completeTiddlers !== false,
+        completeFilterOperators: options.completeFilterOperators !== false,
+        completeFilterRunPrefixes: options.completeFilterRunPrefixes !== false,
         getTiddlerTitles,
         getMacroNames,
-        getWidgetNames
+        getWidgetNames,
+        getFilterOperators
     });
 }
 // ============================================================================

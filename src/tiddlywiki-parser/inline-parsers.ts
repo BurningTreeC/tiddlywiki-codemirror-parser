@@ -1362,12 +1362,18 @@ export const CamelCaseLink: InlineParser = {
     // Must start with uppercase
     if (next < 65 || next > 90) return -1
 
+    // Must be at word boundary (previous char must not be a letter)
+    if (pos > cx.offset) {
+      const prev = cx.char(pos - 1)
+      // Check if previous char is a letter (a-z or A-Z)
+      if ((prev >= 65 && prev <= 90) || (prev >= 97 && prev <= 122)) return -1
+      // Check it's not escaped with ~
+      if (prev === Ch.Tilde) return -1
+    }
+
     const text = cx.slice(pos, cx.end)
     const match = camelCaseRe.exec(text)
     if (!match) return -1
-
-    // Check it's not escaped with ~
-    if (pos > cx.offset && cx.char(pos - 1) === Ch.Tilde) return -1
 
     return cx.addElement(cx.elt(Type.CamelCaseLink, pos, pos + match[0].length))
   }
