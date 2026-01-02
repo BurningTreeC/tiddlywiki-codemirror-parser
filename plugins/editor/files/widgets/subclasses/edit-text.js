@@ -9,6 +9,7 @@ Widget subclass for CodeMirror 6 editor (production-ready)
 - Centralizes config → emits a single settingsChanged snapshot
 - Keeps TW core factory.js unmodified
 - Theme management with auto-match palette support
+- Plugin registry for extensibility (Zen Mode, etc.)
 
 \*/
 
@@ -24,6 +25,107 @@ exports.constructor = function (parseTreeNode, options) {
 };
 
 exports.prototype = {};
+
+// ============================================================================
+// Plugin Registry - allows external plugins to hook into the widget
+// ============================================================================
+
+/**
+ * Global registry for CM6 widget plugins.
+ * Plugins register handlers that get called at various lifecycle points.
+ * 
+ * Usage from a plugin:
+ *   var registry = require("$:/plugins/BurningTreeC/tiddlywiki-codemirror/modules/subclasses/editor/edit-text.js").registry;
+ *   registry.register("zenMode", {
+ *       onRender: function(widget) { ... },
+ *       onMessage: { "tm-cm6-zen-mode": function(widget, event) { ... } }
+ *   });
+ */
+var pluginRegistry = {
+	_plugins: {},
+	
+	/**
+	 * Register a plugin with the widget system
+	 * @param {string} name - Unique plugin identifier
+	 * @param {object} handlers - Object containing lifecycle hooks and message handlers
+	 */
+	register: function(name, handlers) {
+		this._plugins[name] = handlers;
+	},
+	
+	/**
+	 * Unregister a plugin
+	 * @param {string} name - Plugin identifier to remove
+	 */
+	unregister: function(name) {
+		delete this._plugins[name];
+	},
+	
+	/**
+	 * Check if a plugin is registered
+	 * @param {string} name - Plugin identifier
+	 * @returns {boolean}
+	 */
+	has: function(name) {
+		return !!this._plugins[name];
+	},
+	
+	/**
+	 * Get a registered plugin's handlers
+	 * @param {string} name - Plugin identifier
+	 * @returns {object|undefined}
+	 */
+	get: function(name) {
+		return this._plugins[name];
+	},
+	
+	/**
+	 * Call a lifecycle hook on all registered plugins
+	 * @param {string} hook - Hook name (e.g., "onRender", "onRefresh")
+	 * @param {object} widget - The widget instance
+	 * @param {...*} args - Additional arguments to pass
+	 */
+	callHook: function(hook, widget) {
+		var args = Array.prototype.slice.call(arguments, 1);
+		var pluginNames = Object.keys(this._plugins);
+		for (var i = 0; i < pluginNames.length; i++) {
+			var plugin = this._plugins[pluginNames[i]];
+			if (plugin && typeof plugin[hook] === "function") {
+				try {
+					plugin[hook].apply(null, args);
+				} catch (e) {
+					console.error("CM6 plugin error (" + pluginNames[i] + "." + hook + "):", e);
+				}
+			}
+		}
+	},
+	
+	/**
+	 * Try to handle a message via registered plugins
+	 * @param {string} message - Message type (e.g., "tm-cm6-zen-mode")
+	 * @param {object} widget - The widget instance
+	 * @param {object} event - The event object
+	 * @returns {boolean} - True if a plugin handled the message
+	 */
+	handleMessage: function(message, widget, event) {
+		var pluginNames = Object.keys(this._plugins);
+		for (var i = 0; i < pluginNames.length; i++) {
+			var plugin = this._plugins[pluginNames[i]];
+			if (plugin && plugin.onMessage && typeof plugin.onMessage[message] === "function") {
+				try {
+					plugin.onMessage[message](widget, event);
+					return true;
+				} catch (e) {
+					console.error("CM6 plugin message error (" + pluginNames[i] + "." + message + "):", e);
+				}
+			}
+		}
+		return false;
+	}
+};
+
+// Export registry for external plugins
+exports.registry = pluginRegistry;
 
 // ============================================================================
 // Local utilities (kept local to avoid prototype pollution)
@@ -203,6 +305,21 @@ exports.prototype.render = function (parent, nextSibling) {
 	// Apply theme immediately (fast DOM attribute)
 	this._applyTheme();
 
+	// Store references for plugin access
+	if (this.engine && this.engine.domNode) {
+		this.engine.domNode._cm6Engine = this.engine;
+		this.engine.domNode._cm6Widget = this;
+		
+		// Store on tiddler frame for external lookup
+		var frame = this.engine.domNode.closest(".tc-tiddler-frame");
+		if (frame) {
+			frame._cm6Widget = this;
+		}
+	}
+
+	// Notify registered plugins
+	pluginRegistry.callHook("onRender", this);
+
 	// Emit initial settings snapshot
 	this.applyEngineSettings();
 };
@@ -259,6 +376,23 @@ exports.prototype.updateShortcutLists = function (tiddlerList) {
 
 		this.shortcutPriorityList[i] = fields.priority === "yes";
 	}
+};
+
+// ============================================================================
+// Message handling with plugin support
+// ============================================================================
+
+/**
+ * Handle messages - first check registered plugins, then fall back to built-in handlers
+ */
+exports.prototype.dispatchEvent = function (event) {
+	// Try plugin handlers first
+	if (event.type && pluginRegistry.handleMessage(event.type, this, event)) {
+		return true;
+	}
+	
+	// Call parent dispatchEvent
+	return Object.getPrototypeOf(Object.getPrototypeOf(this)).dispatchEvent.call(this, event);
 };
 
 // ============================================================================
@@ -375,6 +509,9 @@ exports.prototype.refresh = function (changedTiddlers) {
 			});
 		}
 	}
+
+	// Notify registered plugins of refresh
+	pluginRegistry.callHook("onRefresh", this, changedTiddlers);
 
 	// Call base refresh
 	return Object.getPrototypeOf(Object.getPrototypeOf(this)).refresh.call(this, changedTiddlers);
