@@ -1,6 +1,6 @@
 title: $:/plugins/BurningTreeC/codemirror6-theme-nord/themes/nord
 tags: $:/tags/CodeMirrorTheme
-name: Dark
+name: Nord Dark
 family: Nord
 value: nord
 color-scheme: dark
