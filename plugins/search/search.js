@@ -1,118 +1,155 @@
 /*\
-title: $:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/search.js
+title: $:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/search/search.js
 type: application/javascript
 module-type: codemirror6-plugin
 
-Search and replace plugin - adds search panel and find/replace APIs.
+Search and replace plugin for CodeMirror 6
 
 \*/
-(function(){
-
-/*jslint node: true, browser: true */
-/*global $tw: false */
+(function() {
 "use strict";
 
+if (!$tw.browser) return;
+
+// Load the search library
+var searchLib = require("$:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/search/lib/codemirror-search.js");
+
 exports.plugin = {
-	name: "search",
-	description: "Search and replace functionality",
-	priority: 800,
-	
-	// Load if search option is not explicitly disabled
-	condition: function(context) {
-		return context.options.search !== false;
-	},
-	
-	init: function(cm6Core) {
-		this._core = cm6Core;
-	},
-	
-	getExtensions: function(context) {
-		var core = this._core;
-		var extensions = [];
-		
-		// Search keymap
-		var searchKeymap = (core.search || {}).searchKeymap;
-		var keymap = core.view.keymap;
-		if (searchKeymap && keymap) {
-			extensions.push(keymap.of(searchKeymap));
-		}
-		
-		// Highlight selection matches
-		var highlightSelectionMatches = (core.search || {}).highlightSelectionMatches;
-		if (highlightSelectionMatches && context.options.highlightSelectionMatches !== false) {
-			extensions.push(highlightSelectionMatches());
-		}
-		
-		return extensions;
-	},
-	
-	extendAPI: function(engine, context) {
-		var core = this._core;
-		var openSearchPanel = (core.search || {}).openSearchPanel;
-		var closeSearchPanel = (core.search || {}).closeSearchPanel;
-		var findNext = (core.search || {}).findNext;
-		var findPrevious = (core.search || {}).findPrevious;
-		var selectMatches = (core.search || {}).selectMatches;
-		var replaceNext = (core.search || {}).replaceNext;
-		var replaceAll = (core.search || {}).replaceAll;
-		var gotoLine = (core.search || {}).gotoLine;
-		var selectNextOccurrence = (core.search || {}).selectNextOccurrence;
-		
-		return {
-			// ==== Search Panel API ====
-			
-			openSearchPanel: function() {
-				if (this._destroyed || !openSearchPanel) return;
-				openSearchPanel(this.view);
-			},
-			
-			closeSearchPanel: function() {
-				if (this._destroyed || !closeSearchPanel) return;
-				closeSearchPanel(this.view);
-			},
-			
-			// ==== Find API ====
-			
-			findNext: function() {
-				if (this._destroyed || !findNext) return false;
-				return findNext(this.view);
-			},
-			
-			findPrevious: function() {
-				if (this._destroyed || !findPrevious) return false;
-				return findPrevious(this.view);
-			},
-			
-			selectAllMatches: function() {
-				if (this._destroyed || !selectMatches) return false;
-				return selectMatches(this.view);
-			},
-			
-			selectNextOccurrence: function() {
-				if (this._destroyed || !selectNextOccurrence) return false;
-				return selectNextOccurrence(this.view);
-			},
-			
-			// ==== Replace API ====
-			
-			replaceNext: function() {
-				if (this._destroyed || !replaceNext) return false;
-				return replaceNext(this.view);
-			},
-			
-			replaceAll: function() {
-				if (this._destroyed || !replaceAll) return false;
-				return replaceAll(this.view);
-			},
-			
-			// ==== Goto Line ====
-			
-			gotoLine: function() {
-				if (this._destroyed || !gotoLine) return false;
-				return gotoLine(this.view);
-			}
-		};
-	}
+  name: "search",
+  description: "Search and replace functionality",
+  priority: 700,
+
+  init: function(cm6Core) {
+    this._core = cm6Core;
+  },
+
+  getExtensions: function(context) {
+    var core = this._core;
+    var extensions = [];
+    var keymap = core.view.keymap;
+    var Prec = core.state.Prec;
+
+    // Add search extension
+    if (searchLib.search) {
+      extensions.push(searchLib.search({
+        top: true
+      }));
+    }
+
+    // Add highlight selection matches
+    if (searchLib.highlightSelectionMatches) {
+      extensions.push(searchLib.highlightSelectionMatches());
+    }
+
+    // Add search keymap (without Escape - we handle it separately)
+    if (keymap && searchLib.searchKeymap) {
+      var filteredKeymap = searchLib.searchKeymap.filter(function(binding) {
+        return binding.key !== "Escape";
+      });
+      extensions.push(keymap.of(filteredKeymap));
+    }
+
+    // Store reference for Escape handler
+    var searchLibRef = searchLib;
+
+    // Use ViewPlugin to add capturing event listener for Escape
+    var ViewPlugin = core.view.ViewPlugin;
+    if (ViewPlugin) {
+      extensions.push(ViewPlugin.define(function(view) {
+        var handler = function(event) {
+          if (event.key === "Escape") {
+            // Check if search panel is open
+            var searchClosed = searchLibRef.closeSearchPanel(view);
+            if (searchClosed) {
+              event.preventDefault();
+              event.stopPropagation();
+              event.stopImmediatePropagation();
+              return;
+            }
+
+            // Check if goto line panel is open
+            var gotoLinePanel = view.dom.querySelector(".cm-gotoLine");
+            if (gotoLinePanel) {
+              // Find and click the close button, or simulate escape on the input
+              var closeBtn = gotoLinePanel.querySelector("button[name=close]");
+              if (closeBtn) {
+                closeBtn.click();
+                event.preventDefault();
+                event.stopPropagation();
+                event.stopImmediatePropagation();
+                return;
+              }
+            }
+          }
+        };
+
+        // Add listener in capture phase to intercept before TiddlyWiki
+        view.dom.addEventListener("keydown", handler, true);
+
+        return {
+          destroy: function() {
+            view.dom.removeEventListener("keydown", handler, true);
+          }
+        };
+      }));
+    }
+
+    return extensions;
+  },
+
+  extendAPI: function(engine, context) {
+    return {
+      openSearch: function() {
+        if (this._destroyed || !searchLib.openSearchPanel) return;
+        searchLib.openSearchPanel(this.view);
+      },
+
+      closeSearch: function() {
+        if (this._destroyed || !searchLib.closeSearchPanel) return;
+        searchLib.closeSearchPanel(this.view);
+      },
+
+      findNext: function() {
+        if (this._destroyed || !searchLib.findNext) return;
+        searchLib.findNext(this.view);
+      },
+
+      findPrevious: function() {
+        if (this._destroyed || !searchLib.findPrevious) return;
+        searchLib.findPrevious(this.view);
+      },
+
+      replaceNext: function() {
+        if (this._destroyed || !searchLib.replaceNext) return;
+        searchLib.replaceNext(this.view);
+      },
+
+      replaceAll: function() {
+        if (this._destroyed || !searchLib.replaceAll) return;
+        searchLib.replaceAll(this.view);
+      },
+
+      selectNextOccurrence: function() {
+        if (this._destroyed || !searchLib.selectNextOccurrence) return;
+        searchLib.selectNextOccurrence(this.view);
+      },
+
+      selectAllOccurrences: function() {
+        if (this._destroyed || !searchLib.selectMatches) return;
+        searchLib.selectMatches(this.view);
+      },
+
+      gotoLine: function() {
+        if (this._destroyed || !searchLib.gotoLine) return;
+        searchLib.gotoLine(this.view);
+      },
+
+      isSearchOpen: function() {
+        if (this._destroyed || !searchLib.searchPanelOpen) return false;
+        return searchLib.searchPanelOpen(this.view.state);
+      }
+    };
+  }
 };
 
 })();

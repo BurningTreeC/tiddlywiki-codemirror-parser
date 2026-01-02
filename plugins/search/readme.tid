@@ -1,0 +1,41 @@
+title: $:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/search/readme
+
+! Search & Replace for CodeMirror 6
+
+Full-featured search and replace functionality for the editor.
+
+!! Keyboard Shortcuts
+
+|!Shortcut |!Action |
+|`Ctrl+F` / `Cmd+F` |Open search panel |
+|`Ctrl+H` / `Cmd+Alt+F` |Open search & replace |
+|`F3` / `Ctrl+G` |Find next match |
+|`Shift+F3` / `Ctrl+Shift+G` |Find previous match |
+|`Ctrl+D` |Select next occurrence |
+|`Ctrl+Shift+L` |Select all occurrences |
+|`Escape` |Close search panel |
+|`Ctrl+G` |Go to line |
+
+!! Features
+
+* ''Find'' - Search for text with match highlighting
+* ''Replace'' - Replace current or all matches
+* ''Case sensitive'' - Toggle case sensitivity
+* ''Regular expressions'' - Use regex patterns
+* ''Match whole word'' - Match complete words only
+* ''Selection matches'' - Highlight other occurrences of selected text
+
+!! API
+
+The plugin adds these methods to the engine:
+
+* `openSearch()` - Open the search panel
+* `closeSearch()` - Close the search panel
+* `findNext()` - Jump to next match
+* `findPrevious()` - Jump to previous match
+* `replaceNext()` - Replace current match
+* `replaceAll()` - Replace all matches
+* `selectNextOccurrence()` - Add next occurrence to selection
+* `selectAllOccurrences()` - Select all occurrences
+* `gotoLine()` - Open go to line dialog
+* `isSearchOpen()` - Check if search panel is open

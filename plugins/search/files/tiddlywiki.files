@@ -1,0 +1,12 @@
+{
+    "tiddlers": [
+        {
+            "file": "codemirror-search.js",
+            "fields": {
+                "title": "$:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/search/lib/codemirror-search.js",
+                "type": "application/javascript",
+                "module-type": "library"
+            }
+        }
+    ]
+}
