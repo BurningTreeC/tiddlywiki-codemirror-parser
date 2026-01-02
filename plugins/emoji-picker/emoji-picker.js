@@ -3,7 +3,8 @@ title: $:/plugins/custom/emoji-picker/emoji-picker.js
 type: application/javascript
 module-type: codemirror-6
 
-CodeMirror 6 Emoji Picker - loads emoji data from gemoji JSON tiddler
+CodeMirror 6 Emoji Picker - loads emoji data from emojibase JSON tiddler
+Supports skin tone variants and extensive search
 
 \*/
 (function() {
@@ -31,10 +32,20 @@ const {
 
 const CONFIG = {
   dataTiddler: "$:/plugins/custom/emoji-picker/data",
+  shortcodesTiddler: "$:/plugins/custom/emoji-picker/shortcodes",
   triggerChar: ":",
   minQueryLength: 2,
   maxResults: 50,
   debounceMs: 50
+};
+
+// Skin tone labels for display
+const SKIN_TONES = {
+  1: "light",
+  2: "medium-light", 
+  3: "medium",
+  4: "medium-dark",
+  5: "dark"
 };
 
 // ============================================================
@@ -42,28 +53,97 @@ const CONFIG = {
 // ============================================================
 
 let EMOJI_DATA = null;
+let SHORTCODES = null;
+let SEARCH_INDEX = null;
 
 /**
- * Load emoji data from JSON tiddler
+ * Load emoji data from JSON tiddlers
  */
 function loadEmojiData() {
   if (EMOJI_DATA !== null) return EMOJI_DATA;
   
   try {
+    // Load main emoji data
     const json = $tw.wiki.getTiddlerText(CONFIG.dataTiddler);
     if (json) {
       EMOJI_DATA = JSON.parse(json);
-      console.log(`Emoji picker: Loaded ${EMOJI_DATA.length} emojis`);
+      console.log(`Emoji picker: Loaded ${EMOJI_DATA.length} base emojis`);
     } else {
       console.warn("Emoji picker: No data tiddler found at", CONFIG.dataTiddler);
       EMOJI_DATA = [];
     }
+    
+    // Load shortcodes (optional, enhances search)
+    const shortcodesJson = $tw.wiki.getTiddlerText(CONFIG.shortcodesTiddler);
+    if (shortcodesJson) {
+      SHORTCODES = JSON.parse(shortcodesJson);
+      console.log(`Emoji picker: Loaded shortcodes`);
+    } else {
+      SHORTCODES = {};
+    }
+    
+    // Build search index
+    buildSearchIndex();
+    
   } catch (e) {
     console.error("Emoji picker: Error loading emoji data", e);
     EMOJI_DATA = [];
+    SHORTCODES = {};
   }
   
   return EMOJI_DATA;
+}
+
+/**
+ * Build flattened search index including skin variants
+ */
+function buildSearchIndex() {
+  SEARCH_INDEX = [];
+  
+  EMOJI_DATA.forEach(emoji => {
+    // Get shortcodes for this emoji
+    const shortcodes = SHORTCODES[emoji.hexcode] || [];
+    const shortcodeArray = Array.isArray(shortcodes) ? shortcodes : [shortcodes];
+    
+    // Add base emoji
+    SEARCH_INDEX.push({
+      emoji: emoji.emoji,
+      annotation: emoji.annotation || "",
+      tags: emoji.tags || [],
+      shortcodes: shortcodeArray,
+      hexcode: emoji.hexcode,
+      tone: null,
+      hasSkins: !!(emoji.skins && emoji.skins.length > 0),
+      skins: emoji.skins || []
+    });
+    
+    // Add skin tone variants as separate searchable entries
+    if (emoji.skins) {
+      emoji.skins.forEach(skin => {
+        const skinShortcodes = SHORTCODES[skin.hexcode] || [];
+        const skinShortcodeArray = Array.isArray(skinShortcodes) ? skinShortcodes : [skinShortcodes];
+        
+        // Generate tone-specific shortcodes if not present
+        const toneLabel = Array.isArray(skin.tone) 
+          ? skin.tone.map(t => SKIN_TONES[t]).join(", ")
+          : SKIN_TONES[skin.tone];
+        
+        SEARCH_INDEX.push({
+          emoji: skin.emoji,
+          annotation: skin.annotation || `${emoji.annotation}: ${toneLabel} skin tone`,
+          tags: [...(emoji.tags || []), toneLabel, "skin tone"],
+          shortcodes: skinShortcodeArray.length > 0 ? skinShortcodeArray : 
+            shortcodeArray.map(sc => `${sc}_tone${Array.isArray(skin.tone) ? skin.tone.join("_") : skin.tone}`),
+          hexcode: skin.hexcode,
+          tone: skin.tone,
+          hasSkins: false,
+          skins: []
+        });
+      });
+    }
+  });
+  
+  console.log(`Emoji picker: Search index built with ${SEARCH_INDEX.length} entries`);
 }
 
 /**
@@ -71,8 +151,8 @@ function loadEmojiData() {
  * Returns results sorted: exact matches first, then prefix matches, then contains
  */
 function searchEmojis(query) {
-  const data = loadEmojiData();
-  if (!query || query.length < CONFIG.minQueryLength) return [];
+  loadEmojiData();
+  if (!SEARCH_INDEX || !query || query.length < CONFIG.minQueryLength) return [];
   
   const q = query.toLowerCase();
   const exactMatches = [];
@@ -80,52 +160,59 @@ function searchEmojis(query) {
   const containsMatches = [];
   const seen = new Set();
   
-  data.forEach((emoji, idx) => {
+  SEARCH_INDEX.forEach((entry, idx) => {
     if (seen.has(idx)) return;
     
-    // Check aliases for exact match
-    const hasExactAlias = emoji.aliases.some(a => a.toLowerCase() === q);
-    if (hasExactAlias) {
-      exactMatches.push(emoji);
+    // Check shortcodes for exact match
+    const hasExactShortcode = entry.shortcodes.some(sc => sc.toLowerCase() === q);
+    if (hasExactShortcode) {
+      exactMatches.push(entry);
       seen.add(idx);
       return;
     }
     
-    // Check aliases for prefix match
-    const hasPrefixAlias = emoji.aliases.some(a => a.toLowerCase().startsWith(q));
-    if (hasPrefixAlias) {
-      prefixMatches.push(emoji);
+    // Check shortcodes for prefix match
+    const hasPrefixShortcode = entry.shortcodes.some(sc => sc.toLowerCase().startsWith(q));
+    if (hasPrefixShortcode) {
+      prefixMatches.push(entry);
       seen.add(idx);
       return;
     }
     
     // Check tags for prefix match
-    const hasPrefixTag = emoji.tags && emoji.tags.some(t => t.toLowerCase().startsWith(q));
+    const hasPrefixTag = entry.tags.some(t => t.toLowerCase().startsWith(q));
     if (hasPrefixTag) {
-      prefixMatches.push(emoji);
+      prefixMatches.push(entry);
       seen.add(idx);
       return;
     }
     
-    // Check aliases for contains match
-    const hasContainsAlias = emoji.aliases.some(a => a.toLowerCase().includes(q));
-    if (hasContainsAlias) {
-      containsMatches.push(emoji);
+    // Check annotation for prefix match
+    if (entry.annotation.toLowerCase().startsWith(q)) {
+      prefixMatches.push(entry);
+      seen.add(idx);
+      return;
+    }
+    
+    // Check shortcodes for contains match
+    const hasContainsShortcode = entry.shortcodes.some(sc => sc.toLowerCase().includes(q));
+    if (hasContainsShortcode) {
+      containsMatches.push(entry);
       seen.add(idx);
       return;
     }
     
     // Check tags for contains match
-    const hasContainsTag = emoji.tags && emoji.tags.some(t => t.toLowerCase().includes(q));
+    const hasContainsTag = entry.tags.some(t => t.toLowerCase().includes(q));
     if (hasContainsTag) {
-      containsMatches.push(emoji);
+      containsMatches.push(entry);
       seen.add(idx);
       return;
     }
     
-    // Check description for contains match
-    if (emoji.description.toLowerCase().includes(q)) {
-      containsMatches.push(emoji);
+    // Check annotation for contains match
+    if (entry.annotation.toLowerCase().includes(q)) {
+      containsMatches.push(entry);
       seen.add(idx);
     }
   });
@@ -227,22 +314,23 @@ class PickerWidget extends WidgetType {
     const list = document.createElement("div");
     list.className = "cm-emoji-picker-list";
     
-    this.state.results.forEach((emoji, idx) => {
+    this.state.results.forEach((entry, idx) => {
       const item = document.createElement("div");
       item.className = "cm-emoji-picker-item" + 
         (idx === this.state.selectedIndex ? " selected" : "");
       
       const emojiSpan = document.createElement("span");
       emojiSpan.className = "cm-emoji-picker-emoji";
-      emojiSpan.textContent = emoji.emoji;
+      emojiSpan.textContent = entry.emoji;
       
       const nameSpan = document.createElement("span");
       nameSpan.className = "cm-emoji-picker-name";
-      nameSpan.textContent = ":" + emoji.aliases[0] + ":";
+      const shortcode = entry.shortcodes[0] || entry.annotation.replace(/\s+/g, "_");
+      nameSpan.textContent = ":" + shortcode + ":";
       
       const descSpan = document.createElement("span");
       descSpan.className = "cm-emoji-picker-desc";
-      descSpan.textContent = emoji.description;
+      descSpan.textContent = entry.annotation;
       
       item.appendChild(emojiSpan);
       item.appendChild(nameSpan);
@@ -250,7 +338,7 @@ class PickerWidget extends WidgetType {
       
       item.addEventListener("mousedown", (e) => {
         e.preventDefault();
-        insertEmoji(view, emoji, this.state.triggerPos);
+        insertEmoji(view, entry, this.state.triggerPos);
       });
       
       item.addEventListener("mouseenter", () => {
