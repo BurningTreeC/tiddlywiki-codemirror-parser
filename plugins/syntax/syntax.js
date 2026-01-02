@@ -25,15 +25,43 @@ exports.plugin = {
 	init: function(cm6Core) {
 		this._core = cm6Core;
 	},
+
+	/**
+	 * Get indent unit string from wiki config
+	 * Reads $:/config/codemirror-6/indentUnit (spaces or tab)
+	 * and $:/config/codemirror-6/indentUnitMultiplier (number of spaces)
+	 */
+	_getIndentUnitFromConfig: function() {
+		var indentUnit = "spaces";
+		var multiplier = 4;
+
+		if ($tw && $tw.wiki) {
+			var unitText = $tw.wiki.getTiddlerText("$:/config/codemirror-6/indentUnit");
+			if (unitText === "tab") {
+				indentUnit = "tab";
+			}
+			var multText = $tw.wiki.getTiddlerText("$:/config/codemirror-6/indentUnitMultiplier");
+			var parsed = parseInt(multText, 10);
+			if (isFinite(parsed) && parsed > 0 && parsed <= 16) {
+				multiplier = parsed;
+			}
+		}
+
+		if (indentUnit === "tab") {
+			return "\t";
+		}
+		return " ".repeat(multiplier);
+	},
 	
 	registerCompartments: function() {
 		var core = this._core;
 		var Compartment = core.state.Compartment;
-		
+
 		return {
 			bracketMatching: new Compartment(),
 			closeBrackets: new Compartment(),
-			indentUnit: new Compartment()
+			indentUnit: new Compartment(),
+			tabSize: new Compartment()
 		};
 	},
 	
@@ -43,7 +71,7 @@ exports.plugin = {
 		var engine = context.engine;
 		var compartments = engine._compartments;
 		var options = context.options;
-		
+
 		// Bracket matching
 		var bracketMatching = (core.language || {}).bracketMatching;
 		if (compartments.bracketMatching && bracketMatching) {
@@ -53,7 +81,7 @@ exports.plugin = {
 				)
 			);
 		}
-		
+
 		// Close brackets
 		var closeBrackets = (core.autocomplete || {}).closeBrackets;
 		if (compartments.closeBrackets && closeBrackets) {
@@ -63,12 +91,11 @@ exports.plugin = {
 				)
 			);
 		}
-		
-		// Indent unit
+
+		// Indent unit - read from wiki config
 		var indentUnit = (core.language || {}).indentUnit;
 		if (compartments.indentUnit && indentUnit) {
-			var tabSize = typeof options.tabSize === "number" ? options.tabSize : 4;
-			var unit = options.indentWithTabs ? "\t" : " ".repeat(tabSize);
+			var unit = this._getIndentUnitFromConfig();
 			extensions.push(compartments.indentUnit.of(indentUnit.of(unit)));
 		}
 		
@@ -165,6 +192,23 @@ exports.plugin = {
 			getNodeTypeAt: function(pos) {
 				var node = this.getNodeAt(pos);
 				return node ? node.type.name : null;
+			}
+		};
+	},
+
+	registerEvents: function(engine, context) {
+		var self = this;
+		var core = this._core;
+		var indentUnit = (core.language || {}).indentUnit;
+
+		return {
+			settingsChanged: function(settings) {
+				if (!engine || engine._destroyed) return;
+				if (!indentUnit) return;
+
+				// Reconfigure indent unit when settings change
+				var unit = self._getIndentUnitFromConfig();
+				engine.reconfigure("indentUnit", indentUnit.of(unit));
 			}
 		};
 	}

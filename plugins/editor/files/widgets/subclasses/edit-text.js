@@ -1,5 +1,5 @@
 /*\
-title: $:/plugins/BurningTreeC/tiddlywiki-codemirror/modules/subclasses/editor/edit-text.js
+title: $:/plugins/BurningTreeC/tiddlywiki-codemirror/widgets/subclasses/edit-text.js
 type: application/javascript
 module-type: widget-subclass
 
@@ -35,7 +35,7 @@ exports.prototype = {};
  * Plugins register handlers that get called at various lifecycle points.
  * 
  * Usage from a plugin:
- *   var registry = require("$:/plugins/BurningTreeC/tiddlywiki-codemirror/modules/subclasses/editor/edit-text.js").registry;
+ *   var registry = require("$:/plugins/BurningTreeC/tiddlywiki-codemirror/widgets/subclasses/edit-text.js").registry;
  *   registry.register("zenMode", {
  *       onRender: function(widget) { ... },
  *       onMessage: { "tm-cm6-zen-mode": function(widget, event) { ... } }
@@ -390,9 +390,34 @@ exports.prototype.dispatchEvent = function (event) {
 	if (event.type && pluginRegistry.handleMessage(event.type, this, event)) {
 		return true;
 	}
-	
-	// Call parent dispatchEvent
-	return Object.getPrototypeOf(Object.getPrototypeOf(this)).dispatchEvent.call(this, event);
+
+	// Check local event listeners (same as Widget.prototype.dispatchEvent)
+	event.widget = event.widget || this;
+	var listeners = this.eventListeners[event.type];
+	if (listeners) {
+		var self = this;
+		var shouldPropagate = true;
+		$tw.utils.each(listeners, function (handler) {
+			var propagate;
+			if (typeof handler === "string") {
+				propagate = self[handler].call(self, event);
+			} else {
+				propagate = handler.call(self, event);
+			}
+			if (propagate === false) {
+				shouldPropagate = false;
+			}
+		});
+		if (!shouldPropagate) {
+			return false;
+		}
+	}
+
+	// Dispatch to parent widget
+	if (this.parentWidget) {
+		return this.parentWidget.dispatchEvent(event);
+	}
+	return true;
 };
 
 // ============================================================================

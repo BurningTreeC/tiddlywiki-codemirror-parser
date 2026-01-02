@@ -1,6 +1,8 @@
 title: $:/plugins/BurningTreeC/codemirror6-theme-zenburn/styles
 tags: $:/tags/Stylesheet
 
+\rules only macrocallinline macrocallblock conditional
+
 /* ============================================================================
    Zenburn Theme for CodeMirror 6
    ============================================================================

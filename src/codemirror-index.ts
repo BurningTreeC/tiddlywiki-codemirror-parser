@@ -123,15 +123,3 @@ export const pasteURLAsLink = EditorView.domEventHandlers({
   }
 })
 
-// ============================================================================
-// Theme
-// ============================================================================
-
-export {
-  tiddlywikiTheme,
-  tiddlywikiLightTheme,
-  tiddlywikiDarkTheme,
-  getTiddlywikiTheme,
-  lightPalette,
-  darkPalette,
-} from "./theme"

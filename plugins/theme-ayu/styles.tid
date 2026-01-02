@@ -1,6 +1,8 @@
 title: $:/plugins/BurningTreeC/codemirror6-theme-ayu/styles
 tags: $:/tags/Stylesheet
 
+\rules only macrocallinline macrocallblock conditional
+
 /* ============================================================================
    Ayu Theme for CodeMirror 6
    ============================================================================

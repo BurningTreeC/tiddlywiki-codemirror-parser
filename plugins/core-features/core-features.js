@@ -25,11 +25,9 @@ exports.plugin = {
 	registerCompartments: function() {
 		var core = this._core;
 		var Compartment = core.state.Compartment;
-		
+
 		return {
-			lineNumbers: new Compartment(),
 			lineWrapping: new Compartment(),
-			highlightActiveLine: new Compartment(),
 			placeholder: new Compartment()
 		};
 	},
@@ -59,17 +57,7 @@ exports.plugin = {
 		if (historyKeymap && keymap) {
 			extensions.push(keymap.of(historyKeymap));
 		}
-		
-		// Line numbers
-		var lineNumbers = (core.view || {}).lineNumbers;
-		if (compartments.lineNumbers && lineNumbers) {
-			extensions.push(
-				compartments.lineNumbers.of(
-					options.lineNumbers !== false ? lineNumbers() : []
-				)
-			);
-		}
-		
+
 		// Line wrapping
 		var EditorView = core.view.EditorView;
 		if (compartments.lineWrapping) {
@@ -79,19 +67,7 @@ exports.plugin = {
 				)
 			);
 		}
-		
-		// Highlight active line
-		var highlightActiveLine = (core.view || {}).highlightActiveLine;
-		var highlightActiveLineGutter = (core.view || {}).highlightActiveLineGutter;
-		if (compartments.highlightActiveLine && highlightActiveLine) {
-			var activeLineExts = options.highlightActiveLine !== false ? 
-				[highlightActiveLine()] : [];
-			if (options.highlightActiveLine !== false && highlightActiveLineGutter) {
-				activeLineExts.push(highlightActiveLineGutter());
-			}
-			extensions.push(compartments.highlightActiveLine.of(activeLineExts));
-		}
-		
+
 		// Placeholder
 		var placeholder = (core.view || {}).placeholder;
 		if (compartments.placeholder && placeholder && options.placeholder) {
@@ -121,7 +97,6 @@ exports.plugin = {
 		var redo = (core.history || {}).redo;
 		var undoDepth = (core.history || {}).undoDepth;
 		var redoDepth = (core.history || {}).redoDepth;
-		var lineNumbers = (core.view || {}).lineNumbers;
 		var placeholder = (core.view || {}).placeholder;
 		var EditorView = core.view.EditorView;
 		
@@ -336,12 +311,7 @@ exports.plugin = {
 			},
 			
 			// ==== Configuration API ====
-			
-			setLineNumbers: function(show) {
-				if (this._destroyed || !lineNumbers) return;
-				this.reconfigure("lineNumbers", show ? lineNumbers() : []);
-			},
-			
+
 			setLineWrapping: function(wrap) {
 				if (this._destroyed) return;
 				this.reconfigure("lineWrapping", wrap ? EditorView.lineWrapping : []);

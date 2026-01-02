@@ -1,6 +1,8 @@
 title: $:/plugins/BurningTreeC/codemirror6-theme-one/styles
 tags: $:/tags/Stylesheet
 
+\rules only macrocallinline macrocallblock conditional
+
 /* ============================================================================
    One Dark / One Light Theme for CodeMirror 6
    ============================================================================

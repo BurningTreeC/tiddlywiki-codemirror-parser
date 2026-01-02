@@ -1,6 +1,5 @@
-title: $:/plugins/custom/emoji-picker/styles
+title: $:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/emoji-picker/styles
 tags: $:/tags/Stylesheet
-type: text/css
 
 \rules only macrocallinline macrocallblock
 

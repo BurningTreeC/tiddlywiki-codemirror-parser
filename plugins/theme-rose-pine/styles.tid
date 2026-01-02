@@ -1,6 +1,8 @@
 title: $:/plugins/BurningTreeC/codemirror6-theme-rose-pine/styles
 tags: $:/tags/Stylesheet
 
+\rules only macrocallinline macrocallblock conditional
+
 /* ============================================================================
    Rosé Pine Theme for CodeMirror 6
    ============================================================================

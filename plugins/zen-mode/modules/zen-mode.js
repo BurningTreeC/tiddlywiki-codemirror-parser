@@ -1,5 +1,5 @@
 /*\
-title: $:/plugins/BurningTreeC/tiddlywiki-codemirror/modules/zen-mode.js
+title: $:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/zen-mode/modules/zen-mode.js
 type: application/javascript
 module-type: library
 
@@ -75,20 +75,20 @@ ZenMode.prototype.createOverlay = function() {
  */
 ZenMode.prototype.enter = function(editorWrapper, engine) {
     if (this.isActive) return;
-    
+
     this.editorWrapper = editorWrapper;
     this.engine = engine;
-    
+
     // Store original position
     this.originalParent = editorWrapper.parentNode;
     this.originalNextSibling = editorWrapper.nextSibling;
-    
+
     // Create placeholder
     this.placeholder = document.createElement("div");
     this.placeholder.className = "cm6-zen-placeholder";
     this.placeholder.style.display = "none";
     this.originalParent.insertBefore(this.placeholder, this.originalNextSibling);
-    
+
     // Move editor into overlay
     this.editorContainer.appendChild(editorWrapper);
     

@@ -1,5 +1,7 @@
-title: $:/plugins/BurningTreeC/tiddlywiki-codemirror/styles/zen-mode
-tags: $:/tags/Stylesheet $:/tags/Stylesheet/Static
+title: $:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/zen-mode/styles/zen-mode
+tags: $:/tags/Stylesheet
+
+\rules only
 
 /* ============================================================================
    Zen Mode for CodeMirror 6
@@ -10,8 +12,6 @@ tags: $:/tags/Stylesheet $:/tags/Stylesheet/Static
 /* ============================================================================
    Overlay Container
    ============================================================================ */
-
-\rules only
 
 .cm6-zen-overlay {
   position: fixed;
@@ -56,9 +56,19 @@ tags: $:/tags/Stylesheet $:/tags/Stylesheet/Static
   height: calc(100vh - 120px);
   padding: 0 2rem;
   z-index: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.cm6-zen-editor-container > .tc-editor-codemirror6 {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .cm6-zen-editor-container .cm-editor {
+  flex: 1;
   height: 100%;
   background: transparent !important;
   font-size: var(--zen-font-size, 1.1em) !important;

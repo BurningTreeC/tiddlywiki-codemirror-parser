@@ -1,5 +1,6 @@
 title: $:/plugins/BurningTreeC/tiddlywiki-codemirror/wikitext-styles
 tags: $:/tags/Stylesheet
+type: text/vnd.tiddlywiki
 
 \rules only macrocallinline macrocallblock conditional
 

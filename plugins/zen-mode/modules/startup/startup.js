@@ -1,5 +1,5 @@
 /*\
-title: $:/plugins/BurningTreeC/codemirror6-zen-mode/modules/startup.js
+title: $:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/zen-mode/modules/startup.js
 type: application/javascript
 module-type: startup
 
@@ -19,16 +19,16 @@ exports.synchronous = true;
 
 exports.startup = function() {
 	// Import the zen mode manager
-	var ZenMode = require("$:/plugins/BurningTreeC/codemirror6-zen-mode/modules/zen-mode.js");
+	var ZenMode = require("$:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/zen-mode/modules/zen-mode.js");
 	var zenMode = ZenMode.getZenMode();
-	
+
 	// Store global reference
 	$tw.cm6ZenMode = zenMode;
-	
+
 	// Register with the CM6 widget plugin system
 	try {
-		var editTextModule = require("$:/plugins/BurningTreeC/tiddlywiki-codemirror/modules/subclasses/editor/edit-text.js");
-		
+		var editTextModule = require("$:/plugins/BurningTreeC/tiddlywiki-codemirror/widgets/subclasses/edit-text.js");
+
 		if (editTextModule && editTextModule.registry) {
 			editTextModule.registry.register("zenMode", {
 				/**

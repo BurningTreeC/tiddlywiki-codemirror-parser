@@ -591,7 +591,8 @@ exports.plugin = {
 		var keymap = core.view.keymap;
 		var Prec = core.state.Prec;
 		var extensions = [];
-		
+		var engine = context.engine;
+
 		// High-precedence Tab handler for snippets
 		if (keymap && Prec) {
 			extensions.push(
@@ -600,15 +601,12 @@ exports.plugin = {
 				]))
 			);
 		}
-		
-		// Add completion source
-		var autocompletion = (core.autocomplete || {}).autocompletion;
-		if (autocompletion) {
-			extensions.push(autocompletion({
-				override: [snippetCompletions]
-			}));
+
+		// Register completion source with the engine
+		if (engine && engine.registerCompletionSource) {
+			engine.registerCompletionSource(snippetCompletions, 20);
 		}
-		
+
 		return extensions;
 	},
 	

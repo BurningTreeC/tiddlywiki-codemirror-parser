@@ -1,6 +1,8 @@
 title: $:/plugins/BurningTreeC/codemirror6-theme-material/styles
 tags: $:/tags/Stylesheet
 
+\rules only macrocallinline macrocallblock conditional
+
 /* ============================================================================
    Material Theme for CodeMirror 6
    ============================================================================

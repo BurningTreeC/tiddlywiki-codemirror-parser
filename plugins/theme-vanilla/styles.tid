@@ -1,6 +1,8 @@
 title: $:/plugins/BurningTreeC/codemirror6-theme-vanilla/styles
 tags: $:/tags/Stylesheet
 
+\rules only macrocallinline macrocallblock conditional
+
 /* ============================================================================
    Vanilla Theme for CodeMirror 6
    ============================================================================
@@ -51,11 +53,11 @@ tags: $:/tags/Stylesheet
   --wt-bg: #ffffff;
   --wt-bg-subtle: #f4f4f4;
   --wt-fg: #333333;
-  --wt-fg-muted: #999999;
-  --wt-fg-faint: #bbbbbb;
-  --wt-border: #dddddd;
-  --wt-selection: rgba(87, 120, 216, 0.2);
-  --wt-line-highlight: rgba(0, 0, 0, 0.03);
+  --wt-fg-muted: #666666;
+  --wt-fg-faint: #888888;
+  --wt-border: #cccccc;
+  --wt-selection: rgba(87, 120, 216, 0.25);
+  --wt-line-highlight: rgba(0, 0, 0, 0.04);
 
   /* Semantic colors - derived from TW5 palette */
   --wt-teal: #2a9d8f;           /* Complementary teal for widgets */
@@ -74,7 +76,7 @@ tags: $:/tags/Stylesheet
   /* Formatting */
   --wt-bold: #1a1a1a;
   --wt-italic: #333333;
-  --wt-strike: #bbbbbb;
+  --wt-strike: #888888;
   --wt-underline: #333333;
   --wt-heading: #182955;        /* TW title color */
 
@@ -87,8 +89,8 @@ tags: $:/tags/Stylesheet
   --wt-highlight-fg: #333333;
 
   /* Comments */
-  --wt-comment: #999999;
-  --wt-mark: #cccccc;
+  --wt-comment: #6a737d;
+  --wt-mark: #999999;
 }
 
 /* ============================================================================
@@ -195,7 +197,7 @@ tags: $:/tags/Stylesheet
 .cm6-theme-vanilla-light .tok-operator,
 [data-cm6-theme="vanilla"] .tok-operator,
 [data-cm6-theme="vanilla-light"] .tok-operator {
-  color: #666666;
+  color: #555555;
 }
 
 /* ============================================================================
@@ -271,7 +273,7 @@ tags: $:/tags/Stylesheet
 [data-cm6-theme="vanilla-light"] .cm-editor .cm-gutters {
   background-color: #f4f4f4;
   border-right-color: #dddddd;
-  color: #999999;
+  color: #6a737d;
 }
 
 .cm6-theme-vanilla .cm-tooltip.cm-tooltip-autocomplete,

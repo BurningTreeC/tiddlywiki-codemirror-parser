@@ -1,0 +1,16 @@
+title: $:/plugins/BurningTreeC/tiddlywiki-codemirror/ui/ControlPanel/Editor
+tags: $:/tags/ControlPanel/Settings/CodeMirror
+caption: Editor
+
+! Indentation
+
+|!Indent with |<$select tiddler="$:/config/codemirror-6/indentUnit" default="tab"><option value="tab">Tabs</option><option value="spaces">Spaces</option></$select> |
+|!Indent size |<$select tiddler="$:/config/codemirror-6/indentUnitMultiplier" default="4"><option value="2">2</option><option value="4">4</option><option value="8">8</option></$select> |
+
+The indent size affects the visual width of tabs and the number of spaces when using space indentation.
+
+! Brackets
+
+<$checkbox tiddler="$:/config/codemirror-6/bracketMatching" field="text" checked="yes" unchecked="no" default="yes"> Highlight matching brackets</$checkbox>
+
+<$checkbox tiddler="$:/config/codemirror-6/closeBrackets" field="text" checked="yes" unchecked="no" default="yes"> Auto-close brackets and quotes</$checkbox>

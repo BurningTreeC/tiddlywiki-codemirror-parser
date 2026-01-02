@@ -1,6 +1,8 @@
 title: $:/plugins/BurningTreeC/codemirror6-theme-palenight/styles
 tags: $:/tags/Stylesheet
 
+\rules only macrocallinline macrocallblock conditional
+
 /* ============================================================================
    Palenight Theme for CodeMirror 6
    ============================================================================

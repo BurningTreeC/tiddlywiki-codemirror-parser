@@ -1,6 +1,8 @@
 title: $:/plugins/BurningTreeC/codemirror6-theme-catppuccin/styles
 tags: $:/tags/Stylesheet
 
+\rules only macrocallinline macrocallblock conditional
+
 /* ============================================================================
    Catppuccin Theme for CodeMirror 6
    ============================================================================

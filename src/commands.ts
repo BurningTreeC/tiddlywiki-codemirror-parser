@@ -187,7 +187,19 @@ export const insertNewlineContinueMarkupCommand = (config: {
 
         // Check for patterns that need indentation on next line
         const trimmed = lineText.trim()
-        if (/<%\s*(if|elseif)\s+.+%>\s*$/.test(trimmed) || /<%\s*else\s*%>\s*$/.test(trimmed)) {
+        const cursorCol = pos - line.from
+        const textAfterCursor = lineText.slice(cursorCol).trim()
+
+        // If line is empty (just whitespace), preserve current indentation
+        if (trimmed === "") {
+          indent = baseIndent
+        // If cursor is BEFORE a tag (opening or closing), keep current indentation (don't add)
+        // This handles cases like cursor before <$list>, <div>, <%if, </$list>, <%endif%>, \end, etc.
+        } else if (/^<[$a-zA-Z\/]/.test(textAfterCursor) ||
+            /^<%/.test(textAfterCursor) ||
+            /^\\end\b/.test(textAfterCursor)) {
+          indent = baseIndent
+        } else if (/<%\s*(if|elseif)\s+.+%>\s*$/.test(trimmed) || /<%\s*else\s*%>\s*$/.test(trimmed)) {
           // Conditional opener - indent next line
           indent = baseIndent + unitSize
         } else if (/<[$a-zA-Z][^>]*>\s*$/.test(trimmed) && !/<\//.test(trimmed) && !trimmed.endsWith("/>")) {

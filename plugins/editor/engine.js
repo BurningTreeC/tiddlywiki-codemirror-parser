@@ -357,6 +357,11 @@ function CodeMirrorEngine(options) {
 	if (core.getLanguages) {
 		this.options.codeLanguages = core.getLanguages();
 	}
+
+	// Add placeholder from widget
+	if (this.widget && this.widget.editPlaceholder) {
+		this.options.placeholder = this.widget.editPlaceholder;
+	}
 	
 	this._destroyed = false;
 	this._pendingChange = false;
@@ -383,6 +388,9 @@ function CodeMirrorEngine(options) {
 	// Conditional plugins (have a condition function) - for dynamic switching
 	this._conditionalPlugins = [];
 
+	// Completion source registry - plugins register sources here
+	this._completionSources = [];
+
 	// ========================================================================
 	// Load CM6 Core
 	// ========================================================================
@@ -403,9 +411,13 @@ function CodeMirrorEngine(options) {
 	// ========================================================================
 	// Compartments
 	// ========================================================================
-	
+
 	this._compartments = {
-		readOnly: new Compartment()
+		readOnly: new Compartment(),
+		indentUnit: new Compartment(),
+		tabSize: new Compartment(),
+		bracketMatching: new Compartment(),
+		closeBrackets: new Compartment()
 	};
 
 	// ========================================================================
@@ -520,10 +532,31 @@ function CodeMirrorEngine(options) {
 		}
 	}
 
-	// Core: Bracket matching
+	// Core: Bracket matching (with compartment for dynamic toggle)
 	var bracketMatching = (core.language || {}).bracketMatching;
-	if (bracketMatching) {
-		extensions.push(bracketMatching());
+	if (bracketMatching && this._compartments.bracketMatching) {
+		extensions.push(this._compartments.bracketMatching.of(bracketMatching()));
+	}
+
+	// Core: Close brackets (with compartment for dynamic toggle)
+	var closeBrackets = (core.autocomplete || {}).closeBrackets;
+	var closeBracketsKeymap = (core.autocomplete || {}).closeBracketsKeymap;
+	if (closeBrackets && this._compartments.closeBrackets) {
+		extensions.push(this._compartments.closeBrackets.of(closeBrackets())); // Default on
+		if (closeBracketsKeymap && cmKeymap) {
+			extensions.push(cmKeymap.of(closeBracketsKeymap));
+		}
+	}
+
+	// Core: Indent unit (with compartment for dynamic config)
+	var indentUnit = (core.language || {}).indentUnit;
+	if (indentUnit && this._compartments.indentUnit) {
+		extensions.push(this._compartments.indentUnit.of(indentUnit.of("\t"))); // Default: tab
+	}
+
+	// Core: Tab size (with compartment for dynamic config)
+	if (EditorState.tabSize && this._compartments.tabSize) {
+		extensions.push(this._compartments.tabSize.of(EditorState.tabSize.of(4))); // Default: 4
 	}
 
 	// Core: Default syntax highlighting (fallback for languages without custom styles)
@@ -536,10 +569,29 @@ function CodeMirrorEngine(options) {
 	}
 
 	// Core: Autocompletion (enables completion popups for all languages)
+	// Uses a wrapper function to dynamically retrieve registered completion sources
+	// while also preserving language-based completions
 	var autocompletion = (core.autocomplete || {}).autocompletion;
 	var completionKeymap = (core.autocomplete || {}).completionKeymap;
 	if (autocompletion) {
-		extensions.push(autocompletion());
+		var self = this;
+		extensions.push(autocompletion({
+			override: [function(context) {
+				// First try registered plugin sources (higher priority)
+				var sources = self.getCompletionSources();
+				for (var i = 0; i < sources.length; i++) {
+					var result = sources[i](context);
+					if (result) return result;
+				}
+				// Fall back to language-based completions
+				var langCompletions = context.state.languageDataAt("autocomplete", context.pos);
+				for (var j = 0; j < langCompletions.length; j++) {
+					var langResult = langCompletions[j](context);
+					if (langResult) return langResult;
+				}
+				return null;
+			}]
+		}));
 		if (completionKeymap && cmKeymap) {
 			extensions.push(cmKeymap.of(completionKeymap));
 		}
@@ -779,9 +831,16 @@ function CodeMirrorEngine(options) {
 	}
 
 	// ========================================================================
+	// Internal Settings Handler
+	// ========================================================================
+
+	// Register internal handler for settingsChanged to reconfigure compartments
+	this.on("settingsChanged", this._handleSettingsChanged.bind(this));
+
+	// ========================================================================
 	// Autofocus
 	// ========================================================================
-	
+
 	if (options.autofocus) {
 		this.focus();
 	}
@@ -868,13 +927,70 @@ CodeMirrorEngine.prototype._handleBlur = function() {
 CodeMirrorEngine.prototype._triggerEvent = function(eventName, data) {
 	var handlers = this._eventHandlers[eventName];
 	if (!handlers) return;
-	
+
 	for (var i = 0; i < handlers.length; i++) {
 		try {
 			handlers[i].call(this, data);
 		} catch (e) {
 			console.error("Event handler failed for '" + eventName + "':", e);
 		}
+	}
+};
+
+CodeMirrorEngine.prototype._handleSettingsChanged = function(settings) {
+	if (this._destroyed) return;
+
+	var core = this.cm;
+	var effects = [];
+
+	// Bracket matching
+	var bracketMatching = (core.language || {}).bracketMatching;
+	if (bracketMatching && this._compartments.bracketMatching) {
+		var bmContent = settings.bracketMatching ? bracketMatching() : [];
+		effects.push(this._compartments.bracketMatching.reconfigure(bmContent));
+	}
+
+	// Close brackets
+	var closeBrackets = (core.autocomplete || {}).closeBrackets;
+	if (closeBrackets && this._compartments.closeBrackets) {
+		var cbContent = settings.closeBrackets ? closeBrackets() : [];
+		effects.push(this._compartments.closeBrackets.reconfigure(cbContent));
+	}
+
+	// Indentation settings
+	if (settings.indent) {
+		var indentUnit = (core.language || {}).indentUnit;
+		var EditorState = core.state.EditorState;
+
+		// Determine indent unit string
+		var unitStr = "\t"; // default: tab
+		var multiplier = 4; // default size
+
+		if (settings.indent.indentUnitMultiplier) {
+			var parsed = parseInt(settings.indent.indentUnitMultiplier, 10);
+			if (isFinite(parsed) && parsed > 0 && parsed <= 16) {
+				multiplier = parsed;
+			}
+		}
+
+		if (settings.indent.indentUnit === "spaces") {
+			unitStr = " ".repeat(multiplier);
+		}
+
+		// Reconfigure indent unit
+		if (indentUnit && this._compartments.indentUnit) {
+			effects.push(this._compartments.indentUnit.reconfigure(indentUnit.of(unitStr)));
+		}
+
+		// Reconfigure tab size (visual width)
+		if (EditorState && EditorState.tabSize && this._compartments.tabSize) {
+			effects.push(this._compartments.tabSize.reconfigure(EditorState.tabSize.of(multiplier)));
+		}
+	}
+
+	// Apply all effects
+	if (effects.length > 0) {
+		this.view.dispatch({ effects: effects });
 	}
 };
 
@@ -1097,6 +1213,39 @@ CodeMirrorEngine.prototype.getActivePlugins = function() {
 			description: p.description || "",
 			priority: p.priority || 0
 		};
+	});
+};
+
+// ============================================================================
+// Completion Source Registry
+// ============================================================================
+
+/**
+ * Register a completion source for use by the autocomplete system
+ * @param {Function} source - A CM6 completion source function
+ * @param {number} priority - Higher priority sources are tried first (default: 0)
+ */
+CodeMirrorEngine.prototype.registerCompletionSource = function(source, priority) {
+	if (!isFunction(source)) return;
+
+	this._completionSources.push({
+		source: source,
+		priority: priority || 0
+	});
+
+	// Sort by priority descending
+	this._completionSources.sort(function(a, b) {
+		return b.priority - a.priority;
+	});
+};
+
+/**
+ * Get all registered completion sources
+ * @returns {Function[]} Array of completion source functions
+ */
+CodeMirrorEngine.prototype.getCompletionSources = function() {
+	return this._completionSources.map(function(entry) {
+		return entry.source;
 	});
 };
 

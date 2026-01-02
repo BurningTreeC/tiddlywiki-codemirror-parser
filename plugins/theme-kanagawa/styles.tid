@@ -1,6 +1,8 @@
 title: $:/plugins/BurningTreeC/codemirror6-theme-kanagawa/styles
 tags: $:/tags/Stylesheet
 
+\rules only macrocallinline macrocallblock conditional
+
 /* ============================================================================
    Kanagawa Theme for CodeMirror 6
    ============================================================================

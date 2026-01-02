@@ -1,6 +1,8 @@
 title: $:/plugins/BurningTreeC/codemirror6-theme-everforest/styles
 tags: $:/tags/Stylesheet
 
+\rules only macrocallinline macrocallblock conditional
+
 /* ============================================================================
    Everforest Theme for CodeMirror 6
    ============================================================================
