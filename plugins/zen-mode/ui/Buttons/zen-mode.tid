@@ -1,0 +1,10 @@
+title: $:/plugins/BurningTreeC/tiddlywiki-codemirror/ui/Buttons/zen-mode
+tags: $:/tags/EditorToolbar
+caption: {{$:/plugins/BurningTreeC/tiddlywiki-codemirror/icons/zen}} Zen Mode
+description: Enter distraction-free writing mode
+icon: $:/plugins/BurningTreeC/tiddlywiki-codemirror/icons/zen
+condition: [<targetTiddler>has[title]]
+shortcuts: ((cm6-zen-mode))
+button-classes: cm6-toolbar-btn-zen
+
+<$action-sendmessage $message="tm-cm6-zen-mode" tiddler=<<targetTiddler>>/>
