@@ -8,6 +8,7 @@ Widget subclass for CodeMirror 6 editor (production-ready)
 - Overrides toolbar text operations to route through CM6 engine + plugins
 - Centralizes config → emits a single settingsChanged snapshot
 - Keeps TW core factory.js unmodified
+- Theme management with auto-match palette support
 
 \*/
 
@@ -44,6 +45,55 @@ function isMainTextEditorBody(widget) {
 function hopAny(changedTiddlers, list) {
 	return $tw.utils.hopArray(changedTiddlers, list);
 }
+
+// Theme-related tiddlers to watch for changes
+var THEME_TIDDLERS = [
+	"$:/config/codemirror-6/theme",
+	"$:/config/codemirror-6/theme-light",
+	"$:/config/codemirror-6/theme-dark",
+	"$:/config/codemirror-6/auto-match-palette",
+	"$:/palette"
+];
+
+// ============================================================================
+// Theme management
+// ============================================================================
+
+/**
+ * Get the current theme based on config and palette settings.
+ * Supports auto-matching TiddlyWiki palette color-scheme.
+ */
+exports.prototype._getCurrentTheme = function () {
+	var wiki = this.wiki;
+	var autoMatch = wiki.getTiddlerText(
+		"$:/config/codemirror-6/auto-match-palette",
+		"yes"
+	) === "yes";
+
+	if (autoMatch) {
+		var paletteName = wiki.getTiddlerText("$:/palette");
+		var palette = wiki.getTiddler(paletteName);
+		var isDark = palette && palette.fields["color-scheme"] === "dark";
+
+		return wiki.getTiddlerText(
+			isDark
+				? "$:/config/codemirror-6/theme-dark"
+				: "$:/config/codemirror-6/theme-light",
+			isDark ? "vanilla-dark" : "vanilla"
+		);
+	}
+
+	return wiki.getTiddlerText("$:/config/codemirror-6/theme", "vanilla");
+};
+
+/**
+ * Apply theme directly to DOM (fast path, no engine round-trip).
+ * Theme is pure CSS via data attribute, not CM6 state.
+ */
+exports.prototype._applyTheme = function () {
+	if (!this.engine || !this.engine.domNode) return;
+	this.engine.domNode.setAttribute("data-cm6-theme", this._getCurrentTheme());
+};
 
 // ============================================================================
 // Settings snapshot → engine/plugins
@@ -92,7 +142,10 @@ exports.prototype._buildSettingsSnapshot = function () {
 			maxRenderedOptions: intConfig(wiki, "$:/config/codemirror-6/maxRenderedOptions", 100),
 			activateOnTyping: boolConfig(wiki, "$:/config/codemirror-6/activateOnTyping"),
 			completeAnyWord: boolConfig(wiki, "$:/config/codemirror-6/completeAnyWord")
-		}
+		},
+
+		// theme (for plugins that might need it)
+		theme: this._getCurrentTheme()
 	};
 };
 
@@ -146,6 +199,9 @@ exports.prototype.render = function (parent, nextSibling) {
 
 	// Load shortcuts once initially
 	this.updateShortcutLists(this.getShortcutTiddlerList());
+
+	// Apply theme immediately (fast DOM attribute)
+	this._applyTheme();
 
 	// Emit initial settings snapshot
 	this.applyEngineSettings();
@@ -281,6 +337,11 @@ exports.prototype.refresh = function (changedTiddlers) {
 	if (changedAttributes.type) {
 		this.editType = this.getAttribute("type", "");
 		this.applyEngineSettings();
+	}
+
+	// Theme changes: apply directly (fast path, DOM only)
+	if (hopAny(changedTiddlers, THEME_TIDDLERS)) {
+		this._applyTheme();
 	}
 
 	// Any config/state under these prefixes triggers settingsChanged
