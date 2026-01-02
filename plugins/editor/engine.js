@@ -69,6 +69,84 @@ function hasWindowTimers() {
 }
 
 // ============================================================================
+// Focus Navigation (Ctrl+. / Ctrl+Shift+.)
+// ============================================================================
+
+var FOCUSABLE_SELECTOR = [
+	'a[href]',
+	'button:not([disabled])',
+	'textarea:not([disabled])',
+	'input:not([disabled])',
+	'select:not([disabled])',
+	'[tabindex]:not([tabindex="-1"])'
+].join(', ');
+
+/**
+ * Get all visible focusable elements in document order
+ */
+function getFocusableElements() {
+	return Array.prototype.slice.call(
+		document.querySelectorAll(FOCUSABLE_SELECTOR)
+	).filter(function(el) {
+		// Filter out hidden elements
+		return el.offsetParent !== null;
+	});
+}
+
+/**
+ * Focus the next focusable element after the editor
+ */
+function focusNextElement(view) {
+	var elements = getFocusableElements();
+	var editorDOM = view.dom;
+	
+	// Find the last focusable element inside the editor
+	var editorIndex = -1;
+	for (var i = 0; i < elements.length; i++) {
+		if (editorDOM.contains(elements[i]) || elements[i] === editorDOM) {
+			editorIndex = i;
+		}
+	}
+	
+	// Focus the next element after the editor
+	if (editorIndex >= 0 && editorIndex < elements.length - 1) {
+		elements[editorIndex + 1].focus();
+	} else if (elements.length > 0) {
+		// Wrap around to first element
+		elements[0].focus();
+	}
+	
+	return true;
+}
+
+/**
+ * Focus the previous focusable element before the editor
+ */
+function focusPrevElement(view) {
+	var elements = getFocusableElements();
+	var editorDOM = view.dom;
+	
+	// Find the first focusable element inside the editor
+	var editorIndex = -1;
+	for (var i = 0; i < elements.length; i++) {
+		if (editorDOM.contains(elements[i]) || elements[i] === editorDOM) {
+			editorIndex = i;
+			break;
+		}
+	}
+	
+	// Focus the previous element before the editor
+	if (editorIndex > 0) {
+		elements[editorIndex - 1].focus();
+	} else if (elements.length > 0) {
+		// Wrap around to last element
+		elements[elements.length - 1].focus();
+	}
+	
+	return true;
+}
+
+// ============================================================================
 // Core Library Loading
 // ============================================================================
 
@@ -404,13 +482,17 @@ function CodeMirrorEngine(options) {
 		)
 	);
 
-	// Core: Basic keymap
+	// Core: Basic keymap + focus navigation
 	var defaultKeymap = (core.commands || {}).defaultKeymap || [];
 	var indentWithTab = (core.commands || {}).indentWithTab;
 	
 	var km = [];
 	if (defaultKeymap.length) km = km.concat(defaultKeymap);
 	if (indentWithTab) km.push(indentWithTab);
+	
+	// Focus navigation: Ctrl+. to next, Ctrl+Shift+. to previous
+	km.push({ key: "Ctrl-.", run: focusNextElement });
+	km.push({ key: "Ctrl-Shift-.", run: focusPrevElement });
 	
 	if (km.length && cmKeymap) {
 		extensions.push(cmKeymap.of(km));
