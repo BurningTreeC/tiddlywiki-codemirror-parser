@@ -1,0 +1,6 @@
+title: $:/plugins/BurningTreeC/codemirror6-theme-github/themes/github-dark
+tags: $:/tags/CodeMirrorTheme
+name: Dark
+family: GitHub
+value: github-dark
+color-scheme: dark
