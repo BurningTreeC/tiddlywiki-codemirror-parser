@@ -241,6 +241,26 @@ export interface TiddlyWikiLanguageConfig {
   getFilterOperators?: () => string[]
 
   /**
+   * Function to get field names for completion in filter operators like has[], get[], sort[]
+   */
+  getFieldNames?: () => string[]
+
+  /**
+   * Function to get tag names for completion in filter operators like tag[], tagging[]
+   */
+  getTagNames?: () => string[]
+
+  /**
+   * Function to get function names for completion in function[], subfilter[]
+   */
+  getFunctionNames?: () => string[]
+
+  /**
+   * Function to get variable names for completion in getvariable[]
+   */
+  getVariableNames?: () => string[]
+
+  /**
    * Language support for HTML tags (default: html without tag matching)
    */
   htmlTagLanguage?: LanguageSupport
@@ -372,6 +392,10 @@ export function tiddlywiki(config: TiddlyWikiLanguageConfig = {}): LanguageSuppo
     getMacroParams,
     getWidgetNames,
     getFilterOperators,
+    getFieldNames,
+    getTagNames,
+    getFunctionNames,
+    getVariableNames,
     htmlTagLanguage = htmlNoMatch,
   } = config
 
@@ -506,6 +530,28 @@ export function tiddlywiki(config: TiddlyWikiLanguageConfig = {}): LanguageSuppo
   if (completeFilterRunPrefixes) {
     support.push(lang.data.of({
       autocomplete: filterRunPrefixCompletion
+    }))
+  }
+
+  // Filter operator suffix completion (e.g., [contains:, [search:literal:)
+  // Always enabled when filter operators are enabled
+  if (completeFilterOperators) {
+    support.push(lang.data.of({
+      autocomplete: filterOperatorSuffixCompletion(getFieldNames)
+    }))
+  }
+
+  // Filter operand value completion (e.g., all[current], is[shadow], tag[TagName])
+  // Always enabled when filter operators are enabled
+  if (completeFilterOperators) {
+    support.push(lang.data.of({
+      autocomplete: filterOperandValueCompletion(
+        getTiddlerTitles,
+        getTagNames,
+        getFieldNames,
+        getFunctionNames,
+        getVariableNames
+      )
     }))
   }
 
@@ -939,6 +985,107 @@ const filterRunPrefixes = [
   { label: ":flat", detail: "flatten list output" },
 ]
 
+// Default field names for completions when no getFieldNames callback is provided
+const defaultFieldNames = [
+  "title", "text", "tags", "modified", "created", "creator", "modifier",
+  "type", "caption", "description", "list", "list-before", "list-after",
+  "draft.of", "draft.title", "plugin-type", "plugin-priority", "color",
+  "icon", "library", "source", "code-body", "throttle.refresh"
+]
+
+// Filter operator metadata for special completions
+// Defines valid operand values, available suffixes, and flags for each operator
+const filterOperatorMeta: Record<string, {
+  operands?: string[]           // Static values inside []
+  suffixes?: string[]           // Available suffixes after : (type modifiers)
+  flags?: string[]              // Boolean flags (like casesensitive)
+  dynamicOperands?: 'fields' | 'tags' | 'tiddlers' | 'functions' | 'variables'
+  allowPlus?: boolean           // Whether operator supports + combinations (e.g., all[tiddlers+shadows])
+}> = {
+  // Selection constructors
+  "all": { operands: ["current", "missing", "orphans", "shadows", "tags", "tiddlers"], allowPlus: true },
+  "is": { operands: ["binary", "blank", "current", "draft", "image", "missing", "orphan", "shadow", "system", "tag", "tiddler", "variable"] },
+
+  // Field-related operators
+  "has": { dynamicOperands: "fields", suffixes: ["field", "index", "tag"] },
+  "get": { dynamicOperands: "fields" },
+  "getindex": { dynamicOperands: "fields" },
+  "field": { dynamicOperands: "fields" },
+  "fields": { operands: [] },  // No operand, returns all field names
+  "indexes": { dynamicOperands: "fields" },  // Operand is field name containing JSON
+
+  // Tag-related operators
+  "tag": { dynamicOperands: "tags" },
+  "tagging": { dynamicOperands: "tags" },
+
+  // Function/subfilter operators
+  "function": { dynamicOperands: "functions" },
+  "subfilter": { dynamicOperands: "functions" },
+
+  // String operators with flags/suffixes
+  "contains": { flags: ["casesensitive"], suffixes: ["field", "index"] },
+  "match": { flags: ["casesensitive"] },
+  "regexp": { flags: ["casesensitive"] },
+  "search": {
+    flags: ["casesensitive", "anchored", "literal", "whitespace", "regexp", "words", "some", "all"],
+    suffixes: ["field"]
+  },
+  "prefix": { flags: ["casesensitive"] },
+  "suffix": { flags: ["casesensitive"] },
+
+  // Sort operators
+  "sort": {
+    dynamicOperands: "fields",
+    flags: ["reverse", "casesensitive"],
+    suffixes: ["alphanumeric", "number", "string", "date", "naturaldate"]
+  },
+  "nsort": { dynamicOperands: "fields", flags: ["reverse"] },
+  "sortan": { dynamicOperands: "fields", flags: ["reverse"] },
+  "sortcs": { dynamicOperands: "fields", flags: ["reverse"] },
+  "sortby": { dynamicOperands: "fields", flags: ["reverse"] },
+  "nsortby": { dynamicOperands: "fields", flags: ["reverse"] },
+
+  // Comparison operators
+  "compare": {
+    suffixes: ["number", "string", "integer", "date", "version"],
+    flags: ["casesensitive"]
+  },
+
+  // Limit operators (numeric only, no special completions)
+  "limit": { operands: [] },
+  "first": { operands: [] },
+  "last": { operands: [] },
+  "nth": { operands: [] },
+  "range": { operands: [] },
+
+  // Format operator
+  "format": { operands: ["date", "relativedate", "json", "timestamp", "titlelist"] },
+
+  // JSON operators
+  "jsonget": { operands: [] },  // Path segments
+  "jsontype": { operands: [] },
+  "jsonindexes": { operands: [] },
+  "jsonextract": { operands: [] },
+
+  // Transclusion with field operand
+  "lookup": { dynamicOperands: "fields" },
+  "getvariable": { dynamicOperands: "variables" },
+
+  // List-related
+  "list": { dynamicOperands: "tiddlers" },
+  "listed": { dynamicOperands: "fields" },
+  "enlist": { operands: [] },  // Takes space-separated list
+  "split": { operands: [] },
+
+  // Draft operators
+  "draft.of": { operands: [] },
+  "draft.for": { operands: [] },
+
+  // Special operators
+  "each": { dynamicOperands: "fields" },
+  "eachday": { dynamicOperands: "fields" },
+}
+
 /**
  * Macro completion source (<<macro or [<variable> or [operator<variable> in filters)
  */
@@ -1129,7 +1276,26 @@ function tiddlerCompletion(getTiddlerTitles?: () => string[]) {
     // Match [{ or [operator{ or ]operator{ or }operator{ or >operator{ for text references inside filters
     const filterTextRefMatch = /[\[\]}>][\w\-:!]*\{[^}]*$/.exec(textBefore)
 
-    const match = linkMatch || transcludeMatch || imageMatch || filterOperandMatch || filterTextRefMatch
+    // Check if we're inside a filter context (affects how [[ is treated)
+    // Filter contexts: {{{ filter }}}, filter="...", <$list filter="..."/>, etc.
+    const inFilterContext = (
+      // Inside filtered transclusion {{{ ... }}}
+      /\{\{\{[^}]*$/.test(textBefore) ||
+      // Inside filter attribute: filter="..." or filter='...' or filter="""..."""
+      /\bfilter\s*=\s*(?:"[^"]*|'[^']*|"""[^"]*)$/.test(textBefore) ||
+      // Inside other common filter attributes (e.g., <$list filter=, <$count filter=)
+      /<\$\w+[^>]*\bfilter\s*=\s*(?:"[^"]*|'[^']*|"""[^"]*)$/.test(textBefore)
+    )
+
+    // If inside a filter context and we have [[, prioritize filterOperandMatch over linkMatch
+    // Otherwise, prioritize linkMatch (for wikilinks)
+    let match: RegExpExecArray | null
+    if (inFilterContext && linkMatch && filterOperandMatch) {
+      // Inside filter: [[ is a literal title operand, not a wikilink
+      match = filterOperandMatch
+    } else {
+      match = linkMatch || transcludeMatch || imageMatch || filterOperandMatch || filterTextRefMatch
+    }
     if (!match) return null
 
     // Don't complete inside code blocks or comments
@@ -1193,6 +1359,17 @@ function tiddlerCompletion(getTiddlerTitles?: () => string[]) {
       }
     } else if (filterOperandMatch) {
       // Filter operand: [operator[value]] or [[value]]
+      // Check if this operator has special handling in filterOperatorMeta
+      // If so, skip tiddler completion - filterOperandValueCompletion will handle it
+      const operatorMatch = /[\[\]}>](!?)([\w.]+)(?::[\w]+)*\[[^\]]*$/.exec(match[0])
+      if (operatorMatch) {
+        const operator = operatorMatch[2]
+        if (filterOperatorMeta[operator]) {
+          // This operator has special operand handling, don't provide tiddler completions
+          return null
+        }
+      }
+
       // Close with ]], cursor positioned after first ] but before second ]
       prefix = match[0].slice(0, match[0].lastIndexOf('[') + 1)
       validFor = /^[\[\]}>][\w\-:!]*\[[^\]]*$/
@@ -1654,6 +1831,235 @@ function filterRunPrefixCompletion(context: CompletionContext): CompletionResult
     to: pos,
     options,
     validFor: /^[:+\-~=][\w]*$/
+  }
+}
+
+/**
+ * Filter operator suffix completion source
+ * Triggers after : in operators like [contains:, [search:literal:, [sort:reverse:
+ * Provides flags (casesensitive, reverse) and type suffixes (field, number, string, etc.)
+ */
+function filterOperatorSuffixCompletion(
+  getFieldNames?: () => string[]
+): (context: CompletionContext) => CompletionResult | null {
+  return (context: CompletionContext): CompletionResult | null => {
+    const { state, pos } = context
+    const textBefore = state.sliceDoc(Math.max(0, pos - 100), pos)
+
+    // Match operator with partial suffix: [operator:suf or [operator:flag:suf
+    // Pattern: [ followed by optional ! and operator name, then one or more :suffix segments
+    // The last segment can be partial (what user is typing)
+    const match = /\[(!?)([\w.]+)((?::[\w]*)*)$/.exec(textBefore)
+    if (!match) return null
+
+    const operator = match[2]
+    const suffixPart = match[3]  // e.g., ":case" or ":casesensitive:fi" or ":"
+
+    // Must have at least one : to trigger suffix completion
+    if (!suffixPart || !suffixPart.includes(':')) return null
+
+    // Extract the partial suffix being typed (after last :)
+    const colonMatch = /:(\w*)$/.exec(suffixPart)
+    if (!colonMatch) return null
+
+    const partial = colonMatch[1]  // The partial suffix being typed (may be empty)
+
+    const meta = filterOperatorMeta[operator]
+    if (!meta) return null
+
+    // Check if this operator has any suffixes or flags
+    if (!meta.flags && !meta.suffixes) return null
+
+    // Collect already-used suffixes to avoid duplicates
+    const usedSuffixes = suffixPart.split(':').filter(s => s && s !== partial)
+    const options: Completion[] = []
+
+    // Add flags that haven't been used
+    if (meta.flags) {
+      for (const flag of meta.flags) {
+        if (!usedSuffixes.includes(flag)) {
+          options.push({
+            label: flag,
+            type: "keyword",
+            detail: "flag"
+          })
+        }
+      }
+    }
+
+    // Add type suffixes that haven't been used
+    if (meta.suffixes) {
+      for (const suffix of meta.suffixes) {
+        if (!usedSuffixes.includes(suffix)) {
+          // "field" suffix should allow field name completion, others are literals
+          if (suffix === "field") {
+            options.push({
+              label: suffix,
+              type: "property",
+              detail: "use field suffix"
+            })
+          } else {
+            options.push({
+              label: suffix,
+              type: "property",
+              detail: "type"
+            })
+          }
+        }
+      }
+    }
+
+    // If "field" suffix is available and we're completing after it,
+    // or if the operator uses dynamic field operands, add field names
+    // Check if we're completing field names (after :field: or for operators that take field suffixes)
+    if (usedSuffixes.includes("field") ||
+        (meta.suffixes?.includes("field") && !usedSuffixes.some(s => meta.suffixes?.includes(s) && s !== "field"))) {
+      const fields = getFieldNames ? getFieldNames() : defaultFieldNames
+      for (const field of fields) {
+        if (!usedSuffixes.includes(field)) {
+          options.push({
+            label: field,
+            type: "variable",
+            detail: "field name"
+          })
+        }
+      }
+    }
+
+    if (options.length === 0) return null
+
+    // Filter by partial match
+    const filteredOptions = partial.length > 0
+      ? options.filter(o => o.label.toLowerCase().startsWith(partial.toLowerCase()))
+      : options
+
+    if (filteredOptions.length === 0) return null
+
+    return {
+      from: pos - partial.length,
+      to: pos,
+      options: filteredOptions,
+      validFor: /^\w*$/
+    }
+  }
+}
+
+/**
+ * Filter operand value completion source
+ * Triggers inside [] for operators with predefined values like all[], is[], format[]
+ * Also provides dynamic completions for operators like tag[], has[], get[]
+ */
+function filterOperandValueCompletion(
+  getTiddlerNames?: () => string[],
+  getTagNames?: () => string[],
+  getFieldNames?: () => string[],
+  getFunctionNames?: () => string[],
+  getVariableNames?: () => string[]
+): (context: CompletionContext) => CompletionResult | null {
+  return (context: CompletionContext): CompletionResult | null => {
+    const { state, pos } = context
+    const textBefore = state.sliceDoc(Math.max(0, pos - 100), pos)
+
+    // Match: [operator[partial or [operator:suffix[partial or ]operator[partial
+    // Pattern breakdown:
+    // - [\[\]}>] - start after [, ], }, or > (filter syntax boundaries)
+    // - (!?) - optional negation
+    // - ([\w.]+) - operator name (includes . for draft.of etc)
+    // - ((?::[\w]+)*) - zero or more :suffix segments
+    // - \[ - opening bracket for operand
+    // - ([^\]]*) - the partial operand text (what user is typing)
+    const match = /[\[\]}>](!?)([\w.]+)((?::[\w]+)*)\[([^\]]*)$/.exec(textBefore)
+    if (!match) return null
+
+    const operator = match[2]
+    const operandContent = match[4]  // Full content inside [], e.g., "tiddlers+shad"
+
+    const meta = filterOperatorMeta[operator]
+    if (!meta) return null  // No special completions for this operator
+
+    // If meta has empty operands array, it means numeric only - no completions
+    if (meta.operands && meta.operands.length === 0 && !meta.dynamicOperands) {
+      return null
+    }
+
+    // Handle + combinations only for operators that support it (e.g., all[tiddlers+shadows])
+    let partial: string
+    let usedValues: string[]
+
+    if (meta.allowPlus && operandContent.includes('+')) {
+      const parts = operandContent.split('+')
+      partial = parts[parts.length - 1]  // What user is currently typing
+      usedValues = parts.slice(0, -1)    // Already selected values before last +
+    } else {
+      partial = operandContent
+      usedValues = []
+    }
+
+    let options: Completion[] = []
+
+    // Static operands (like all[], is[], format[])
+    if (meta.operands && meta.operands.length > 0) {
+      options = meta.operands
+        .filter(op => !usedValues.includes(op))  // Exclude already-used values
+        .map(op => ({
+          label: op,
+          type: "constant",
+          detail: `${operator}[] value`
+        }))
+    }
+
+    // Dynamic operands based on type
+    if (meta.dynamicOperands) {
+      let values: string[] = []
+      let detailType = ""
+      switch (meta.dynamicOperands) {
+        case 'fields':
+          values = getFieldNames ? getFieldNames() : defaultFieldNames
+          detailType = "field"
+          break
+        case 'tags':
+          values = getTagNames ? getTagNames() : []
+          detailType = "tag"
+          break
+        case 'tiddlers':
+          values = getTiddlerNames ? getTiddlerNames() : []
+          detailType = "tiddler"
+          break
+        case 'functions':
+          values = getFunctionNames ? getFunctionNames() : []
+          detailType = "function"
+          break
+        case 'variables':
+          values = getVariableNames ? getVariableNames() : []
+          detailType = "variable"
+          break
+      }
+      options.push(...values
+        .filter(v => !usedValues.includes(v))  // Exclude already-used values
+        .map(v => ({
+          label: v,
+          type: meta.dynamicOperands === 'fields' ? 'variable' as const :
+                meta.dynamicOperands === 'functions' ? 'function' as const :
+                'text' as const,
+          detail: detailType
+        })))
+    }
+
+    if (options.length === 0) return null
+
+    // Filter by partial match (case-insensitive)
+    const filteredOptions = partial.length > 0
+      ? options.filter(o => o.label.toLowerCase().startsWith(partial.toLowerCase()))
+      : options
+
+    if (filteredOptions.length === 0) return null
+
+    return {
+      from: pos - partial.length,
+      to: pos,
+      options: filteredOptions,
+      validFor: /^[^\]]*$/
+    }
   }
 }
 
