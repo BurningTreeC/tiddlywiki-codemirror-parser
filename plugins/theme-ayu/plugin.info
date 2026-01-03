@@ -2,7 +2,7 @@
     "title": "$:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/theme-ayu",
     "name": "CodeMirror 6 Ayu Theme",
     "description": "Ayu theme for CodeMirror 6 (Dark, Mirage, Light variants)",
-    "version": "0.0.3",
+    "version": "0.0.4",
     "plugin-type": "plugin",
     "dependents": "$:/plugins/BurningTreeC/tiddlywiki-codemirror",
     "list": "readme styles",
