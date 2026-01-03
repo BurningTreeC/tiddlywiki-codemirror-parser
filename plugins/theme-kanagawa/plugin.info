@@ -1,5 +1,5 @@
 {
-    "title": "$:/plugins/BurningTreeC/codemirror6-theme-kanagawa",
+    "title": "$:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/theme-kanagawa",
     "name": "CodeMirror 6 Kanagawa Theme",
     "description": "Kanagawa Japanese ink painting theme for CodeMirror 6 (Wave, Dragon, Lotus)",
     "version": "0.0.1",

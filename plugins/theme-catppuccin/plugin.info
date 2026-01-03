@@ -1,5 +1,5 @@
 {
-    "title": "$:/plugins/BurningTreeC/codemirror6-theme-catppuccin",
+    "title": "$:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/theme-catppuccin",
     "name": "CodeMirror 6 Catppuccin Theme",
     "description": "Catppuccin pastel theme for CodeMirror 6 (Latte, Frappé, Macchiato, Mocha)",
     "version": "0.0.1",

@@ -1,5 +1,5 @@
 {
-    "title": "$:/plugins/BurningTreeC/codemirror6-theme-solarized",
+    "title": "$:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/theme-solarized",
     "name": "CodeMirror 6 Solarized Theme",
     "description": "Solarized color scheme for CodeMirror 6 (dark and light variants)",
     "version": "0.0.1",

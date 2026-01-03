@@ -1,5 +1,5 @@
 {
-    "title": "$:/plugins/BurningTreeC/codemirror6-theme-gruvbox",
+    "title": "$:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/theme-gruvbox",
     "name": "CodeMirror 6 Gruvbox Theme",
     "description": "Gruvbox color scheme for CodeMirror 6 (dark, dark-hard, light, light-hard variants)",
     "version": "0.0.1",

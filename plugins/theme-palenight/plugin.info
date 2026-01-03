@@ -1,5 +1,5 @@
 {
-    "title": "$:/plugins/BurningTreeC/codemirror6-theme-palenight",
+    "title": "$:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/theme-palenight",
     "name": "CodeMirror 6 Palenight Theme",
     "description": "Palenight elegant purple/blue theme for CodeMirror 6 (Default, Italic)",
     "version": "0.0.1",

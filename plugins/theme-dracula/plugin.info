@@ -1,5 +1,5 @@
 {
-    "title": "$:/plugins/BurningTreeC/codemirror6-theme-dracula",
+    "title": "$:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/theme-dracula",
     "name": "CodeMirror 6 Dracula Theme",
     "description": "Dracula color scheme for CodeMirror 6 (dark and light variants)",
     "version": "0.0.1",

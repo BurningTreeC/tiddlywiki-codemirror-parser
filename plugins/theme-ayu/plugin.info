@@ -1,5 +1,5 @@
 {
-    "title": "$:/plugins/BurningTreeC/codemirror6-theme-ayu",
+    "title": "$:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/theme-ayu",
     "name": "CodeMirror 6 Ayu Theme",
     "description": "Ayu theme for CodeMirror 6 (Dark, Mirage, Light variants)",
     "version": "0.0.1",

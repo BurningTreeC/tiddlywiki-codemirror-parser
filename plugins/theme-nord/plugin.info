@@ -1,5 +1,5 @@
 {
-    "title": "$:/plugins/BurningTreeC/codemirror6-theme-nord",
+    "title": "$:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/theme-nord",
     "name": "CodeMirror 6 Nord Theme",
     "description": "Nord color scheme for CodeMirror 6 (dark and light variants)",
     "version": "0.0.1",

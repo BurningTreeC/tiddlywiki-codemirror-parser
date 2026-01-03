@@ -1,5 +1,5 @@
 {
-    "title": "$:/plugins/BurningTreeC/codemirror6-theme-one",
+    "title": "$:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/theme-one",
     "name": "CodeMirror 6 One Dark/Light Theme",
     "description": "Atom's One Dark and One Light themes for CodeMirror 6",
     "version": "0.0.1",

@@ -1,5 +1,5 @@
 {
-    "title": "$:/plugins/BurningTreeC/codemirror6-theme-github",
+    "title": "$:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/theme-github",
     "name": "CodeMirror 6 GitHub Theme",
     "description": "GitHub's code highlighting theme for CodeMirror 6 (Light, Dark, Dimmed)",
     "version": "0.0.1",
