@@ -1945,6 +1945,29 @@ function filterOperatorSuffixCompletion(
 }
 
 /**
+ * Built-in/implicit variables always available in TiddlyWiki
+ */
+const builtInVariables = [
+  // Always available
+  "transclusion",
+  "currentTiddler",
+  "storyTiddler",
+  // Set by $navigator widget (usually at page level)
+  "tv-story-list",
+  "tv-history-list",
+  // Common tv- config variables
+  "tv-config-toolbar-icons",
+  "tv-config-toolbar-text",
+  "tv-config-toolbar-class",
+  "tv-wikilinks",
+  "tv-show-missing-links",
+  // Set by $list widget implicitly
+  "revealedTitle",
+  // Edit template
+  "tv-tiddler-preview"
+]
+
+/**
  * Extract definition names from document text
  * Finds \define, \procedure, \function, \widget pragmas
  */
@@ -1953,7 +1976,9 @@ function extractLocalDefinitions(text: string): {
   procedures: string[]
   macros: string[]
   widgets: string[]
-  variables: string[]  // All of the above combined
+  widgetVars: string[]  // Variables set by widgets like $set, $let, $vars
+  builtIns: string[]    // Built-in/implicit variables
+  variables: string[]   // All of the above combined
 } {
   const functions: string[] = []
   const procedures: string[] = []
@@ -2061,10 +2086,17 @@ function extractLocalDefinitions(text: string): {
     }
   }
 
-  // All definitions and widget variables are variables
-  const variables = [...functions, ...procedures, ...macros, ...widgets, ...widgetVars]
+  // All definitions, widget variables, and built-in variables are variables
+  const variables = [
+    ...builtInVariables,
+    ...functions,
+    ...procedures,
+    ...macros,
+    ...widgets,
+    ...widgetVars
+  ]
 
-  return { functions, procedures, macros, widgets, variables }
+  return { functions, procedures, macros, widgets, widgetVars, builtIns: builtInVariables, variables }
 }
 
 /**
@@ -2184,17 +2216,54 @@ function filterOperandValueCompletion(
 
       // Add local definitions (from current document) with special detail
       if (localValues.length > 0) {
-        options.push(...localValues
-          .filter(v => {
-            if (seen.has(v)) return false
-            seen.add(v)
-            return true
-          })
-          .map(v => ({
-            label: v,
-            type: 'function' as const,
-            detail: `${detailType} (local)`
-          })))
+        // For variables, separate built-ins from true local definitions
+        if (meta.dynamicOperands === 'variables') {
+          // Add built-in variables first
+          options.push(...localDefs.builtIns
+            .filter(v => {
+              if (seen.has(v)) return false
+              seen.add(v)
+              return true
+            })
+            .map(v => ({
+              label: v,
+              type: 'keyword' as const,
+              detail: `${detailType} (built-in)`
+            })))
+
+          // Add true local definitions (pragmas + widget-set variables)
+          const trueLocalVars = [
+            ...localDefs.functions,
+            ...localDefs.procedures,
+            ...localDefs.macros,
+            ...localDefs.widgets,
+            ...localDefs.widgetVars
+          ]
+          options.push(...trueLocalVars
+            .filter(v => {
+              if (seen.has(v)) return false
+              seen.add(v)
+              return true
+            })
+            .map(v => ({
+              label: v,
+              type: 'function' as const,
+              detail: `${detailType} (local)`
+            })))
+        } else {
+          // For functions, just add as local
+          options.push(...localValues
+            .filter(v => {
+              if (seen.has(v)) return false
+              seen.add(v)
+              return true
+            })
+            .map(v => ({
+              label: v,
+              type: 'function' as const,
+              detail: `${detailType} (local)`
+            })))
+        }
       }
     }
 
