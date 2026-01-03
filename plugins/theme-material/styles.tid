@@ -427,3 +427,49 @@ tags: $:/tags/Stylesheet
 [data-cm6-theme="material-lighter"] .cm-completionMatchedText {
   color: #39adb5;
 }
+
+/* ============================================================================
+   Autocomplete Selected - Dark Variants
+   ============================================================================ */
+
+.cm6-theme-material .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
+.cm6-theme-material-default .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
+.cm6-theme-material-ocean .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
+.cm6-theme-material-palenight .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
+.cm6-theme-material-darker .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
+[data-cm6-theme="material"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
+[data-cm6-theme="material-default"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
+[data-cm6-theme="material-ocean"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
+[data-cm6-theme="material-palenight"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
+[data-cm6-theme="material-darker"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] {
+  background-color: #82aaff;
+  color: #1e272c;
+}
+
+.cm6-theme-material .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+.cm6-theme-material-default .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+.cm6-theme-material-ocean .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+.cm6-theme-material-palenight .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+.cm6-theme-material-darker .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+[data-cm6-theme="material"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+[data-cm6-theme="material-default"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+[data-cm6-theme="material-ocean"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+[data-cm6-theme="material-palenight"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+[data-cm6-theme="material-darker"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail {
+  color: rgba(30, 39, 44, 0.8);
+}
+
+/* ============================================================================
+   Autocomplete Selected - Lighter
+   ============================================================================ */
+
+.cm6-theme-material-lighter .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
+[data-cm6-theme="material-lighter"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] {
+  background-color: #6182b8;
+  color: #fafafa;
+}
+
+.cm6-theme-material-lighter .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+[data-cm6-theme="material-lighter"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail {
+  color: rgba(250, 250, 250, 0.8);
+}

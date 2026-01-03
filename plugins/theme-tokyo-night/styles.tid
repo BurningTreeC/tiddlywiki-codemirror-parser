@@ -318,3 +318,45 @@ tags: $:/tags/Stylesheet
 [data-cm6-theme="tokyo-day"] .cm-completionMatchedText {
   color: #2e7de9;
 }
+
+/* ============================================================================
+   Autocomplete Selected - Night/Storm
+   ============================================================================ */
+
+.cm6-theme-tokyo-night .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
+.cm6-theme-tokyo .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
+.cm6-theme-tokyo-night-storm .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
+[data-cm6-theme="tokyo-night"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
+[data-cm6-theme="tokyo"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
+[data-cm6-theme="tokyo-night-storm"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] {
+  background-color: #7aa2f7;
+  color: #1a1b26;
+}
+
+.cm6-theme-tokyo-night .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+.cm6-theme-tokyo .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+.cm6-theme-tokyo-night-storm .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+[data-cm6-theme="tokyo-night"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+[data-cm6-theme="tokyo"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+[data-cm6-theme="tokyo-night-storm"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail {
+  color: rgba(26, 27, 38, 0.8);
+}
+
+/* ============================================================================
+   Autocomplete Selected - Day
+   ============================================================================ */
+
+.cm6-theme-tokyo-night-day .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
+.cm6-theme-tokyo-day .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
+[data-cm6-theme="tokyo-night-day"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
+[data-cm6-theme="tokyo-day"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] {
+  background-color: #2e7de9;
+  color: #e1e2e7;
+}
+
+.cm6-theme-tokyo-night-day .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+.cm6-theme-tokyo-day .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+[data-cm6-theme="tokyo-night-day"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+[data-cm6-theme="tokyo-day"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail {
+  color: rgba(225, 226, 231, 0.8);
+}

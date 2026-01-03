@@ -296,3 +296,41 @@ tags: $:/tags/Stylesheet
 [data-cm6-theme="everforest-light"] .cm-completionMatchedText {
   color: #8da101;
 }
+
+/* ============================================================================
+   Autocomplete Selected - Dark
+   ============================================================================ */
+
+.cm6-theme-everforest .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
+.cm6-theme-everforest-dark .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
+.cm6-theme-everforest-dark-hard .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
+[data-cm6-theme="everforest"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
+[data-cm6-theme="everforest-dark"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
+[data-cm6-theme="everforest-dark-hard"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] {
+  background-color: #a7c080;
+  color: #1e2326;
+}
+
+.cm6-theme-everforest .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+.cm6-theme-everforest-dark .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+.cm6-theme-everforest-dark-hard .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+[data-cm6-theme="everforest"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+[data-cm6-theme="everforest-dark"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+[data-cm6-theme="everforest-dark-hard"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail {
+  color: rgba(30, 35, 38, 0.8);
+}
+
+/* ============================================================================
+   Autocomplete Selected - Light
+   ============================================================================ */
+
+.cm6-theme-everforest-light .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
+[data-cm6-theme="everforest-light"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] {
+  background-color: #8da101;
+  color: #fdf6e3;
+}
+
+.cm6-theme-everforest-light .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+[data-cm6-theme="everforest-light"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail {
+  color: rgba(253, 246, 227, 0.8);
+}

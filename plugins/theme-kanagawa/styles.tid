@@ -300,3 +300,41 @@ tags: $:/tags/Stylesheet
 [data-cm6-theme="kanagawa-lotus"] .cm-completionMatchedText {
   color: #4d699b;
 }
+
+/* ============================================================================
+   Autocomplete Selected - Wave/Dragon
+   ============================================================================ */
+
+.cm6-theme-kanagawa .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
+.cm6-theme-kanagawa-wave .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
+.cm6-theme-kanagawa-dragon .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
+[data-cm6-theme="kanagawa"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
+[data-cm6-theme="kanagawa-wave"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
+[data-cm6-theme="kanagawa-dragon"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] {
+  background-color: #7e9cd8;
+  color: #16161d;
+}
+
+.cm6-theme-kanagawa .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+.cm6-theme-kanagawa-wave .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+.cm6-theme-kanagawa-dragon .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+[data-cm6-theme="kanagawa"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+[data-cm6-theme="kanagawa-wave"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+[data-cm6-theme="kanagawa-dragon"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail {
+  color: rgba(22, 22, 29, 0.8);
+}
+
+/* ============================================================================
+   Autocomplete Selected - Lotus
+   ============================================================================ */
+
+.cm6-theme-kanagawa-lotus .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
+[data-cm6-theme="kanagawa-lotus"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] {
+  background-color: #4d699b;
+  color: #f2ecbc;
+}
+
+.cm6-theme-kanagawa-lotus .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+[data-cm6-theme="kanagawa-lotus"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail {
+  color: rgba(242, 236, 188, 0.8);
+}

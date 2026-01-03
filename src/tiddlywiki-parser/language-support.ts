@@ -626,7 +626,8 @@ function widgetCompletion(getWidgetNames?: () => string[]) {
         // Check if there's already a > after cursor (from auto-close brackets)
         const textAfter = view.state.sliceDoc(to, to + 1)
         const hasClosingBracket = textAfter === ">"
-        const insert = hasClosingBracket ? widgetTag : widgetTag + ">"
+        // Always include > in the insert, extend replacement range if > exists
+        const insert = widgetTag + ">"
         // Position cursor before the >
         const cursorPos = from + widgetTag.length
         view.dispatch({
@@ -947,7 +948,8 @@ function macroCompletion(getMacroNames?: () => string[]) {
     const macros = customMacros.length > 0 ? customMacros : commonMacros
 
     if (filterVarMatch) {
-      // Variable reference in filter: [<variable>] or [operator<variable>] or ]operator<variable>]
+      // Variable reference in filter: [<variable>] or [operator<variable>]
+      // Close with >], cursor positioned after > but before ]
       const prefix = m[0].slice(0, m[0].lastIndexOf('<') + 1)
       const options: Completion[] = macros.map(name => ({
         label: prefix + name,
@@ -955,13 +957,25 @@ function macroCompletion(getMacroNames?: () => string[]) {
         detail: "variable",
         apply: (view, _completion, from, to) => {
           const textAfter = view.state.sliceDoc(to, to + 2)
-          // Don't add ] if there's already a ] after cursor
-          const suffix = textAfter.startsWith(">")
-            ? (textAfter[1] === "]" ? "" : "]")
-            : (textAfter.startsWith("]") ? ">" : ">]")
+          const hasClosingAngle = textAfter[0] === ">"
+          const hasOuterBracket = textAfter[1] === "]" || textAfter[0] === "]"
+
+          // Build suffix: always need >], but check what's already there
+          let suffix = ">]"
+          if (hasClosingAngle && hasOuterBracket) {
+            suffix = ""
+          } else if (hasClosingAngle) {
+            suffix = "]" // Add only outer ]
+          } else if (hasOuterBracket) {
+            suffix = ">" // Add only >
+          }
+
+          const insert = prefix + name + suffix
+          // Cursor after >, before ]
+          const cursorPos = from + prefix.length + name.length + 1
           view.dispatch({
-            changes: { from, to, insert: prefix + name + suffix },
-            selection: { anchor: from + prefix.length + name.length + suffix.length }
+            changes: { from, to, insert },
+            selection: { anchor: cursorPos }
           })
         }
       }))
@@ -1116,25 +1130,34 @@ function tiddlerCompletion(getTiddlerTitles?: () => string[]) {
     let detail: string
 
     if (filterTextRefMatch) {
-      // Text reference inside filter: [operator{tiddler}] or [{tiddler}] or ]operator{tiddler}] or }operator{tiddler}]
+      // Text reference inside filter: [operator{tiddler}] or [{tiddler}]
+      // Close with }], cursor positioned after } but before ]
       prefix = match[0].slice(0, match[0].lastIndexOf('{') + 1)
       validFor = /^[\[\]}>][\w\-:!]*\{[^}]*$/
       detail = "text reference"
 
-      // Use dynamic apply to check for existing closing brackets
       const options: Completion[] = titles.map(title => ({
         label: prefix + title,
         type: "variable",
         detail,
         apply: (view, _completion, from, to) => {
           const textAfter = view.state.sliceDoc(to, to + 2)
-          // Don't add ] if there's already a ] after the }
-          const closeSuffix = textAfter.startsWith("}")
-            ? (textAfter[1] === "]" ? "" : "]")
-            : (textAfter.startsWith("]") ? "}" : "}]")
+          const hasClosingBrace = textAfter[0] === "}"
+          const hasOuterBracket = textAfter[1] === "]" || textAfter[0] === "]"
+
+          let suffix = "}"
+          if (hasClosingBrace) suffix = ""
+          if (!hasClosingBrace && !hasOuterBracket) suffix = "}]"
+          if (hasClosingBrace && !hasOuterBracket) suffix = "" // } exists, ] doesn't - we'll add ] after
+
+          // Calculate what we're inserting
+          const needsOuterBracket = !hasOuterBracket && !(hasClosingBrace && textAfter[1] === "]")
+          const insert = prefix + title + (hasClosingBrace ? "" : "}") + (needsOuterBracket ? "]" : "")
+          // Cursor after }, before ]
+          const cursorPos = from + prefix.length + title.length + 1
           view.dispatch({
-            changes: { from, to, insert: prefix + title + closeSuffix },
-            selection: { anchor: from + prefix.length + title.length + closeSuffix.length }
+            changes: { from, to, insert },
+            selection: { anchor: cursorPos }
           })
         }
       }))
@@ -1146,28 +1169,35 @@ function tiddlerCompletion(getTiddlerTitles?: () => string[]) {
         validFor
       }
     } else if (filterOperandMatch) {
-      // Filter operand: [operator[value]] or [[value]] or ]operator[value]] or }operator[value]] or >operator[value]]
+      // Filter operand: [operator[value]] or [[value]]
+      // Close with ]], cursor positioned after first ] but before second ]
       prefix = match[0].slice(0, match[0].lastIndexOf('[') + 1)
       validFor = /^[\[\]}>][\w\-:!]*\[[^\]]*$/
       detail = "filter operand"
 
-      // Use dynamic apply to check for existing closing brackets
       const options: Completion[] = titles.map(title => ({
         label: prefix + title,
         type: "variable",
         detail,
         apply: (view, _completion, from, to) => {
           const textAfter = view.state.sliceDoc(to, to + 2)
-          // Don't add ]] if there are already ]] after cursor
-          let closeSuffix = "]]"
-          if (textAfter === "]]") {
-            closeSuffix = ""
-          } else if (textAfter.startsWith("]")) {
-            closeSuffix = "]"
+          const hasFirstBracket = textAfter[0] === "]"
+          const hasSecondBracket = textAfter[1] === "]"
+
+          // Build suffix: always need ]], but check what's already there
+          let suffix = "]]"
+          if (hasFirstBracket && hasSecondBracket) {
+            suffix = ""
+          } else if (hasFirstBracket) {
+            suffix = "]" // Add only outer ]
           }
+
+          const insert = prefix + title + suffix
+          // Cursor after first ], before second ]
+          const cursorPos = from + prefix.length + title.length + 1
           view.dispatch({
-            changes: { from, to, insert: prefix + title + closeSuffix },
-            selection: { anchor: from + prefix.length + title.length + closeSuffix.length }
+            changes: { from, to, insert },
+            selection: { anchor: cursorPos }
           })
         }
       }))
@@ -1209,24 +1239,24 @@ function tiddlerCompletion(getTiddlerTitles?: () => string[]) {
 
         // Check for existing closing brackets
         if (textAfter === suffix) {
-          // Full suffix already exists
+          // Full suffix already exists - don't add it, cursor skips over it
           actualSuffix = ""
           skipChars = suffix.length
         } else if (suffix === "]]" && textAfter.startsWith("]")) {
-          // Partial ]] exists
+          // Partial ]] exists - add one more, skip the existing one
           actualSuffix = "]"
           skipChars = 1
         } else if (suffix === "}}" && textAfter.startsWith("}")) {
-          // Partial }} exists
+          // Partial }} exists - add one more, skip the existing one
           actualSuffix = "}"
           skipChars = 1
         }
 
         const insert = prefix + title + actualSuffix
-        // Position cursor after the closing brackets
+        // Position cursor after the closing brackets (including any we skipped)
         const cursorPos = from + insert.length + skipChars
         view.dispatch({
-          changes: { from, to: to + skipChars, insert },
+          changes: { from, to, insert },
           selection: { anchor: cursorPos }
         })
       }
@@ -1291,7 +1321,8 @@ function htmlTagCompletion(context: CompletionContext): CompletionResult | null 
       // Check if there's already a > after cursor (from auto-close brackets)
       const textAfter = view.state.sliceDoc(to, to + 1)
       const hasClosingBracket = textAfter === ">"
-      const insert = hasClosingBracket ? tagText : tagText + ">"
+      // Always include > in the insert, extend replacement range if > exists
+      const insert = tagText + ">"
       // Position cursor before the >
       const cursorPos = from + tagText.length
       view.dispatch({

@@ -294,3 +294,41 @@ tags: $:/tags/Stylesheet
 [data-cm6-theme="github-dimmed"] .cm-completionMatchedText {
   color: #58a6ff;
 }
+
+/* ============================================================================
+   Autocomplete Selected - Light
+   ============================================================================ */
+
+.cm6-theme-github .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
+.cm6-theme-github-light .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
+[data-cm6-theme="github"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
+[data-cm6-theme="github-light"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] {
+  background-color: #0550ae;
+  color: #ffffff;
+}
+
+.cm6-theme-github .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+.cm6-theme-github-light .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+[data-cm6-theme="github"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+[data-cm6-theme="github-light"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+/* ============================================================================
+   Autocomplete Selected - Dark
+   ============================================================================ */
+
+.cm6-theme-github-dark .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
+.cm6-theme-github-dimmed .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
+[data-cm6-theme="github-dark"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
+[data-cm6-theme="github-dimmed"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] {
+  background-color: #58a6ff;
+  color: #0d1117;
+}
+
+.cm6-theme-github-dark .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+.cm6-theme-github-dimmed .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+[data-cm6-theme="github-dark"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+[data-cm6-theme="github-dimmed"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail {
+  color: rgba(13, 17, 23, 0.8);
+}

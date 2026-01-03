@@ -229,7 +229,15 @@ tags: $:/tags/Stylesheet
 .cm6-theme-one .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
 [data-cm6-theme="one-dark"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
 [data-cm6-theme="one"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] {
-  background-color: #3e4451;
+  background-color: #61afef;
+  color: #282c34;
+}
+
+.cm6-theme-one-dark .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+.cm6-theme-one .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+[data-cm6-theme="one-dark"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+[data-cm6-theme="one"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail {
+  color: rgba(40, 44, 52, 0.8);
 }
 
 .cm6-theme-one-dark .cm-completionMatchedText,
@@ -274,7 +282,13 @@ tags: $:/tags/Stylesheet
 
 .cm6-theme-one-light .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
 [data-cm6-theme="one-light"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] {
-  background-color: #f0f0f0;
+  background-color: #4078f2;
+  color: #ffffff;
+}
+
+.cm6-theme-one-light .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+[data-cm6-theme="one-light"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail {
+  color: rgba(255, 255, 255, 0.8);
 }
 
 .cm6-theme-one-light .cm-completionMatchedText,

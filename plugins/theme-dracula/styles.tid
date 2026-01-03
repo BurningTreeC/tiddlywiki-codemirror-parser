@@ -179,7 +179,13 @@ tags: $:/tags/Stylesheet
 
 .cm6-theme-dracula .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
 [data-cm6-theme="dracula"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] {
-  background-color: #44475a;
+  background-color: #bd93f9;
+  color: #282a36;
+}
+
+.cm6-theme-dracula .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+[data-cm6-theme="dracula"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail {
+  color: rgba(40, 42, 54, 0.8);
 }
 
 .cm6-theme-dracula .cm-completionMatchedText,

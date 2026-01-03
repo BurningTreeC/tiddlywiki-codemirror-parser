@@ -290,7 +290,15 @@ tags: $:/tags/Stylesheet
 .cm6-theme-flexoki .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
 [data-cm6-theme="flexoki-dark"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
 [data-cm6-theme="flexoki"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] {
-  background-color: #282726;
+  background-color: #4385be;
+  color: #100f0f;
+}
+
+.cm6-theme-flexoki-dark .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+.cm6-theme-flexoki .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+[data-cm6-theme="flexoki-dark"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+[data-cm6-theme="flexoki"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail {
+  color: rgba(16, 15, 15, 0.8);
 }
 
 .cm6-theme-flexoki-dark .cm-completionMatchedText,
@@ -337,7 +345,13 @@ tags: $:/tags/Stylesheet
 
 .cm6-theme-flexoki-light .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
 [data-cm6-theme="flexoki-light"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] {
-  background-color: #f2f0e5;
+  background-color: #205ea6;
+  color: #fffcf0;
+}
+
+.cm6-theme-flexoki-light .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+[data-cm6-theme="flexoki-light"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail {
+  color: rgba(255, 252, 240, 0.8);
 }
 
 .cm6-theme-flexoki-light .cm-completionMatchedText,

@@ -5,64 +5,62 @@ type: text/vnd.tiddlywiki
 \rules only macrocallinline macrocallblock conditional
 
 /* ============================================================================
-   WikiText Theme for CodeMirror 6
+   WikiText Syntax Highlighting for CodeMirror 6
    ============================================================================
 
-   A syntax highlighting theme designed specifically for TiddlyWiki wikitext.
+   Default theme based on TiddlyWiki's Vanilla palette.
+   Clean, unobtrusive, and native to TiddlyWiki.
 
-   Design principles:
-   - Content-first: formatting speaks for itself, colors support readability
-   - Semantic grouping: related concepts share color families
-   - TiddlyWiki identity: widgets use TiddlyWiki's signature teal
-   - Subtle markers: syntax punctuation fades into the background
+   Theme plugins can override these CSS variables to create custom themes.
 
    ============================================================================ */
 
 /* ============================================================================
-   Light Theme (default)
+   Light Theme (Default - matches TW5 Vanilla)
    ============================================================================ */
 
 :root {
-  /* Base palette - warm neutrals */
-  --wt-bg: #fafaf9;
-  --wt-bg-subtle: #f4f4f3;
-  --wt-fg: #1c1917;
-  --wt-fg-muted: #78716c;
-  --wt-fg-faint: #a8a29e;
-  --wt-border: #e7e5e4;
-  --wt-selection: rgba(59, 130, 246, 0.2);
-  --wt-line-highlight: rgba(0, 0, 0, 0.03);
+  /* Base palette - from TW5 Vanilla */
+  --wt-bg: #ffffff;
+  --wt-bg-subtle: #f4f4f4;
+  --wt-fg: #333333;
+  --wt-fg-muted: #666666;
+  --wt-fg-faint: #888888;
+  --wt-border: #cccccc;
+  --wt-selection: rgba(87, 120, 216, 0.25);
+  --wt-line-highlight: rgba(0, 0, 0, 0.04);
 
-  /* Semantic colors - Light */
-  --wt-teal: #0d9488;           /* TiddlyWiki widgets - signature color */
-  --wt-teal-dim: #5eead4;
-  --wt-blue: #2563eb;           /* Links, references */
-  --wt-violet: #7c3aed;         /* Transclusions, special references */
-  --wt-cyan: #0891b2;           /* Filters, data queries */
-  --wt-orange: #ea580c;         /* Macros, variables */
-  --wt-rose: #e11d48;           /* Conditionals, control flow */
-  --wt-amber: #d97706;          /* Attributes */
-  --wt-slate: #475569;          /* Code, monospace */
-  --wt-purple: #9333ea;         /* Pragmas, definitions */
+  /* Semantic colors - derived from TW5 palette */
+  --wt-teal: #2a9d8f;           /* Widgets - complementary teal */
+  --wt-teal-dim: #40b4a6;
+  --wt-blue: #5778d8;           /* TW primary - links */
+  --wt-violet: #6f5cc4;         /* Transclusions */
+  --wt-cyan: #2596be;           /* Filters */
+  --wt-orange: #d68a00;         /* Macros - derived from tag gold */
+  --wt-rose: #c94c64;           /* Conditionals */
+  --wt-amber: #b8860b;          /* Attributes - dark goldenrod */
+  --wt-slate: #555555;          /* Code text */
+  --wt-purple: #6f5cc4;         /* Pragmas */
+  --wt-green: #2e8b57;          /* Strings - sea green */
+  --wt-red: #c0392b;            /* Errors */
 
-  /* Formatting - subtle or inherited */
-  --wt-bold: #292524;
-  --wt-italic: #44403c;
-  --wt-strike: #a8a29e;
-  --wt-underline: #57534e;
-  --wt-heading: #0f172a;
+  /* Formatting */
+  --wt-bold: #1a1a1a;
+  --wt-italic: #333333;
+  --wt-strike: #888888;
+  --wt-underline: #333333;
+  --wt-heading: #182955;        /* TW title color */
 
-  /* Code blocks */
-  --wt-code-bg: #f5f5f4;
-  --wt-code-fg: #be185d;
+  /* Code blocks - from TW5 */
+  --wt-code-bg: #f7f7f9;
+  --wt-code-fg: #dd1144;        /* TW code-foreground */
 
-  /* Highlight/superscript */
-  --wt-highlight-bg: rgba(250, 204, 21, 0.25);
-  --wt-highlight-fg: #854d0e;
+  /* Highlight */
+  --wt-highlight-bg: rgba(255, 255, 0, 0.3);
+  --wt-highlight-fg: #333333;
 
-  /* Comments and marks */
-  --wt-comment: #9ca3af;
-  --wt-mark: #d4d4d4;
+  /* Comments */
+  --wt-comment: #6a737d;
 }
 
 /* ============================================================================
@@ -73,45 +71,46 @@ type: text/vnd.tiddlywiki
 
 :root {
   /* Base palette - dark */
-  --wt-bg: #1c1917;
-  --wt-bg-subtle: #292524;
-  --wt-fg: #fafaf9;
-  --wt-fg-muted: #a8a29e;
-  --wt-fg-faint: #78716c;
-  --wt-border: #44403c;
-  --wt-selection: rgba(59, 130, 246, 0.35);
-  --wt-line-highlight: rgba(255, 255, 255, 0.03);
+  --wt-bg: #1e1e1e;
+  --wt-bg-subtle: #2d2d2d;
+  --wt-fg: #d4d4d4;
+  --wt-fg-muted: #808080;
+  --wt-fg-faint: #555555;
+  --wt-border: #3d3d3d;
+  --wt-selection: rgba(87, 120, 216, 0.35);
+  --wt-line-highlight: rgba(255, 255, 255, 0.04);
 
-  /* Semantic colors - Dark (brighter for dark bg) */
-  --wt-teal: #2dd4bf;
-  --wt-teal-dim: #0d9488;
-  --wt-blue: #60a5fa;
-  --wt-violet: #a78bfa;
-  --wt-cyan: #22d3ee;
-  --wt-orange: #fb923c;
-  --wt-rose: #fb7185;
-  --wt-amber: #fbbf24;
-  --wt-slate: #94a3b8;
-  --wt-purple: #c084fc;
+  /* Semantic colors - brightened for dark bg */
+  --wt-teal: #4ec9b0;
+  --wt-teal-dim: #3db39e;
+  --wt-blue: #6b8ceb;
+  --wt-violet: #b4a7f5;
+  --wt-cyan: #4fc1e9;
+  --wt-orange: #e9b563;
+  --wt-rose: #f48fb1;
+  --wt-amber: #ffd54f;
+  --wt-slate: #b0b0b0;
+  --wt-purple: #b4a7f5;
+  --wt-green: #81c784;
+  --wt-red: #ef5350;
 
-  /* Formatting - dark mode */
-  --wt-bold: #fafaf9;
-  --wt-italic: #e7e5e4;
-  --wt-strike: #78716c;
-  --wt-underline: #d6d3d1;
-  --wt-heading: #f5f5f4;
+  /* Formatting */
+  --wt-bold: #ffffff;
+  --wt-italic: #d4d4d4;
+  --wt-strike: #666666;
+  --wt-underline: #d4d4d4;
+  --wt-heading: #6b8ceb;
 
-  /* Code blocks - dark */
-  --wt-code-bg: #292524;
-  --wt-code-fg: #f472b6;
+  /* Code blocks */
+  --wt-code-bg: #2d2d2d;
+  --wt-code-fg: #f48fb1;
 
-  /* Highlight - dark */
-  --wt-highlight-bg: rgba(250, 204, 21, 0.2);
-  --wt-highlight-fg: #fde047;
+  /* Highlight */
+  --wt-highlight-bg: rgba(255, 213, 79, 0.25);
+  --wt-highlight-fg: #ffd54f;
 
-  /* Comments - dark */
-  --wt-comment: #6b7280;
-  --wt-mark: #525252;
+  /* Comments */
+  --wt-comment: #6a9955;
 }
 
 <% endif %>
@@ -119,37 +118,39 @@ type: text/vnd.tiddlywiki
 /* Dark palette fallback */
 .tc-body.tc-dark,
 [data-palette="dark"] {
-  --wt-bg: #1c1917;
-  --wt-bg-subtle: #292524;
-  --wt-fg: #fafaf9;
-  --wt-fg-muted: #a8a29e;
-  --wt-fg-faint: #78716c;
-  --wt-border: #44403c;
-  --wt-selection: rgba(59, 130, 246, 0.35);
-  --wt-line-highlight: rgba(255, 255, 255, 0.03);
+  --wt-bg: #1e1e1e;
+  --wt-bg-subtle: #2d2d2d;
+  --wt-fg: #d4d4d4;
+  --wt-fg-muted: #808080;
+  --wt-fg-faint: #555555;
+  --wt-border: #3d3d3d;
+  --wt-selection: rgba(87, 120, 216, 0.35);
+  --wt-line-highlight: rgba(255, 255, 255, 0.04);
 
-  --wt-teal: #2dd4bf;
-  --wt-blue: #60a5fa;
-  --wt-violet: #a78bfa;
-  --wt-cyan: #22d3ee;
-  --wt-orange: #fb923c;
-  --wt-rose: #fb7185;
-  --wt-amber: #fbbf24;
-  --wt-slate: #94a3b8;
-  --wt-purple: #c084fc;
+  --wt-teal: #4ec9b0;
+  --wt-teal-dim: #3db39e;
+  --wt-blue: #6b8ceb;
+  --wt-violet: #b4a7f5;
+  --wt-cyan: #4fc1e9;
+  --wt-orange: #e9b563;
+  --wt-rose: #f48fb1;
+  --wt-amber: #ffd54f;
+  --wt-slate: #b0b0b0;
+  --wt-purple: #b4a7f5;
+  --wt-green: #81c784;
+  --wt-red: #ef5350;
 
-  --wt-bold: #fafaf9;
-  --wt-italic: #e7e5e4;
-  --wt-strike: #78716c;
-  --wt-underline: #d6d3d1;
-  --wt-heading: #f5f5f4;
+  --wt-bold: #ffffff;
+  --wt-italic: #d4d4d4;
+  --wt-strike: #666666;
+  --wt-underline: #d4d4d4;
+  --wt-heading: #6b8ceb;
 
-  --wt-code-bg: #292524;
-  --wt-code-fg: #f472b6;
-  --wt-highlight-bg: rgba(250, 204, 21, 0.2);
-  --wt-highlight-fg: #fde047;
-  --wt-comment: #6b7280;
-  --wt-mark: #525252;
+  --wt-code-bg: #2d2d2d;
+  --wt-code-fg: #f48fb1;
+  --wt-highlight-bg: rgba(255, 213, 79, 0.25);
+  --wt-highlight-fg: #ffd54f;
+  --wt-comment: #6a9955;
 }
 
 /* ============================================================================
@@ -235,6 +236,7 @@ type: text/vnd.tiddlywiki
 .cm-tw-code {
   color: var(--wt-code-fg);
   background-color: var(--wt-code-bg);
+  border: 1px solid var(--wt-border);
   border-radius: 4px;
   padding: 1px 5px;
   font-family: ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospace;
@@ -325,7 +327,7 @@ type: text/vnd.tiddlywiki
   font-weight: 600;
 }
 
-/* --- Special Characters --- */
+/* --- Special Characters & Marks --- */
 .cm-tw-escape {
   color: var(--wt-slate);
 }
@@ -335,7 +337,7 @@ type: text/vnd.tiddlywiki
 }
 
 .cm-tw-mark {
-  color: var(--wt-mark);
+  color: var(--wt-fg-muted);
 }
 
 .cm-tw-comment {
@@ -356,8 +358,8 @@ type: text/vnd.tiddlywiki
 
 /* Literals */
 .tok-string,
-.tok-string2 { color: var(--wt-teal); }
-.tok-character { color: var(--wt-teal); }
+.tok-string2 { color: var(--wt-green); }
+.tok-character { color: var(--wt-green); }
 .tok-number,
 .tok-integer,
 .tok-float { color: var(--wt-violet); }
@@ -472,7 +474,7 @@ type: text/vnd.tiddlywiki
 
 .cm-editor .cm-content {
   padding: 10px 0;
-  caret-color: var(--wt-teal);
+  caret-color: var(--wt-blue);
 }
 
 .cm-editor .cm-line {
@@ -496,13 +498,13 @@ type: text/vnd.tiddlywiki
 }
 
 .cm-editor .cm-cursor {
-  border-left-color: var(--wt-teal);
+  border-left-color: var(--wt-blue);
   border-left-width: 2px;
 }
 
 /* Gutters */
 .cm-editor .cm-gutters {
-  background-color: transparent;
+  background-color: var(--wt-bg-subtle);
   border-right: 1px solid var(--wt-border);
   color: var(--wt-fg-faint);
 }
@@ -514,13 +516,13 @@ type: text/vnd.tiddlywiki
 
 /* Matching Brackets */
 .cm-editor .cm-matchingBracket {
-  background-color: rgba(45, 212, 191, 0.2);
-  outline: 1px solid var(--wt-teal);
+  background-color: rgba(87, 120, 216, 0.2);
+  outline: 1px solid var(--wt-blue);
   border-radius: 2px;
 }
 
 .cm-editor .cm-nonmatchingBracket {
-  background-color: rgba(225, 29, 72, 0.2);
+  background-color: rgba(201, 76, 100, 0.2);
   outline: 1px solid var(--wt-rose);
   border-radius: 2px;
 }
@@ -550,7 +552,12 @@ type: text/vnd.tiddlywiki
 }
 
 .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] {
-  background-color: var(--wt-selection);
+  background-color: var(--wt-blue);
+  color: #ffffff;
+}
+
+.cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail {
+  color: rgba(255, 255, 255, 0.8);
 }
 
 .cm-completionIcon {
@@ -563,9 +570,13 @@ type: text/vnd.tiddlywiki
 }
 
 .cm-completionMatchedText {
-  color: var(--wt-teal);
+  color: var(--wt-blue);
   font-weight: 600;
   text-decoration: none;
+}
+
+.cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionMatchedText {
+  color: #ffffff;
 }
 
 .cm-completionDetail {
@@ -597,13 +608,13 @@ type: text/vnd.tiddlywiki
 }
 
 .cm-searchMatch {
-  background-color: rgba(250, 204, 21, 0.3);
+  background-color: rgba(255, 255, 0, 0.4);
   border-radius: 2px;
 }
 
 .cm-searchMatch.cm-searchMatch-selected {
-  background-color: rgba(250, 204, 21, 0.5);
-  outline: 1px solid var(--wt-amber);
+  background-color: rgba(255, 228, 118, 0.7);
+  outline: 1px solid #b99e2f;
 }
 
 /* ============================================================================

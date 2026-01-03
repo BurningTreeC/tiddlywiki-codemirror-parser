@@ -297,3 +297,41 @@ tags: $:/tags/Stylesheet
 [data-cm6-theme="rose-pine-dawn"] .cm-completionMatchedText {
   color: #d7827e;
 }
+
+/* ============================================================================
+   Autocomplete Selected - Dark
+   ============================================================================ */
+
+.cm6-theme-rose-pine .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
+.cm6-theme-rose-pine-main .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
+.cm6-theme-rose-pine-moon .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
+[data-cm6-theme="rose-pine"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
+[data-cm6-theme="rose-pine-main"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
+[data-cm6-theme="rose-pine-moon"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] {
+  background-color: #c4a7e7;
+  color: #191724;
+}
+
+.cm6-theme-rose-pine .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+.cm6-theme-rose-pine-main .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+.cm6-theme-rose-pine-moon .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+[data-cm6-theme="rose-pine"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+[data-cm6-theme="rose-pine-main"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+[data-cm6-theme="rose-pine-moon"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail {
+  color: rgba(25, 23, 36, 0.8);
+}
+
+/* ============================================================================
+   Autocomplete Selected - Dawn
+   ============================================================================ */
+
+.cm6-theme-rose-pine-dawn .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
+[data-cm6-theme="rose-pine-dawn"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] {
+  background-color: #907aa9;
+  color: #faf4ed;
+}
+
+.cm6-theme-rose-pine-dawn .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+[data-cm6-theme="rose-pine-dawn"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail {
+  color: rgba(250, 244, 237, 0.8);
+}

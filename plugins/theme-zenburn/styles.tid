@@ -206,7 +206,15 @@ tags: $:/tags/Stylesheet
 .cm6-theme-zenburn-high .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
 [data-cm6-theme="zenburn"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
 [data-cm6-theme="zenburn-high"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] {
-  background-color: #4f4f4f;
+  background-color: #8cd0d3;
+  color: #2b2b2b;
+}
+
+.cm6-theme-zenburn .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+.cm6-theme-zenburn-high .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+[data-cm6-theme="zenburn"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+[data-cm6-theme="zenburn-high"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail {
+  color: rgba(43, 43, 43, 0.8);
 }
 
 .cm6-theme-zenburn .cm-completionMatchedText,

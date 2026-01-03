@@ -322,7 +322,13 @@ tags: $:/tags/Stylesheet
 
 .cm6-theme-catppuccin-latte .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
 [data-cm6-theme="catppuccin-latte"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] {
-  background-color: #ccd0da;
+  background-color: #1e66f5;
+  color: #eff1f5;
+}
+
+.cm6-theme-catppuccin-latte .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+[data-cm6-theme="catppuccin-latte"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail {
+  color: rgba(239, 241, 245, 0.8);
 }
 
 .cm6-theme-catppuccin-latte .cm-completionMatchedText,
@@ -386,7 +392,15 @@ tags: $:/tags/Stylesheet
 .cm6-theme-catppuccin-mocha .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
 [data-cm6-theme="catppuccin"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
 [data-cm6-theme="catppuccin-mocha"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] {
-  background-color: #313244;
+  background-color: #89b4fa;
+  color: #1e1e2e;
+}
+
+.cm6-theme-catppuccin .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+.cm6-theme-catppuccin-mocha .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+[data-cm6-theme="catppuccin"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+[data-cm6-theme="catppuccin-mocha"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail {
+  color: rgba(30, 30, 46, 0.8);
 }
 
 .cm6-theme-catppuccin .cm-completionMatchedText,

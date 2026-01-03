@@ -240,7 +240,13 @@ tags: $:/tags/Stylesheet
 
 .cm6-theme-solarized-dark .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
 [data-cm6-theme="solarized-dark"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] {
-  background-color: #073642;
+  background-color: #268bd2;
+  color: #fdf6e3;
+}
+
+.cm6-theme-solarized-dark .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+[data-cm6-theme="solarized-dark"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail {
+  color: rgba(253, 246, 227, 0.8);
 }
 
 .cm6-theme-solarized-dark .cm-completionMatchedText,
@@ -276,7 +282,13 @@ tags: $:/tags/Stylesheet
 
 .cm6-theme-solarized-light .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
 [data-cm6-theme="solarized-light"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] {
-  background-color: #eee8d5;
+  background-color: #268bd2;
+  color: #fdf6e3;
+}
+
+.cm6-theme-solarized-light .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+[data-cm6-theme="solarized-light"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail {
+  color: rgba(253, 246, 227, 0.8);
 }
 
 .cm6-theme-solarized-light .cm-completionMatchedText,

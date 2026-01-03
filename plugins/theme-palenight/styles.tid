@@ -215,7 +215,15 @@ tags: $:/tags/Stylesheet
 .cm6-theme-palenight-italic .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
 [data-cm6-theme="palenight"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
 [data-cm6-theme="palenight-italic"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] {
-  background-color: #3a3f58;
+  background-color: #82aaff;
+  color: #1b1e2b;
+}
+
+.cm6-theme-palenight .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+.cm6-theme-palenight-italic .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+[data-cm6-theme="palenight"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+[data-cm6-theme="palenight-italic"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail {
+  color: rgba(27, 30, 43, 0.8);
 }
 
 .cm6-theme-palenight .cm-completionMatchedText,

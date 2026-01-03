@@ -257,3 +257,41 @@ tags: $:/tags/Stylesheet
 [data-cm6-theme="ayu-light"] .cm-completionMatchedText {
   color: #399ee6;
 }
+
+/* ============================================================================
+   Autocomplete Selected - Dark
+   ============================================================================ */
+
+.cm6-theme-ayu .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
+.cm6-theme-ayu-dark .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
+.cm6-theme-ayu-mirage .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
+[data-cm6-theme="ayu"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
+[data-cm6-theme="ayu-dark"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
+[data-cm6-theme="ayu-mirage"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] {
+  background-color: #59c2ff;
+  color: #0b0e14;
+}
+
+.cm6-theme-ayu .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+.cm6-theme-ayu-dark .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+.cm6-theme-ayu-mirage .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+[data-cm6-theme="ayu"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+[data-cm6-theme="ayu-dark"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+[data-cm6-theme="ayu-mirage"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail {
+  color: rgba(11, 14, 20, 0.8);
+}
+
+/* ============================================================================
+   Autocomplete Selected - Light
+   ============================================================================ */
+
+.cm6-theme-ayu-light .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
+[data-cm6-theme="ayu-light"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] {
+  background-color: #399ee6;
+  color: #fafafa;
+}
+
+.cm6-theme-ayu-light .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+[data-cm6-theme="ayu-light"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail {
+  color: rgba(250, 250, 250, 0.8);
+}

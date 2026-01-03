@@ -280,3 +280,41 @@ tags: $:/tags/Stylesheet
 [data-cm6-theme="monokai-light"] .cm-completionMatchedText {
   color: #669900;
 }
+
+/* ============================================================================
+   Autocomplete Selected - Dark
+   ============================================================================ */
+
+.cm6-theme-monokai .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
+.cm6-theme-monokai-dark .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
+.cm6-theme-monokai-pro .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
+[data-cm6-theme="monokai"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
+[data-cm6-theme="monokai-dark"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
+[data-cm6-theme="monokai-pro"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] {
+  background-color: #a6e22e;
+  color: #272822;
+}
+
+.cm6-theme-monokai .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+.cm6-theme-monokai-dark .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+.cm6-theme-monokai-pro .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+[data-cm6-theme="monokai"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+[data-cm6-theme="monokai-dark"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+[data-cm6-theme="monokai-pro"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail {
+  color: rgba(39, 40, 34, 0.8);
+}
+
+/* ============================================================================
+   Autocomplete Selected - Light
+   ============================================================================ */
+
+.cm6-theme-monokai-light .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected],
+[data-cm6-theme="monokai-light"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] {
+  background-color: #669900;
+  color: #fafafa;
+}
+
+.cm6-theme-monokai-light .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail,
+[data-cm6-theme="monokai-light"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail {
+  color: rgba(250, 250, 250, 0.8);
+}
