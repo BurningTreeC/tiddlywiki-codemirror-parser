@@ -3,6 +3,41 @@ tags:
 
 ! Changelog
 
+!! Version 0.0.4
+
+!!! New Features
+
+* '''Multi-Cursor Editing''' - Edit multiple locations simultaneously
+** Ctrl+Click to add cursors at any position
+** Ctrl+D to select next occurrence of current selection
+** Ctrl+Alt+Up/Down to add cursors above/below
+** Custom secondary cursor/selection rendering with native appearance
+** New config: `$:/config/codemirror-6/multiCursor` to enable/disable
+
+* '''Configurable Cursor Blink Rate'''
+** New config: `$:/config/codemirror-6/cursorBlinkRate` (default: 1200ms)
+** Set to 0 to disable blinking
+** Uses CSS transclusion for dynamic updates without reload
+
+* '''Filter Operator Completions''' - Context-aware completions inside filters
+** Operand value completions for operators like `all[]`, `is[]`, `format[]`, `has[]`, `tag[]`
+** Suffix/flag completions after `:` (e.g., `contains:casesensitive`, `search:literal:field`)
+** Support for `+` combinations in `all[]` (e.g., `all[tiddlers+shadows]`)
+** Dynamic completions for fields, tags, functions, and variables via callbacks
+** Filter context detection: `[[tiddler]]` cursor placement differs inside vs outside filters
+
+* '''Mixed List Marker Support''' - Full support for TiddlyWiki mixed lists
+** List continuation works for mixed markers like `*#`, `#*`, `**#`, etc.
+** Tab indents by duplicating last marker (e.g., `*#` → `*##`)
+** Shift+Tab outdents by removing last marker (e.g., `*##` → `*#`)
+** Typing marker characters upgrades lists (e.g., after `*# ` typing `#` → `*## `)
+
+!!! Infrastructure
+
+* Added `plugins/lang-markdown` to version control
+
+---
+
 !! Version 0.0.3
 
 !!! New Features
