@@ -1945,6 +1945,55 @@ function filterOperatorSuffixCompletion(
 }
 
 /**
+ * Extract definition names from document text
+ * Finds \define, \procedure, \function, \widget pragmas
+ */
+function extractLocalDefinitions(text: string): {
+  functions: string[]
+  procedures: string[]
+  macros: string[]
+  widgets: string[]
+  variables: string[]  // All of the above combined
+} {
+  const functions: string[] = []
+  const procedures: string[] = []
+  const macros: string[] = []
+  const widgets: string[] = []
+  const seen: Record<string, boolean> = {}
+
+  // Match \define name, \procedure name, \function name, \widget name
+  // with optional (params) after the name
+  const regex = /\\(define|procedure|function|widget)\s+([^\s(]+)/g
+  let match
+  while ((match = regex.exec(text)) !== null) {
+    const type = match[1]
+    const name = match[2]
+    if (!seen[name]) {
+      seen[name] = true
+      switch (type) {
+        case 'function':
+          functions.push(name)
+          break
+        case 'procedure':
+          procedures.push(name)
+          break
+        case 'define':
+          macros.push(name)
+          break
+        case 'widget':
+          widgets.push(name)
+          break
+      }
+    }
+  }
+
+  // All definitions are also variables
+  const variables = [...functions, ...procedures, ...macros, ...widgets]
+
+  return { functions, procedures, macros, widgets, variables }
+}
+
+/**
  * Filter operand value completion source
  * Triggers inside [] for operators with predefined values like all[], is[], format[]
  * Also provides dynamic completions for operators like tag[], has[], get[]
@@ -1959,6 +2008,11 @@ function filterOperandValueCompletion(
   return (context: CompletionContext): CompletionResult | null => {
     const { state, pos } = context
     const textBefore = state.sliceDoc(Math.max(0, pos - 100), pos)
+
+    // Extract local definitions from current document for functions/variables
+    // Cache per-document to avoid re-parsing on every keystroke
+    const docText = state.doc.toString()
+    const localDefs = extractLocalDefinitions(docText)
 
     // Match: [operator[partial or [operator:suffix[partial or ]operator[partial
     // Pattern breakdown:
@@ -2011,6 +2065,7 @@ function filterOperandValueCompletion(
     // Dynamic operands based on type
     if (meta.dynamicOperands) {
       let values: string[] = []
+      let localValues: string[] = []
       let detailType = ""
       switch (meta.dynamicOperands) {
         case 'fields':
@@ -2027,15 +2082,24 @@ function filterOperandValueCompletion(
           break
         case 'functions':
           values = getFunctionNames ? getFunctionNames() : []
+          localValues = localDefs.functions
           detailType = "function"
           break
         case 'variables':
           values = getVariableNames ? getVariableNames() : []
+          localValues = localDefs.variables
           detailType = "variable"
           break
       }
+
+      // Add global values
+      const seen = new Set<string>(usedValues)
       options.push(...values
-        .filter(v => !usedValues.includes(v))  // Exclude already-used values
+        .filter(v => {
+          if (seen.has(v)) return false
+          seen.add(v)
+          return true
+        })
         .map(v => ({
           label: v,
           type: meta.dynamicOperands === 'fields' ? 'variable' as const :
@@ -2043,6 +2107,21 @@ function filterOperandValueCompletion(
                 'text' as const,
           detail: detailType
         })))
+
+      // Add local definitions (from current document) with special detail
+      if (localValues.length > 0) {
+        options.push(...localValues
+          .filter(v => {
+            if (seen.has(v)) return false
+            seen.add(v)
+            return true
+          })
+          .map(v => ({
+            label: v,
+            type: 'function' as const,
+            detail: `${detailType} (local)`
+          })))
+      }
     }
 
     if (options.length === 0) return null
