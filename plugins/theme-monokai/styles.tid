@@ -318,3 +318,75 @@ tags: $:/tags/Stylesheet
 [data-cm6-theme="monokai-light"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail {
   color: rgba(250, 250, 250, 0.8);
 }
+
+/* ============================================================================
+   Vim Mode - Dark
+   ============================================================================ */
+
+.cm6-theme-monokai .cm-fat-cursor,
+.cm6-theme-monokai-dark .cm-fat-cursor,
+.cm6-theme-monokai-pro .cm-fat-cursor,
+[data-cm6-theme="monokai"] .cm-fat-cursor,
+[data-cm6-theme="monokai-dark"] .cm-fat-cursor,
+[data-cm6-theme="monokai-pro"] .cm-fat-cursor {
+  background: #f8f8f0 !important;
+}
+
+.cm6-theme-monokai .cm-editor:not(.cm-focused) .cm-fat-cursor,
+.cm6-theme-monokai-dark .cm-editor:not(.cm-focused) .cm-fat-cursor,
+.cm6-theme-monokai-pro .cm-editor:not(.cm-focused) .cm-fat-cursor,
+[data-cm6-theme="monokai"] .cm-editor:not(.cm-focused) .cm-fat-cursor,
+[data-cm6-theme="monokai-dark"] .cm-editor:not(.cm-focused) .cm-fat-cursor,
+[data-cm6-theme="monokai-pro"] .cm-editor:not(.cm-focused) .cm-fat-cursor {
+  background: #464741 !important;
+}
+
+.cm6-theme-monokai .cm-vim-panel,
+.cm6-theme-monokai-dark .cm-vim-panel,
+.cm6-theme-monokai-pro .cm-vim-panel,
+[data-cm6-theme="monokai"] .cm-vim-panel,
+[data-cm6-theme="monokai-dark"] .cm-vim-panel,
+[data-cm6-theme="monokai-pro"] .cm-vim-panel {
+  background: #1e1f1c;
+  border-color: #3e3d32;
+  color: #f8f8f2;
+}
+
+.cm6-theme-monokai .cm-vim-panel input,
+.cm6-theme-monokai-dark .cm-vim-panel input,
+.cm6-theme-monokai-pro .cm-vim-panel input,
+[data-cm6-theme="monokai"] .cm-vim-panel input,
+[data-cm6-theme="monokai-dark"] .cm-vim-panel input,
+[data-cm6-theme="monokai-pro"] .cm-vim-panel input {
+  background: #272822;
+  color: #f8f8f2;
+  border-color: #3e3d32;
+}
+
+/* ============================================================================
+   Vim Mode - Light
+   ============================================================================ */
+
+.cm6-theme-monokai-light .cm-fat-cursor,
+[data-cm6-theme="monokai-light"] .cm-fat-cursor {
+  background: #272822 !important;
+}
+
+.cm6-theme-monokai-light .cm-editor:not(.cm-focused) .cm-fat-cursor,
+[data-cm6-theme="monokai-light"] .cm-editor:not(.cm-focused) .cm-fat-cursor {
+  background: #b0b0b0 !important;
+}
+
+.cm6-theme-monokai-light .cm-vim-panel,
+[data-cm6-theme="monokai-light"] .cm-vim-panel {
+  background: #f0f0f0;
+  border-color: #e0e0e0;
+  color: #272822;
+}
+
+.cm6-theme-monokai-light .cm-vim-panel input,
+[data-cm6-theme="monokai-light"] .cm-vim-panel input {
+  background: #fafafa;
+  color: #272822;
+  border-color: #e0e0e0;
+}

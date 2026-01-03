@@ -70,8 +70,8 @@ export const HorizontalRule: BlockParser = {
 // Fenced Code Block (```)
 // ============================================================================
 
-const codeStartRe = /^```(\w*)$/
-const codeEndRe = /^```$/
+const codeStartRe = /^```(\w*)\s*$/
+const codeEndRe = /^```\s*$/
 
 export const FencedCode: BlockParser = {
   name: "FencedCode",
@@ -207,9 +207,8 @@ export const List: BlockParser = {
     const items: Element[] = []
 
     // Parse list items
-    let currentLine = line
     while (true) {
-      const itemMatch = listMarkerRe.exec(currentLine.text)
+      const itemMatch = listMarkerRe.exec(cx.line.text)
       if (!itemMatch || !isCompatibleMarker(firstMarker, itemMatch[1][0])) break
 
       const itemMarkers = itemMatch[1]
@@ -217,7 +216,7 @@ export const List: BlockParser = {
       const markerEnd = itemStart + itemMarkers.length
 
       // Parse inline content
-      const contentText = currentLine.text.slice(itemMarkers.length)
+      const contentText = cx.line.text.slice(itemMarkers.length)
       const inlineElements = cx.parser.parseInline(contentText, markerEnd)
 
       const itemChildren: Element[] = [
@@ -226,13 +225,21 @@ export const List: BlockParser = {
       ]
 
       const itemType = listTypeMap[itemMarkers[itemMarkers.length - 1]]?.item || Type.ListItem
-      items.push(elt(itemType, itemStart, itemStart + currentLine.text.length, itemChildren))
+      items.push(elt(itemType, itemStart, itemStart + cx.line.text.length, itemChildren))
 
-      if (!cx.nextLine()) break
-      currentLine = cx.line
+      // Peek at next line before advancing - don't consume non-list lines
+      const nextText = cx.peekLine()
+      if (nextText === null) break
+
+      const nextMatch = listMarkerRe.exec(nextText)
+      if (!nextMatch || !isCompatibleMarker(firstMarker, nextMatch[1][0])) break
+
+      // Next line continues the list, so advance to it
+      cx.nextLine()
     }
 
-    cx.addElement(elt(listInfo.list, start, cx.prevLineEnd(), items))
+    // cx.line is at the last list item (not advanced past it)
+    cx.addElement(elt(listInfo.list, start, cx.lineStart + cx.line.text.length, items))
     return true
   }
 }

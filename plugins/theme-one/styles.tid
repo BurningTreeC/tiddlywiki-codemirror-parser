@@ -295,3 +295,67 @@ tags: $:/tags/Stylesheet
 [data-cm6-theme="one-light"] .cm-completionMatchedText {
   color: #4078f2;
 }
+
+/* ============================================================================
+   Vim Mode - Dark
+   ============================================================================ */
+
+.cm6-theme-one-dark .cm-fat-cursor,
+.cm6-theme-one .cm-fat-cursor,
+[data-cm6-theme="one-dark"] .cm-fat-cursor,
+[data-cm6-theme="one"] .cm-fat-cursor {
+  background: #528bff !important;
+}
+
+.cm6-theme-one-dark .cm-editor:not(.cm-focused) .cm-fat-cursor,
+.cm6-theme-one .cm-editor:not(.cm-focused) .cm-fat-cursor,
+[data-cm6-theme="one-dark"] .cm-editor:not(.cm-focused) .cm-fat-cursor,
+[data-cm6-theme="one"] .cm-editor:not(.cm-focused) .cm-fat-cursor {
+  background: #4b5263 !important;
+}
+
+.cm6-theme-one-dark .cm-vim-panel,
+.cm6-theme-one .cm-vim-panel,
+[data-cm6-theme="one-dark"] .cm-vim-panel,
+[data-cm6-theme="one"] .cm-vim-panel {
+  background: #21252b;
+  border-color: #3e4451;
+  color: #abb2bf;
+}
+
+.cm6-theme-one-dark .cm-vim-panel input,
+.cm6-theme-one .cm-vim-panel input,
+[data-cm6-theme="one-dark"] .cm-vim-panel input,
+[data-cm6-theme="one"] .cm-vim-panel input {
+  background: #282c34;
+  color: #abb2bf;
+  border-color: #3e4451;
+}
+
+/* ============================================================================
+   Vim Mode - Light
+   ============================================================================ */
+
+.cm6-theme-one-light .cm-fat-cursor,
+[data-cm6-theme="one-light"] .cm-fat-cursor {
+  background: #4078f2 !important;
+}
+
+.cm6-theme-one-light .cm-editor:not(.cm-focused) .cm-fat-cursor,
+[data-cm6-theme="one-light"] .cm-editor:not(.cm-focused) .cm-fat-cursor {
+  background: #c8c8c8 !important;
+}
+
+.cm6-theme-one-light .cm-vim-panel,
+[data-cm6-theme="one-light"] .cm-vim-panel {
+  background: #f0f0f0;
+  border-color: #e0e0e0;
+  color: #383a42;
+}
+
+.cm6-theme-one-light .cm-vim-panel input,
+[data-cm6-theme="one-light"] .cm-vim-panel input {
+  background: #fafafa;
+  color: #383a42;
+  border-color: #e0e0e0;
+}

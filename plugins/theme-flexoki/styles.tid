@@ -421,3 +421,67 @@ tags: $:/tags/Stylesheet
   background-color: #f2f0e5;
   border-color: #e6e4d9;
 }
+
+/* ============================================================================
+   Vim Mode - Dark
+   ============================================================================ */
+
+.cm6-theme-flexoki-dark .cm-fat-cursor,
+.cm6-theme-flexoki .cm-fat-cursor,
+[data-cm6-theme="flexoki-dark"] .cm-fat-cursor,
+[data-cm6-theme="flexoki"] .cm-fat-cursor {
+  background: #cecdc3 !important;
+}
+
+.cm6-theme-flexoki-dark .cm-editor:not(.cm-focused) .cm-fat-cursor,
+.cm6-theme-flexoki .cm-editor:not(.cm-focused) .cm-fat-cursor,
+[data-cm6-theme="flexoki-dark"] .cm-editor:not(.cm-focused) .cm-fat-cursor,
+[data-cm6-theme="flexoki"] .cm-editor:not(.cm-focused) .cm-fat-cursor {
+  background: #575653 !important;
+}
+
+.cm6-theme-flexoki-dark .cm-vim-panel,
+.cm6-theme-flexoki .cm-vim-panel,
+[data-cm6-theme="flexoki-dark"] .cm-vim-panel,
+[data-cm6-theme="flexoki"] .cm-vim-panel {
+  background: #1c1b1a;
+  border-color: #282726;
+  color: #cecdc3;
+}
+
+.cm6-theme-flexoki-dark .cm-vim-panel input,
+.cm6-theme-flexoki .cm-vim-panel input,
+[data-cm6-theme="flexoki-dark"] .cm-vim-panel input,
+[data-cm6-theme="flexoki"] .cm-vim-panel input {
+  background: #100f0f;
+  color: #cecdc3;
+  border-color: #282726;
+}
+
+/* ============================================================================
+   Vim Mode - Light
+   ============================================================================ */
+
+.cm6-theme-flexoki-light .cm-fat-cursor,
+[data-cm6-theme="flexoki-light"] .cm-fat-cursor {
+  background: #100f0f !important;
+}
+
+.cm6-theme-flexoki-light .cm-editor:not(.cm-focused) .cm-fat-cursor,
+[data-cm6-theme="flexoki-light"] .cm-editor:not(.cm-focused) .cm-fat-cursor {
+  background: #b7b5ac !important;
+}
+
+.cm6-theme-flexoki-light .cm-vim-panel,
+[data-cm6-theme="flexoki-light"] .cm-vim-panel {
+  background: #f2f0e5;
+  border-color: #e6e4d9;
+  color: #100f0f;
+}
+
+.cm6-theme-flexoki-light .cm-vim-panel input,
+[data-cm6-theme="flexoki-light"] .cm-vim-panel input {
+  background: #fffcf0;
+  color: #100f0f;
+  border-color: #e6e4d9;
+}

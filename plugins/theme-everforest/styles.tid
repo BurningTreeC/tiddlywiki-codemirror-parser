@@ -334,3 +334,75 @@ tags: $:/tags/Stylesheet
 [data-cm6-theme="everforest-light"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail {
   color: rgba(253, 246, 227, 0.8);
 }
+
+/* ============================================================================
+   Vim Mode - Dark
+   ============================================================================ */
+
+.cm6-theme-everforest .cm-fat-cursor,
+.cm6-theme-everforest-dark .cm-fat-cursor,
+.cm6-theme-everforest-dark-hard .cm-fat-cursor,
+[data-cm6-theme="everforest"] .cm-fat-cursor,
+[data-cm6-theme="everforest-dark"] .cm-fat-cursor,
+[data-cm6-theme="everforest-dark-hard"] .cm-fat-cursor {
+  background: #d3c6aa !important;
+}
+
+.cm6-theme-everforest .cm-editor:not(.cm-focused) .cm-fat-cursor,
+.cm6-theme-everforest-dark .cm-editor:not(.cm-focused) .cm-fat-cursor,
+.cm6-theme-everforest-dark-hard .cm-editor:not(.cm-focused) .cm-fat-cursor,
+[data-cm6-theme="everforest"] .cm-editor:not(.cm-focused) .cm-fat-cursor,
+[data-cm6-theme="everforest-dark"] .cm-editor:not(.cm-focused) .cm-fat-cursor,
+[data-cm6-theme="everforest-dark-hard"] .cm-editor:not(.cm-focused) .cm-fat-cursor {
+  background: #5c6a72 !important;
+}
+
+.cm6-theme-everforest .cm-vim-panel,
+.cm6-theme-everforest-dark .cm-vim-panel,
+.cm6-theme-everforest-dark-hard .cm-vim-panel,
+[data-cm6-theme="everforest"] .cm-vim-panel,
+[data-cm6-theme="everforest-dark"] .cm-vim-panel,
+[data-cm6-theme="everforest-dark-hard"] .cm-vim-panel {
+  background: #272e33;
+  border-color: #3d484d;
+  color: #d3c6aa;
+}
+
+.cm6-theme-everforest .cm-vim-panel input,
+.cm6-theme-everforest-dark .cm-vim-panel input,
+.cm6-theme-everforest-dark-hard .cm-vim-panel input,
+[data-cm6-theme="everforest"] .cm-vim-panel input,
+[data-cm6-theme="everforest-dark"] .cm-vim-panel input,
+[data-cm6-theme="everforest-dark-hard"] .cm-vim-panel input {
+  background: #2d353b;
+  color: #d3c6aa;
+  border-color: #3d484d;
+}
+
+/* ============================================================================
+   Vim Mode - Light
+   ============================================================================ */
+
+.cm6-theme-everforest-light .cm-fat-cursor,
+[data-cm6-theme="everforest-light"] .cm-fat-cursor {
+  background: #5c6a72 !important;
+}
+
+.cm6-theme-everforest-light .cm-editor:not(.cm-focused) .cm-fat-cursor,
+[data-cm6-theme="everforest-light"] .cm-editor:not(.cm-focused) .cm-fat-cursor {
+  background: #c9d0c0 !important;
+}
+
+.cm6-theme-everforest-light .cm-vim-panel,
+[data-cm6-theme="everforest-light"] .cm-vim-panel {
+  background: #f4f0d9;
+  border-color: #e5dfc5;
+  color: #5c6a72;
+}
+
+.cm6-theme-everforest-light .cm-vim-panel input,
+[data-cm6-theme="everforest-light"] .cm-vim-panel input {
+  background: #fdf6e3;
+  color: #5c6a72;
+  border-color: #e5dfc5;
+}

@@ -73,6 +73,14 @@
             }
         },
         {
+            "file": "lib/codemirror-search.js",
+            "fields": {
+                "type": "application/javascript",
+                "title": "$:/plugins/BurningTreeC/tiddlywiki-codemirror/lib/codemirror-search.js",
+                "module-type": "library"
+            }
+        },
+        {
             "file": "widgets/subclasses/edit-text.js",
             "fields": {
                 "type": "application/javascript",

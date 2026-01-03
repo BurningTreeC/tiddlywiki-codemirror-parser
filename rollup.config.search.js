@@ -13,11 +13,11 @@ export default {
   input: "@codemirror/search",
   external: Object.keys(twPaths),
   output: {
-    file: "plugins/search/files/codemirror-search.js",
+    file: "plugins/editor/files/lib/codemirror-search.js",
     format: "cjs",
     exports: "named",
     banner: `/*\\
-title: $:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/search/lib/codemirror-search.js
+title: $:/plugins/BurningTreeC/tiddlywiki-codemirror/lib/codemirror-search.js
 type: application/javascript
 module-type: library
 

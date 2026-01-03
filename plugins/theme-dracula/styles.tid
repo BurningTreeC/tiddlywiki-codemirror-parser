@@ -192,3 +192,59 @@ tags: $:/tags/Stylesheet
 [data-cm6-theme="dracula"] .cm-completionMatchedText {
   color: #50fa7b;
 }
+
+/* ============================================================================
+   Vim Mode - Dark
+   ============================================================================ */
+
+.cm6-theme-dracula .cm-fat-cursor,
+[data-cm6-theme="dracula"] .cm-fat-cursor {
+  background: #f8f8f2 !important;
+}
+
+.cm6-theme-dracula .cm-editor:not(.cm-focused) .cm-fat-cursor,
+[data-cm6-theme="dracula"] .cm-editor:not(.cm-focused) .cm-fat-cursor {
+  background: #6272a4 !important;
+}
+
+.cm6-theme-dracula .cm-vim-panel,
+[data-cm6-theme="dracula"] .cm-vim-panel {
+  background: #343746;
+  border-color: #44475a;
+  color: #f8f8f2;
+}
+
+.cm6-theme-dracula .cm-vim-panel input,
+[data-cm6-theme="dracula"] .cm-vim-panel input {
+  background: #282a36;
+  color: #f8f8f2;
+  border-color: #44475a;
+}
+
+/* ============================================================================
+   Vim Mode - Light
+   ============================================================================ */
+
+.cm6-theme-dracula-light .cm-fat-cursor,
+[data-cm6-theme="dracula-light"] .cm-fat-cursor {
+  background: #282a36 !important;
+}
+
+.cm6-theme-dracula-light .cm-editor:not(.cm-focused) .cm-fat-cursor,
+[data-cm6-theme="dracula-light"] .cm-editor:not(.cm-focused) .cm-fat-cursor {
+  background: #a4a4a4 !important;
+}
+
+.cm6-theme-dracula-light .cm-vim-panel,
+[data-cm6-theme="dracula-light"] .cm-vim-panel {
+  background: #e8e8e2;
+  border-color: #d4d4d4;
+  color: #282a36;
+}
+
+.cm6-theme-dracula-light .cm-vim-panel input,
+[data-cm6-theme="dracula-light"] .cm-vim-panel input {
+  background: #f8f8f2;
+  color: #282a36;
+  border-color: #d4d4d4;
+}

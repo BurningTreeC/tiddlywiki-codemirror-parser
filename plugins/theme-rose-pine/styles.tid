@@ -335,3 +335,75 @@ tags: $:/tags/Stylesheet
 [data-cm6-theme="rose-pine-dawn"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail {
   color: rgba(250, 244, 237, 0.8);
 }
+
+/* ============================================================================
+   Vim Mode - Main/Moon (Dark)
+   ============================================================================ */
+
+.cm6-theme-rose-pine .cm-fat-cursor,
+.cm6-theme-rose-pine-main .cm-fat-cursor,
+.cm6-theme-rose-pine-moon .cm-fat-cursor,
+[data-cm6-theme="rose-pine"] .cm-fat-cursor,
+[data-cm6-theme="rose-pine-main"] .cm-fat-cursor,
+[data-cm6-theme="rose-pine-moon"] .cm-fat-cursor {
+  background: #e0def4 !important;
+}
+
+.cm6-theme-rose-pine .cm-editor:not(.cm-focused) .cm-fat-cursor,
+.cm6-theme-rose-pine-main .cm-editor:not(.cm-focused) .cm-fat-cursor,
+.cm6-theme-rose-pine-moon .cm-editor:not(.cm-focused) .cm-fat-cursor,
+[data-cm6-theme="rose-pine"] .cm-editor:not(.cm-focused) .cm-fat-cursor,
+[data-cm6-theme="rose-pine-main"] .cm-editor:not(.cm-focused) .cm-fat-cursor,
+[data-cm6-theme="rose-pine-moon"] .cm-editor:not(.cm-focused) .cm-fat-cursor {
+  background: #524f67 !important;
+}
+
+.cm6-theme-rose-pine .cm-vim-panel,
+.cm6-theme-rose-pine-main .cm-vim-panel,
+.cm6-theme-rose-pine-moon .cm-vim-panel,
+[data-cm6-theme="rose-pine"] .cm-vim-panel,
+[data-cm6-theme="rose-pine-main"] .cm-vim-panel,
+[data-cm6-theme="rose-pine-moon"] .cm-vim-panel {
+  background: #1f1d2e;
+  border-color: #26233a;
+  color: #e0def4;
+}
+
+.cm6-theme-rose-pine .cm-vim-panel input,
+.cm6-theme-rose-pine-main .cm-vim-panel input,
+.cm6-theme-rose-pine-moon .cm-vim-panel input,
+[data-cm6-theme="rose-pine"] .cm-vim-panel input,
+[data-cm6-theme="rose-pine-main"] .cm-vim-panel input,
+[data-cm6-theme="rose-pine-moon"] .cm-vim-panel input {
+  background: #191724;
+  color: #e0def4;
+  border-color: #26233a;
+}
+
+/* ============================================================================
+   Vim Mode - Dawn (Light)
+   ============================================================================ */
+
+.cm6-theme-rose-pine-dawn .cm-fat-cursor,
+[data-cm6-theme="rose-pine-dawn"] .cm-fat-cursor {
+  background: #575279 !important;
+}
+
+.cm6-theme-rose-pine-dawn .cm-editor:not(.cm-focused) .cm-fat-cursor,
+[data-cm6-theme="rose-pine-dawn"] .cm-editor:not(.cm-focused) .cm-fat-cursor {
+  background: #cecacd !important;
+}
+
+.cm6-theme-rose-pine-dawn .cm-vim-panel,
+[data-cm6-theme="rose-pine-dawn"] .cm-vim-panel {
+  background: #fffaf3;
+  border-color: #f2e9e1;
+  color: #575279;
+}
+
+.cm6-theme-rose-pine-dawn .cm-vim-panel input,
+[data-cm6-theme="rose-pine-dawn"] .cm-vim-panel input {
+  background: #faf4ed;
+  color: #575279;
+  border-color: #f2e9e1;
+}

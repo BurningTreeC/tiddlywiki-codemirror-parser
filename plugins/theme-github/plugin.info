@@ -2,7 +2,7 @@
     "title": "$:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/theme-github",
     "name": "CodeMirror 6 GitHub Theme",
     "description": "GitHub's code highlighting theme for CodeMirror 6 (Light, Dark, Dimmed)",
-    "version": "0.0.2",
+    "version": "0.0.3",
     "plugin-type": "plugin",
     "dependents": "$:/plugins/BurningTreeC/tiddlywiki-codemirror",
     "list": "readme styles",

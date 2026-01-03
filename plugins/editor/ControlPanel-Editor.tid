@@ -31,6 +31,21 @@ caption: Editor
 </div>
 \end
 
+\define render-keymap-select(configTiddler)
+<div class="cm-config-item">
+<label><$transclude tiddler=<<__configTiddler__>> field="caption"/></label>
+<$select tiddler=<<__configTiddler__>> default={{{ [<__configTiddler__>get[default]] }}}>
+<option value="default">Default (VS Code / Sublime)</option>
+<$list filter="[all[tiddlers+shadows]tag[$:/tags/Config/CodeMirror/Keymap]sort[caption]]" variable="keymapTiddler">
+<option value={{{ [<keymapTiddler>get[keymap-id]] }}}><$transclude tiddler=<<keymapTiddler>> field="caption"/></option>
+</$list>
+</$select>
+<$list filter="[<__configTiddler__>has[description]]" variable="ignore">
+<div class="cm-config-description"><em><$transclude tiddler=<<__configTiddler__>> field="description"/></em></div>
+</$list>
+</div>
+\end
+
 \define render-config(configTiddler)
 <$list filter="[<__configTiddler__>get[config-type]match[checkbox]]" variable="ignore">
 <$macrocall $name="render-checkbox" configTiddler=<<__configTiddler__>>/>
@@ -40,6 +55,9 @@ caption: Editor
 </$list>
 <$list filter="[<__configTiddler__>get[config-type]match[input]]" variable="ignore">
 <$macrocall $name="render-input" configTiddler=<<__configTiddler__>>/>
+</$list>
+<$list filter="[<__configTiddler__>get[config-type]match[keymap-select]]" variable="ignore">
+<$macrocall $name="render-keymap-select" configTiddler=<<__configTiddler__>>/>
 </$list>
 \end
 

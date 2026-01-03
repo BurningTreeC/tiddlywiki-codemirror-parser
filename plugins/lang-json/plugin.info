@@ -2,7 +2,7 @@
     "title": "$:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/lang-json",
     "name": "CodeMirror 6 JSON Language",
     "description": "JSON syntax highlighting for CodeMirror 6 code blocks",
-    "version": "0.0.2",
+    "version": "0.0.3",
     "plugin-type": "plugin",
     "dependents": "",
     "list": "readme",

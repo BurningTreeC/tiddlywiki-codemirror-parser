@@ -1,5 +1,5 @@
 /*\
-title: $:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/search/lib/codemirror-search.js
+title: $:/plugins/BurningTreeC/tiddlywiki-codemirror/lib/codemirror-search.js
 type: application/javascript
 module-type: library
 

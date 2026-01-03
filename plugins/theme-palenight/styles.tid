@@ -263,3 +263,39 @@ tags: $:/tags/Stylesheet
   background-color: #1b1e2b;
   border-color: #3a3f58;
 }
+
+/* ============================================================================
+   Vim Mode
+   ============================================================================ */
+
+.cm6-theme-palenight .cm-fat-cursor,
+.cm6-theme-palenight-italic .cm-fat-cursor,
+[data-cm6-theme="palenight"] .cm-fat-cursor,
+[data-cm6-theme="palenight-italic"] .cm-fat-cursor {
+  background: #ffcc00 !important;
+}
+
+.cm6-theme-palenight .cm-editor:not(.cm-focused) .cm-fat-cursor,
+.cm6-theme-palenight-italic .cm-editor:not(.cm-focused) .cm-fat-cursor,
+[data-cm6-theme="palenight"] .cm-editor:not(.cm-focused) .cm-fat-cursor,
+[data-cm6-theme="palenight-italic"] .cm-editor:not(.cm-focused) .cm-fat-cursor {
+  background: #4e5579 !important;
+}
+
+.cm6-theme-palenight .cm-vim-panel,
+.cm6-theme-palenight-italic .cm-vim-panel,
+[data-cm6-theme="palenight"] .cm-vim-panel,
+[data-cm6-theme="palenight-italic"] .cm-vim-panel {
+  background: #1b1e2b;
+  border-color: #3a3f58;
+  color: #a6accd;
+}
+
+.cm6-theme-palenight .cm-vim-panel input,
+.cm6-theme-palenight-italic .cm-vim-panel input,
+[data-cm6-theme="palenight"] .cm-vim-panel input,
+[data-cm6-theme="palenight-italic"] .cm-vim-panel input {
+  background: #292d3e;
+  color: #a6accd;
+  border-color: #3a3f58;
+}

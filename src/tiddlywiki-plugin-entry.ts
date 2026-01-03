@@ -371,9 +371,13 @@ export const plugin = {
     // Header folding support
     extensions.push(headerIndent)
     
-    // Keymap (unless read-only)
+    // Keymap (unless read-only or custom keymap is active)
     if (!context.readOnly) {
-      extensions.push(tiddlywikiKeymap)
+      const wiki = context.engine?.widget?.wiki || (typeof $tw !== "undefined" ? $tw.wiki : null)
+      const selectedKeymap = wiki?.getTiddlerText?.("$:/config/codemirror-6/keymap", "default") ?? "default"
+      if (selectedKeymap === "default") {
+        extensions.push(tiddlywikiKeymap)
+      }
     }
     
     return extensions

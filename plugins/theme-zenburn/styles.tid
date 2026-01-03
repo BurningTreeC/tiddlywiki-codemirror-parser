@@ -242,3 +242,39 @@ tags: $:/tags/Stylesheet
   background-color: rgba(240, 223, 175, 0.5);
   outline: 1px solid #f0dfaf;
 }
+
+/* ============================================================================
+   Vim Mode
+   ============================================================================ */
+
+.cm6-theme-zenburn .cm-fat-cursor,
+.cm6-theme-zenburn-high .cm-fat-cursor,
+[data-cm6-theme="zenburn"] .cm-fat-cursor,
+[data-cm6-theme="zenburn-high"] .cm-fat-cursor {
+  background: #dcdccc !important;
+}
+
+.cm6-theme-zenburn .cm-editor:not(.cm-focused) .cm-fat-cursor,
+.cm6-theme-zenburn-high .cm-editor:not(.cm-focused) .cm-fat-cursor,
+[data-cm6-theme="zenburn"] .cm-editor:not(.cm-focused) .cm-fat-cursor,
+[data-cm6-theme="zenburn-high"] .cm-editor:not(.cm-focused) .cm-fat-cursor {
+  background: #5f5f5f !important;
+}
+
+.cm6-theme-zenburn .cm-vim-panel,
+.cm6-theme-zenburn-high .cm-vim-panel,
+[data-cm6-theme="zenburn"] .cm-vim-panel,
+[data-cm6-theme="zenburn-high"] .cm-vim-panel {
+  background: #383838;
+  border-color: #4f4f4f;
+  color: #dcdccc;
+}
+
+.cm6-theme-zenburn .cm-vim-panel input,
+.cm6-theme-zenburn-high .cm-vim-panel input,
+[data-cm6-theme="zenburn"] .cm-vim-panel input,
+[data-cm6-theme="zenburn-high"] .cm-vim-panel input {
+  background: #3f3f3f;
+  color: #dcdccc;
+  border-color: #4f4f4f;
+}

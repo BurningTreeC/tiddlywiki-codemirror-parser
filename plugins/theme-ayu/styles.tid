@@ -295,3 +295,75 @@ tags: $:/tags/Stylesheet
 [data-cm6-theme="ayu-light"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail {
   color: rgba(250, 250, 250, 0.8);
 }
+
+/* ============================================================================
+   Vim Mode - Dark/Mirage
+   ============================================================================ */
+
+.cm6-theme-ayu .cm-fat-cursor,
+.cm6-theme-ayu-dark .cm-fat-cursor,
+.cm6-theme-ayu-mirage .cm-fat-cursor,
+[data-cm6-theme="ayu"] .cm-fat-cursor,
+[data-cm6-theme="ayu-dark"] .cm-fat-cursor,
+[data-cm6-theme="ayu-mirage"] .cm-fat-cursor {
+  background: #e6b450 !important;
+}
+
+.cm6-theme-ayu .cm-editor:not(.cm-focused) .cm-fat-cursor,
+.cm6-theme-ayu-dark .cm-editor:not(.cm-focused) .cm-fat-cursor,
+.cm6-theme-ayu-mirage .cm-editor:not(.cm-focused) .cm-fat-cursor,
+[data-cm6-theme="ayu"] .cm-editor:not(.cm-focused) .cm-fat-cursor,
+[data-cm6-theme="ayu-dark"] .cm-editor:not(.cm-focused) .cm-fat-cursor,
+[data-cm6-theme="ayu-mirage"] .cm-editor:not(.cm-focused) .cm-fat-cursor {
+  background: #565b66 !important;
+}
+
+.cm6-theme-ayu .cm-vim-panel,
+.cm6-theme-ayu-dark .cm-vim-panel,
+.cm6-theme-ayu-mirage .cm-vim-panel,
+[data-cm6-theme="ayu"] .cm-vim-panel,
+[data-cm6-theme="ayu-dark"] .cm-vim-panel,
+[data-cm6-theme="ayu-mirage"] .cm-vim-panel {
+  background: #0d1017;
+  border-color: #1c2028;
+  color: #bfbdb6;
+}
+
+.cm6-theme-ayu .cm-vim-panel input,
+.cm6-theme-ayu-dark .cm-vim-panel input,
+.cm6-theme-ayu-mirage .cm-vim-panel input,
+[data-cm6-theme="ayu"] .cm-vim-panel input,
+[data-cm6-theme="ayu-dark"] .cm-vim-panel input,
+[data-cm6-theme="ayu-mirage"] .cm-vim-panel input {
+  background: #0b0e14;
+  color: #bfbdb6;
+  border-color: #1c2028;
+}
+
+/* ============================================================================
+   Vim Mode - Light
+   ============================================================================ */
+
+.cm6-theme-ayu-light .cm-fat-cursor,
+[data-cm6-theme="ayu-light"] .cm-fat-cursor {
+  background: #ff9940 !important;
+}
+
+.cm6-theme-ayu-light .cm-editor:not(.cm-focused) .cm-fat-cursor,
+[data-cm6-theme="ayu-light"] .cm-editor:not(.cm-focused) .cm-fat-cursor {
+  background: #8a9199 !important;
+}
+
+.cm6-theme-ayu-light .cm-vim-panel,
+[data-cm6-theme="ayu-light"] .cm-vim-panel {
+  background: #f0f0f0;
+  border-color: #e8e9eb;
+  color: #5c6166;
+}
+
+.cm6-theme-ayu-light .cm-vim-panel input,
+[data-cm6-theme="ayu-light"] .cm-vim-panel input {
+  background: #fafafa;
+  color: #5c6166;
+  border-color: #e8e9eb;
+}

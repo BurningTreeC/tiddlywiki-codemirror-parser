@@ -360,3 +360,83 @@ tags: $:/tags/Stylesheet
 [data-cm6-theme="tokyo-day"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail {
   color: rgba(225, 226, 231, 0.8);
 }
+
+/* ============================================================================
+   Vim Mode - Night/Storm (Dark)
+   ============================================================================ */
+
+.cm6-theme-tokyo-night .cm-fat-cursor,
+.cm6-theme-tokyo .cm-fat-cursor,
+.cm6-theme-tokyo-night-storm .cm-fat-cursor,
+[data-cm6-theme="tokyo-night"] .cm-fat-cursor,
+[data-cm6-theme="tokyo"] .cm-fat-cursor,
+[data-cm6-theme="tokyo-night-storm"] .cm-fat-cursor {
+  background: #c0caf5 !important;
+}
+
+.cm6-theme-tokyo-night .cm-editor:not(.cm-focused) .cm-fat-cursor,
+.cm6-theme-tokyo .cm-editor:not(.cm-focused) .cm-fat-cursor,
+.cm6-theme-tokyo-night-storm .cm-editor:not(.cm-focused) .cm-fat-cursor,
+[data-cm6-theme="tokyo-night"] .cm-editor:not(.cm-focused) .cm-fat-cursor,
+[data-cm6-theme="tokyo"] .cm-editor:not(.cm-focused) .cm-fat-cursor,
+[data-cm6-theme="tokyo-night-storm"] .cm-editor:not(.cm-focused) .cm-fat-cursor {
+  background: #414868 !important;
+}
+
+.cm6-theme-tokyo-night .cm-vim-panel,
+.cm6-theme-tokyo .cm-vim-panel,
+.cm6-theme-tokyo-night-storm .cm-vim-panel,
+[data-cm6-theme="tokyo-night"] .cm-vim-panel,
+[data-cm6-theme="tokyo"] .cm-vim-panel,
+[data-cm6-theme="tokyo-night-storm"] .cm-vim-panel {
+  background: #16161e;
+  border-color: #292e42;
+  color: #a9b1d6;
+}
+
+.cm6-theme-tokyo-night .cm-vim-panel input,
+.cm6-theme-tokyo .cm-vim-panel input,
+.cm6-theme-tokyo-night-storm .cm-vim-panel input,
+[data-cm6-theme="tokyo-night"] .cm-vim-panel input,
+[data-cm6-theme="tokyo"] .cm-vim-panel input,
+[data-cm6-theme="tokyo-night-storm"] .cm-vim-panel input {
+  background: #1a1b26;
+  color: #a9b1d6;
+  border-color: #292e42;
+}
+
+/* ============================================================================
+   Vim Mode - Day (Light)
+   ============================================================================ */
+
+.cm6-theme-tokyo-night-day .cm-fat-cursor,
+.cm6-theme-tokyo-day .cm-fat-cursor,
+[data-cm6-theme="tokyo-night-day"] .cm-fat-cursor,
+[data-cm6-theme="tokyo-day"] .cm-fat-cursor {
+  background: #3760bf !important;
+}
+
+.cm6-theme-tokyo-night-day .cm-editor:not(.cm-focused) .cm-fat-cursor,
+.cm6-theme-tokyo-day .cm-editor:not(.cm-focused) .cm-fat-cursor,
+[data-cm6-theme="tokyo-night-day"] .cm-editor:not(.cm-focused) .cm-fat-cursor,
+[data-cm6-theme="tokyo-day"] .cm-editor:not(.cm-focused) .cm-fat-cursor {
+  background: #9699a3 !important;
+}
+
+.cm6-theme-tokyo-night-day .cm-vim-panel,
+.cm6-theme-tokyo-day .cm-vim-panel,
+[data-cm6-theme="tokyo-night-day"] .cm-vim-panel,
+[data-cm6-theme="tokyo-day"] .cm-vim-panel {
+  background: #d5d6db;
+  border-color: #c4c5ca;
+  color: #3760bf;
+}
+
+.cm6-theme-tokyo-night-day .cm-vim-panel input,
+.cm6-theme-tokyo-day .cm-vim-panel input,
+[data-cm6-theme="tokyo-night-day"] .cm-vim-panel input,
+[data-cm6-theme="tokyo-day"] .cm-vim-panel input {
+  background: #e1e2e7;
+  color: #3760bf;
+  border-color: #c4c5ca;
+}

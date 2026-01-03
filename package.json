@@ -28,6 +28,8 @@
     "build:tiddlywiki": "rollup -c rollup.config.tiddlywiki.js",
     "build:cm6-libs": "rollup -c rollup.config.cm6-libs.js",
     "build:cm6-languages": "rollup -c rollup.config.cm6-languages.js",
+    "build:cm6-keymaps": "rollup -c rollup.config.cm6-keymaps.js",
+    "build:search": "rollup -c rollup.config.search.js",
     "prepublishOnly": "npm run clean && npm run typecheck && npm run build",
     "test": "echo \"No tests yet\" && exit 0"
   },
@@ -60,6 +62,7 @@
     "@codemirror/language": "^6.10.0",
     "@codemirror/state": "^6.4.0",
     "@codemirror/view": "^6.33.0",
+    "@replit/codemirror-vim": "^6.3.0",
     "@rollup/plugin-commonjs": "^25.0.7",
     "@rollup/plugin-node-resolve": "^15.2.3",
     "@rollup/plugin-terser": "^0.4.4",

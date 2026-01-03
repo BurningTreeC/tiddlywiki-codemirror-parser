@@ -452,3 +452,83 @@ tags: $:/tags/Stylesheet
   background-color: #ebdbb2;
   border-right-color: #d5c4a1;
 }
+
+/* ============================================================================
+   Vim Mode - Dark
+   ============================================================================ */
+
+.cm6-theme-gruvbox-dark .cm-fat-cursor,
+.cm6-theme-gruvbox .cm-fat-cursor,
+.cm6-theme-gruvbox-dark-hard .cm-fat-cursor,
+[data-cm6-theme="gruvbox-dark"] .cm-fat-cursor,
+[data-cm6-theme="gruvbox"] .cm-fat-cursor,
+[data-cm6-theme="gruvbox-dark-hard"] .cm-fat-cursor {
+  background: #ebdbb2 !important;
+}
+
+.cm6-theme-gruvbox-dark .cm-editor:not(.cm-focused) .cm-fat-cursor,
+.cm6-theme-gruvbox .cm-editor:not(.cm-focused) .cm-fat-cursor,
+.cm6-theme-gruvbox-dark-hard .cm-editor:not(.cm-focused) .cm-fat-cursor,
+[data-cm6-theme="gruvbox-dark"] .cm-editor:not(.cm-focused) .cm-fat-cursor,
+[data-cm6-theme="gruvbox"] .cm-editor:not(.cm-focused) .cm-fat-cursor,
+[data-cm6-theme="gruvbox-dark-hard"] .cm-editor:not(.cm-focused) .cm-fat-cursor {
+  background: #504945 !important;
+}
+
+.cm6-theme-gruvbox-dark .cm-vim-panel,
+.cm6-theme-gruvbox .cm-vim-panel,
+.cm6-theme-gruvbox-dark-hard .cm-vim-panel,
+[data-cm6-theme="gruvbox-dark"] .cm-vim-panel,
+[data-cm6-theme="gruvbox"] .cm-vim-panel,
+[data-cm6-theme="gruvbox-dark-hard"] .cm-vim-panel {
+  background: #3c3836;
+  border-color: #3c3836;
+  color: #ebdbb2;
+}
+
+.cm6-theme-gruvbox-dark .cm-vim-panel input,
+.cm6-theme-gruvbox .cm-vim-panel input,
+.cm6-theme-gruvbox-dark-hard .cm-vim-panel input,
+[data-cm6-theme="gruvbox-dark"] .cm-vim-panel input,
+[data-cm6-theme="gruvbox"] .cm-vim-panel input,
+[data-cm6-theme="gruvbox-dark-hard"] .cm-vim-panel input {
+  background: #282828;
+  color: #ebdbb2;
+  border-color: #3c3836;
+}
+
+/* ============================================================================
+   Vim Mode - Light
+   ============================================================================ */
+
+.cm6-theme-gruvbox-light .cm-fat-cursor,
+.cm6-theme-gruvbox-light-hard .cm-fat-cursor,
+[data-cm6-theme="gruvbox-light"] .cm-fat-cursor,
+[data-cm6-theme="gruvbox-light-hard"] .cm-fat-cursor {
+  background: #3c3836 !important;
+}
+
+.cm6-theme-gruvbox-light .cm-editor:not(.cm-focused) .cm-fat-cursor,
+.cm6-theme-gruvbox-light-hard .cm-editor:not(.cm-focused) .cm-fat-cursor,
+[data-cm6-theme="gruvbox-light"] .cm-editor:not(.cm-focused) .cm-fat-cursor,
+[data-cm6-theme="gruvbox-light-hard"] .cm-editor:not(.cm-focused) .cm-fat-cursor {
+  background: #d5c4a1 !important;
+}
+
+.cm6-theme-gruvbox-light .cm-vim-panel,
+.cm6-theme-gruvbox-light-hard .cm-vim-panel,
+[data-cm6-theme="gruvbox-light"] .cm-vim-panel,
+[data-cm6-theme="gruvbox-light-hard"] .cm-vim-panel {
+  background: #ebdbb2;
+  border-color: #d5c4a1;
+  color: #3c3836;
+}
+
+.cm6-theme-gruvbox-light .cm-vim-panel input,
+.cm6-theme-gruvbox-light-hard .cm-vim-panel input,
+[data-cm6-theme="gruvbox-light"] .cm-vim-panel input,
+[data-cm6-theme="gruvbox-light-hard"] .cm-vim-panel input {
+  background: #fbf1c7;
+  color: #3c3836;
+  border-color: #d5c4a1;
+}

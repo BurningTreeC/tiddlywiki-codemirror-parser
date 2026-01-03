@@ -301,3 +301,59 @@ tags: $:/tags/Stylesheet
   background-color: #eee8d5;
   border-right-color: #93a1a1;
 }
+
+/* ============================================================================
+   Vim Mode - Dark
+   ============================================================================ */
+
+.cm6-theme-solarized-dark .cm-fat-cursor,
+[data-cm6-theme="solarized-dark"] .cm-fat-cursor {
+  background: #839496 !important;
+}
+
+.cm6-theme-solarized-dark .cm-editor:not(.cm-focused) .cm-fat-cursor,
+[data-cm6-theme="solarized-dark"] .cm-editor:not(.cm-focused) .cm-fat-cursor {
+  background: #586e75 !important;
+}
+
+.cm6-theme-solarized-dark .cm-vim-panel,
+[data-cm6-theme="solarized-dark"] .cm-vim-panel {
+  background: #073642;
+  border-color: #073642;
+  color: #839496;
+}
+
+.cm6-theme-solarized-dark .cm-vim-panel input,
+[data-cm6-theme="solarized-dark"] .cm-vim-panel input {
+  background: #002b36;
+  color: #839496;
+  border-color: #073642;
+}
+
+/* ============================================================================
+   Vim Mode - Light
+   ============================================================================ */
+
+.cm6-theme-solarized-light .cm-fat-cursor,
+[data-cm6-theme="solarized-light"] .cm-fat-cursor {
+  background: #657b83 !important;
+}
+
+.cm6-theme-solarized-light .cm-editor:not(.cm-focused) .cm-fat-cursor,
+[data-cm6-theme="solarized-light"] .cm-editor:not(.cm-focused) .cm-fat-cursor {
+  background: #93a1a1 !important;
+}
+
+.cm6-theme-solarized-light .cm-vim-panel,
+[data-cm6-theme="solarized-light"] .cm-vim-panel {
+  background: #eee8d5;
+  border-color: #eee8d5;
+  color: #657b83;
+}
+
+.cm6-theme-solarized-light .cm-vim-panel input,
+[data-cm6-theme="solarized-light"] .cm-vim-panel input {
+  background: #fdf6e3;
+  color: #657b83;
+  border-color: #eee8d5;
+}

@@ -332,3 +332,95 @@ tags: $:/tags/Stylesheet
 [data-cm6-theme="github-dimmed"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail {
   color: rgba(13, 17, 23, 0.8);
 }
+
+/* ============================================================================
+   Vim Mode - Light
+   ============================================================================ */
+
+.cm6-theme-github .cm-fat-cursor,
+.cm6-theme-github-light .cm-fat-cursor,
+[data-cm6-theme="github"] .cm-fat-cursor,
+[data-cm6-theme="github-light"] .cm-fat-cursor {
+  background: #0969da !important;
+}
+
+.cm6-theme-github .cm-editor:not(.cm-focused) .cm-fat-cursor,
+.cm6-theme-github-light .cm-editor:not(.cm-focused) .cm-fat-cursor,
+[data-cm6-theme="github"] .cm-editor:not(.cm-focused) .cm-fat-cursor,
+[data-cm6-theme="github-light"] .cm-editor:not(.cm-focused) .cm-fat-cursor {
+  background: #8b949e !important;
+}
+
+.cm6-theme-github .cm-vim-panel,
+.cm6-theme-github-light .cm-vim-panel,
+[data-cm6-theme="github"] .cm-vim-panel,
+[data-cm6-theme="github-light"] .cm-vim-panel {
+  background: #f6f8fa;
+  border-color: #d0d7de;
+  color: #24292f;
+}
+
+.cm6-theme-github .cm-vim-panel input,
+.cm6-theme-github-light .cm-vim-panel input,
+[data-cm6-theme="github"] .cm-vim-panel input,
+[data-cm6-theme="github-light"] .cm-vim-panel input {
+  background: #ffffff;
+  color: #24292f;
+  border-color: #d0d7de;
+}
+
+/* ============================================================================
+   Vim Mode - Dark
+   ============================================================================ */
+
+.cm6-theme-github-dark .cm-fat-cursor,
+[data-cm6-theme="github-dark"] .cm-fat-cursor {
+  background: #58a6ff !important;
+}
+
+.cm6-theme-github-dark .cm-editor:not(.cm-focused) .cm-fat-cursor,
+[data-cm6-theme="github-dark"] .cm-editor:not(.cm-focused) .cm-fat-cursor {
+  background: #484f58 !important;
+}
+
+.cm6-theme-github-dark .cm-vim-panel,
+[data-cm6-theme="github-dark"] .cm-vim-panel {
+  background: #161b22;
+  border-color: #30363d;
+  color: #c9d1d9;
+}
+
+.cm6-theme-github-dark .cm-vim-panel input,
+[data-cm6-theme="github-dark"] .cm-vim-panel input {
+  background: #0d1117;
+  color: #c9d1d9;
+  border-color: #30363d;
+}
+
+/* ============================================================================
+   Vim Mode - Dimmed
+   ============================================================================ */
+
+.cm6-theme-github-dimmed .cm-fat-cursor,
+[data-cm6-theme="github-dimmed"] .cm-fat-cursor {
+  background: #539bf5 !important;
+}
+
+.cm6-theme-github-dimmed .cm-editor:not(.cm-focused) .cm-fat-cursor,
+[data-cm6-theme="github-dimmed"] .cm-editor:not(.cm-focused) .cm-fat-cursor {
+  background: #545d68 !important;
+}
+
+.cm6-theme-github-dimmed .cm-vim-panel,
+[data-cm6-theme="github-dimmed"] .cm-vim-panel {
+  background: #2d333b;
+  border-color: #444c56;
+  color: #adbac7;
+}
+
+.cm6-theme-github-dimmed .cm-vim-panel input,
+[data-cm6-theme="github-dimmed"] .cm-vim-panel input {
+  background: #22272e;
+  color: #adbac7;
+  border-color: #444c56;
+}

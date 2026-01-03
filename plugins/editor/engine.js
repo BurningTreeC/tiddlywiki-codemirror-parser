@@ -416,8 +416,12 @@ function CodeMirrorEngine(options) {
 		indentUnit: new Compartment(),
 		tabSize: new Compartment(),
 		bracketMatching: new Compartment(),
-		closeBrackets: new Compartment()
+		closeBrackets: new Compartment(),
+		keymap: new Compartment()
 	};
+
+	// Track registered keymap plugins for dynamic switching
+	this._keymapPlugins = {};
 
 	// ========================================================================
 	// Build Initial Context
@@ -443,7 +447,7 @@ function CodeMirrorEngine(options) {
 	for (var i = 0; i < plugins.length; i++) {
 		var plugin = plugins[i];
 		var hasCondition = isFunction(plugin.condition);
-		
+
 		try {
 			// ALWAYS register compartments (so we can reconfigure later)
 			if (isFunction(plugin.registerCompartments)) {
@@ -457,19 +461,25 @@ function CodeMirrorEngine(options) {
 					}
 				}
 			}
-			
+
+			// Track keymap plugins by their keymapId
+			if (isString(plugin.keymapId)) {
+				this._keymapPlugins[plugin.keymapId] = plugin;
+				console.log("CM6: Registered keymap plugin '" + plugin.keymapId + "'");
+			}
+
 			// Track conditional plugins separately
 			if (hasCondition) {
 				this._conditionalPlugins.push(plugin);
 			}
-			
+
 			// Check if plugin should be active
 			var shouldActivate = true;
 			if (hasCondition) {
 				shouldActivate = plugin.condition(context);
 				console.log("CM6: Plugin '" + plugin.name + "' condition: " + shouldActivate + " (type: '" + (context.tiddlerType || "") + "')");
 			}
-			
+
 			if (shouldActivate) {
 				this._activePlugins.push(plugin);
 			}
@@ -596,20 +606,45 @@ function CodeMirrorEngine(options) {
 		}
 	}
 
+	// Core: Keymap compartment (for vim/emacs dynamic switching)
+	// Get initial keymap from config and load extensions from matching plugin
+	var initialKeymapId = $tw.wiki.getTiddlerText("$:/config/codemirror-6/keymap", "default");
+	var initialKeymapExtensions = [];
+	if (initialKeymapId !== "default" && this._keymapPlugins[initialKeymapId]) {
+		var keymapPlugin = this._keymapPlugins[initialKeymapId];
+		if (isFunction(keymapPlugin.getExtensions)) {
+			try {
+				initialKeymapExtensions = keymapPlugin.getExtensions(context) || [];
+				console.log("CM6: Loaded keymap '" + initialKeymapId + "' with " + initialKeymapExtensions.length + " extensions");
+			} catch (e) {
+				console.error("CM6: Error loading keymap '" + initialKeymapId + "':", e);
+			}
+		}
+	}
+	this._currentKeymap = initialKeymapId;
+	extensions.push(this._compartments.keymap.of(initialKeymapExtensions));
+
 	// Collect extensions from plugins
-	// 
+	//
 	// IMPORTANT: Plugins with compartments are responsible for their own compartment.of() calls.
 	// The engine does NOT wrap their extensions again (that would cause "Duplicate compartment" error).
-	// 
+	//
 	// For inactive conditional plugins: we add an empty compartment so it can be filled later.
+	// NOTE: Keymap plugins are now handled via the central keymap compartment above.
 	// For active plugins: we add their extensions directly (they manage their own compartment).
 	
 	for (var j = 0; j < this._allPlugins.length; j++) {
 		var pluginJ = this._allPlugins[j];
+
+		// Skip keymap plugins - they're handled via the central keymap compartment
+		if (isString(pluginJ.keymapId)) {
+			continue;
+		}
+
 		var isActive = this._activePlugins.indexOf(pluginJ) >= 0;
 		var hasConditionJ = isFunction(pluginJ.condition);
 		var hasCompartment = isFunction(pluginJ.registerCompartments);
-		
+
 		try {
 			if (isFunction(pluginJ.getExtensions)) {
 				if (hasConditionJ && hasCompartment) {
@@ -954,6 +989,29 @@ CodeMirrorEngine.prototype._handleSettingsChanged = function(settings) {
 	if (closeBrackets && this._compartments.closeBrackets) {
 		var cbContent = settings.closeBrackets ? closeBrackets() : [];
 		effects.push(this._compartments.closeBrackets.reconfigure(cbContent));
+	}
+
+	// Keymap switching (vim/emacs/default)
+	if (settings.keymap !== undefined && settings.keymap !== this._currentKeymap) {
+		var newKeymapId = settings.keymap || "default";
+		var newKeymapExtensions = [];
+
+		if (newKeymapId !== "default" && this._keymapPlugins[newKeymapId]) {
+			var keymapPlugin = this._keymapPlugins[newKeymapId];
+			if (isFunction(keymapPlugin.getExtensions)) {
+				try {
+					newKeymapExtensions = keymapPlugin.getExtensions(this._pluginContext) || [];
+					console.log("CM6: Switching to keymap '" + newKeymapId + "' with " + newKeymapExtensions.length + " extensions");
+				} catch (e) {
+					console.error("CM6: Error loading keymap '" + newKeymapId + "':", e);
+				}
+			}
+		} else if (newKeymapId === "default") {
+			console.log("CM6: Switching to default keymap");
+		}
+
+		this._currentKeymap = newKeymapId;
+		effects.push(this._compartments.keymap.reconfigure(newKeymapExtensions));
 	}
 
 	// Indentation settings

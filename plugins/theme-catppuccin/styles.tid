@@ -413,3 +413,83 @@ tags: $:/tags/Stylesheet
 [data-cm6-theme="catppuccin-frappe"] .cm-completionMatchedText {
   color: #89b4fa;
 }
+
+/* ============================================================================
+   Vim Mode - Latte (Light)
+   ============================================================================ */
+
+.cm6-theme-catppuccin-latte .cm-fat-cursor,
+[data-cm6-theme="catppuccin-latte"] .cm-fat-cursor {
+  background: #dc8a78 !important;
+}
+
+.cm6-theme-catppuccin-latte .cm-editor:not(.cm-focused) .cm-fat-cursor,
+[data-cm6-theme="catppuccin-latte"] .cm-editor:not(.cm-focused) .cm-fat-cursor {
+  background: #9ca0b0 !important;
+}
+
+.cm6-theme-catppuccin-latte .cm-vim-panel,
+[data-cm6-theme="catppuccin-latte"] .cm-vim-panel {
+  background: #e6e9ef;
+  border-color: #ccd0da;
+  color: #4c4f69;
+}
+
+.cm6-theme-catppuccin-latte .cm-vim-panel input,
+[data-cm6-theme="catppuccin-latte"] .cm-vim-panel input {
+  background: #eff1f5;
+  color: #4c4f69;
+  border-color: #ccd0da;
+}
+
+/* ============================================================================
+   Vim Mode - Dark Flavors (Frappe, Macchiato, Mocha)
+   ============================================================================ */
+
+.cm6-theme-catppuccin .cm-fat-cursor,
+.cm6-theme-catppuccin-mocha .cm-fat-cursor,
+.cm6-theme-catppuccin-macchiato .cm-fat-cursor,
+.cm6-theme-catppuccin-frappe .cm-fat-cursor,
+[data-cm6-theme="catppuccin"] .cm-fat-cursor,
+[data-cm6-theme="catppuccin-mocha"] .cm-fat-cursor,
+[data-cm6-theme="catppuccin-macchiato"] .cm-fat-cursor,
+[data-cm6-theme="catppuccin-frappe"] .cm-fat-cursor {
+  background: #f5e0dc !important;
+}
+
+.cm6-theme-catppuccin .cm-editor:not(.cm-focused) .cm-fat-cursor,
+.cm6-theme-catppuccin-mocha .cm-editor:not(.cm-focused) .cm-fat-cursor,
+.cm6-theme-catppuccin-macchiato .cm-editor:not(.cm-focused) .cm-fat-cursor,
+.cm6-theme-catppuccin-frappe .cm-editor:not(.cm-focused) .cm-fat-cursor,
+[data-cm6-theme="catppuccin"] .cm-editor:not(.cm-focused) .cm-fat-cursor,
+[data-cm6-theme="catppuccin-mocha"] .cm-editor:not(.cm-focused) .cm-fat-cursor,
+[data-cm6-theme="catppuccin-macchiato"] .cm-editor:not(.cm-focused) .cm-fat-cursor,
+[data-cm6-theme="catppuccin-frappe"] .cm-editor:not(.cm-focused) .cm-fat-cursor {
+  background: #6c7086 !important;
+}
+
+.cm6-theme-catppuccin .cm-vim-panel,
+.cm6-theme-catppuccin-mocha .cm-vim-panel,
+.cm6-theme-catppuccin-macchiato .cm-vim-panel,
+.cm6-theme-catppuccin-frappe .cm-vim-panel,
+[data-cm6-theme="catppuccin"] .cm-vim-panel,
+[data-cm6-theme="catppuccin-mocha"] .cm-vim-panel,
+[data-cm6-theme="catppuccin-macchiato"] .cm-vim-panel,
+[data-cm6-theme="catppuccin-frappe"] .cm-vim-panel {
+  background: #181825;
+  border-color: #313244;
+  color: #cdd6f4;
+}
+
+.cm6-theme-catppuccin .cm-vim-panel input,
+.cm6-theme-catppuccin-mocha .cm-vim-panel input,
+.cm6-theme-catppuccin-macchiato .cm-vim-panel input,
+.cm6-theme-catppuccin-frappe .cm-vim-panel input,
+[data-cm6-theme="catppuccin"] .cm-vim-panel input,
+[data-cm6-theme="catppuccin-mocha"] .cm-vim-panel input,
+[data-cm6-theme="catppuccin-macchiato"] .cm-vim-panel input,
+[data-cm6-theme="catppuccin-frappe"] .cm-vim-panel input {
+  background: #1e1e2e;
+  color: #cdd6f4;
+  border-color: #313244;
+}

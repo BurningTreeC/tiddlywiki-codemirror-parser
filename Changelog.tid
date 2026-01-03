@@ -3,6 +3,41 @@ tags:
 
 ! Changelog
 
+!! Version 0.0.3
+
+!!! New Features
+
+* '''Dynamic Keymap Switching''' - Change between default, Vim, and Emacs keymaps on-the-fly without reloading
+** Keymap compartment architecture allows instant switching via Control Panel
+** Engine tracks keymap plugins and reconfigures when settings change
+
+* '''Search & Replace Built-in''' - Search functionality merged into base editor plugin
+** No longer requires separate plugin installation
+** Same TiddlyWiki-styled panel interface
+
+!!! Improvements
+
+* '''Vim Mode'''
+** Fixed Escape key to not close tiddlers when exiting insert/visual mode
+** Added proper block cursor styling for all themes
+** Added vim status panel styling for all themes
+
+* '''Emacs Mode'''
+** Added cursor and selection styling for all themes
+
+* '''Dark Theme Support'''
+** Fixed search panel inputs having white background in dark themes
+** Fixed goto-line panel inputs for dark themes
+** Override CodeMirror's hardcoded `.cm-textfield` and `.cm-button` styles
+
+!!! Infrastructure
+
+* Updated rollup build configuration for search library path
+* Added `build:search` npm script
+* Keymap plugins now use `keymapId` property for engine registration
+
+---
+
 !! Version 0.0.2
 
 !!! New Features
@@ -27,6 +62,10 @@ tags:
 </div>
 ```
 
+* '''Keymap Plugins'''
+** '''Vim Keymap''' - Full Vim emulation with normal, insert, visual, and command modes
+** '''Emacs Keymap''' - Emacs-style keybindings (Ctrl-A, Ctrl-E, Ctrl-K, etc.)
+
 !!! Improvements
 
 * '''Editor Preview Panel''' - Styled to match CodeMirror editor frame (border, border-radius, background)
@@ -36,6 +75,7 @@ tags:
 
 !!! Bug Fixes
 
+* Fixed fenced code blocks not parsing correctly when following list items without a blank line
 * Fixed incomplete filtered transclusion `{{{` consuming formatting delimiters
 * Fixed theme contrast issues for autocomplete selected items in all themes
 * Fixed `cm-tw-mark` visibility (was using background color variable for text)

@@ -250,7 +250,10 @@ exports.prototype._buildSettingsSnapshot = function () {
 		},
 
 		// theme (for plugins that might need it)
-		theme: this._getCurrentTheme()
+		theme: this._getCurrentTheme(),
+
+		// keymap (vim/emacs/default)
+		keymap: wiki.getTiddlerText("$:/config/codemirror-6/keymap", "default")
 	};
 };
 

@@ -338,3 +338,75 @@ tags: $:/tags/Stylesheet
 [data-cm6-theme="kanagawa-lotus"] .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail {
   color: rgba(242, 236, 188, 0.8);
 }
+
+/* ============================================================================
+   Vim Mode - Wave/Dragon (Dark)
+   ============================================================================ */
+
+.cm6-theme-kanagawa .cm-fat-cursor,
+.cm6-theme-kanagawa-wave .cm-fat-cursor,
+.cm6-theme-kanagawa-dragon .cm-fat-cursor,
+[data-cm6-theme="kanagawa"] .cm-fat-cursor,
+[data-cm6-theme="kanagawa-wave"] .cm-fat-cursor,
+[data-cm6-theme="kanagawa-dragon"] .cm-fat-cursor {
+  background: #c8c093 !important;
+}
+
+.cm6-theme-kanagawa .cm-editor:not(.cm-focused) .cm-fat-cursor,
+.cm6-theme-kanagawa-wave .cm-editor:not(.cm-focused) .cm-fat-cursor,
+.cm6-theme-kanagawa-dragon .cm-editor:not(.cm-focused) .cm-fat-cursor,
+[data-cm6-theme="kanagawa"] .cm-editor:not(.cm-focused) .cm-fat-cursor,
+[data-cm6-theme="kanagawa-wave"] .cm-editor:not(.cm-focused) .cm-fat-cursor,
+[data-cm6-theme="kanagawa-dragon"] .cm-editor:not(.cm-focused) .cm-fat-cursor {
+  background: #54546d !important;
+}
+
+.cm6-theme-kanagawa .cm-vim-panel,
+.cm6-theme-kanagawa-wave .cm-vim-panel,
+.cm6-theme-kanagawa-dragon .cm-vim-panel,
+[data-cm6-theme="kanagawa"] .cm-vim-panel,
+[data-cm6-theme="kanagawa-wave"] .cm-vim-panel,
+[data-cm6-theme="kanagawa-dragon"] .cm-vim-panel {
+  background: #16161d;
+  border-color: #2a2a37;
+  color: #dcd7ba;
+}
+
+.cm6-theme-kanagawa .cm-vim-panel input,
+.cm6-theme-kanagawa-wave .cm-vim-panel input,
+.cm6-theme-kanagawa-dragon .cm-vim-panel input,
+[data-cm6-theme="kanagawa"] .cm-vim-panel input,
+[data-cm6-theme="kanagawa-wave"] .cm-vim-panel input,
+[data-cm6-theme="kanagawa-dragon"] .cm-vim-panel input {
+  background: #1f1f28;
+  color: #dcd7ba;
+  border-color: #2a2a37;
+}
+
+/* ============================================================================
+   Vim Mode - Lotus (Light)
+   ============================================================================ */
+
+.cm6-theme-kanagawa-lotus .cm-fat-cursor,
+[data-cm6-theme="kanagawa-lotus"] .cm-fat-cursor {
+  background: #545464 !important;
+}
+
+.cm6-theme-kanagawa-lotus .cm-editor:not(.cm-focused) .cm-fat-cursor,
+[data-cm6-theme="kanagawa-lotus"] .cm-editor:not(.cm-focused) .cm-fat-cursor {
+  background: #c7c0a9 !important;
+}
+
+.cm6-theme-kanagawa-lotus .cm-vim-panel,
+[data-cm6-theme="kanagawa-lotus"] .cm-vim-panel {
+  background: #e5ddb0;
+  border-color: #d5cea3;
+  color: #545464;
+}
+
+.cm6-theme-kanagawa-lotus .cm-vim-panel input,
+[data-cm6-theme="kanagawa-lotus"] .cm-vim-panel input {
+  background: #f2ecbc;
+  color: #545464;
+  border-color: #d5cea3;
+}
