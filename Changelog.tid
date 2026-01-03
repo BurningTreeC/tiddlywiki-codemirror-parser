@@ -27,6 +27,7 @@ tags:
 ** Support for namespaced widgets with dots (e.g., `<$my.widget`)
 ** Widgets defined by `\widget` pragma now appear in completions with "(local)" detail
 ** Widget attribute completion also supports namespaced widgets
+** Syntax highlighting for namespaced widgets (both opening and closing tags)
 
 ---
 

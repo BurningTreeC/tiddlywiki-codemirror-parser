@@ -1108,10 +1108,10 @@ function parseAttributes(attrString: string, offset: number, isWidget: boolean):
   return elements
 }
 
-// Opening tag start: <tagname or <$widget (may not have closing >)
-const openTagStartRe = /^(\s*)<([a-zA-Z$][a-zA-Z0-9\-]*)/
-// Closing tag: </tagname> or </$widget>
-const closeTagRe = /^(\s*)<\/([a-zA-Z$][a-zA-Z0-9\-]*)>/
+// Opening tag start: <tagname or <$widget or <$ns.widget (may not have closing >)
+const openTagStartRe = /^(\s*)<([a-zA-Z$][a-zA-Z0-9\-\.]*)/
+// Closing tag: </tagname> or </$widget> or </$ns.widget>
+const closeTagRe = /^(\s*)<\/([a-zA-Z$][a-zA-Z0-9\-\.]*)>/
 // Self-closing check
 const selfClosingRe = /\/>\s*$/
 
