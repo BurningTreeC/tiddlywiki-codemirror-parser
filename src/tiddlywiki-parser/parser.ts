@@ -23,13 +23,15 @@ import { DefaultInlineParsers } from "./inline-parsers"
 /**
  * TiddlyWiki-specific syntax highlighting tags
  */
-const twTags = {
+export const twTags = {
   twTransclusion: Tag.define(),
   twMacro: Tag.define(),
   twWidget: Tag.define(),
   twFilter: Tag.define(),
   twPragma: Tag.define(),
   twVariable: Tag.define(),
+  twSuperscript: Tag.define(),
+  twSubscript: Tag.define(),
 }
 
 /**
@@ -50,8 +52,8 @@ const defaultStyleTags = styleTags({
   "Italic/...": t.emphasis,
   "Underline/...": t.special(t.emphasis),
   "Strikethrough/...": t.strikethrough,
-  "Superscript/...": t.special(t.content),
-  "Subscript/...": t.special(t.content),
+  "Superscript/...": twTags.twSuperscript,
+  "Subscript/...": twTags.twSubscript,
   "Highlight/...": t.special(t.content),
   "BoldMark ItalicMark UnderlineMark StrikethroughMark SuperscriptMark SubscriptMark HighlightMark": t.processingInstruction,
 

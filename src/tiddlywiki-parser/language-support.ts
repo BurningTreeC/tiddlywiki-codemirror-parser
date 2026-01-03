@@ -14,7 +14,7 @@ import { tags as t } from "@lezer/highlight"
 import { html, htmlCompletionSource } from "@codemirror/lang-html"
 import { parseMixed, SyntaxNodeRef, Input } from "@lezer/common"
 
-import { TiddlyWikiParser } from "./parser"
+import { TiddlyWikiParser, twTags } from "./parser"
 import { TiddlyWikiConfig } from "./core"
 import { tiddlywikiLanguage, mkLang, getCodeParser, headerIndent } from "./language"
 import {
@@ -38,7 +38,9 @@ import {
   removeHeading,
   toggleBulletList,
   toggleNumberedList,
-  insertCodeBlock
+  insertCodeBlock,
+  listMarkerUpgradeHandler,
+  listMarkerDowngrade
 } from "../commands"
 
 // Re-export core language
@@ -109,8 +111,12 @@ export const tiddlywikiHighlightStyle = HighlightStyle.define([
   // Special emphasis (underline)
   { tag: t.special(t.emphasis), class: "cm-tw-underline" },
 
-  // Special content (superscript, subscript, highlight)
-  { tag: t.special(t.content), class: "cm-tw-superscript" },
+  // Superscript and subscript
+  { tag: twTags.twSuperscript, class: "cm-tw-superscript" },
+  { tag: twTags.twSubscript, class: "cm-tw-subscript" },
+
+  // Highlight
+  { tag: t.special(t.content), class: "cm-tw-highlight" },
 ])
 
 /**
@@ -118,7 +124,7 @@ export const tiddlywikiHighlightStyle = HighlightStyle.define([
  */
 export const tiddlywikiKeymap: readonly KeyBinding[] = [
   {key: "Enter", run: insertNewlineContinueMarkup},
-  {key: "Backspace", run: deleteMarkupBackward},
+  {key: "Backspace", run: (view) => listMarkerDowngrade(view) || deleteMarkupBackward(view)},
   {key: "Mod-b", run: toggleBold},
   {key: "Mod-i", run: toggleItalic},
   {key: "Mod-u", run: toggleUnderline},
@@ -266,7 +272,8 @@ function mimeToLanguage(mimeType: string): string {
  */
 function createMixedLanguageWrapper(
   codeLanguages: readonly LanguageDescription[] | ((info: string) => Language | LanguageDescription | null) | undefined,
-  defaultCodeLanguage: Language | undefined
+  defaultCodeLanguage: Language | undefined,
+  tiddlywikiParser?: TiddlyWikiParser
 ) {
   const getParser = getCodeParser(codeLanguages, defaultCodeLanguage)
 
@@ -289,6 +296,20 @@ function createMixedLanguageWrapper(
       if (parent?.name === "TypedBlock") {
         const typeNode = parent.getChild("TypedBlockType")
         const typeName = typeNode ? input.read(typeNode.from, typeNode.to) : ""
+
+        // Handle text/vnd.tiddlywiki - parse content as TiddlyWiki wikitext
+        if (typeName === "text/vnd.tiddlywiki" || typeName === "text/x-tiddlywiki") {
+          if (tiddlywikiParser) {
+            return { parser: tiddlywikiParser }
+          }
+        }
+
+        // Handle text/plain - no syntax highlighting (return null to keep CodeText)
+        if (typeName === "text/plain") {
+          return null
+        }
+
+        // For other types, try to find a matching language parser
         const langName = mimeToLanguage(typeName)
         if (langName) {
           const parser = getParser(langName)
@@ -370,6 +391,8 @@ export function tiddlywiki(config: TiddlyWikiLanguageConfig = {}): LanguageSuppo
       activateOnTyping: true,
     }),
     keymap.of(completionKeymap),
+    // Input handler for upgrading list markers (e.g., "* " + "*" → "** ")
+    listMarkerUpgradeHandler,
   ]
 
   // Handle default code language
@@ -381,14 +404,24 @@ export function tiddlywiki(config: TiddlyWikiLanguageConfig = {}): LanguageSuppo
     defaultCode = defaultCodeLanguage
   }
 
-  // Add mixed language parsing for code blocks
-  if (codeLanguages || defaultCode) {
-    const wrap = createMixedLanguageWrapper(
-      codeLanguages,
-      defaultCode
-    )
-    parserExtensions.push({ wrap })
+  // Include support extensions for code languages (enables autocompletion in nested code blocks)
+  if (codeLanguages && Array.isArray(codeLanguages)) {
+    for (const langDesc of codeLanguages) {
+      if (langDesc.support) {
+        // Language already loaded - include its support extensions
+        support.push(langDesc.support.support)
+      }
+    }
   }
+
+  // Add mixed language parsing for code blocks
+  // Always enable for text/vnd.tiddlywiki support in typed blocks
+  const wrap = createMixedLanguageWrapper(
+    codeLanguages,
+    defaultCode,
+    parser  // Pass the TiddlyWiki parser for nested wikitext in typed blocks
+  )
+  parserExtensions.push({ wrap })
 
   // Add keymap if requested
   if (addKeymap && tiddlywikiKeymap.length > 0) {

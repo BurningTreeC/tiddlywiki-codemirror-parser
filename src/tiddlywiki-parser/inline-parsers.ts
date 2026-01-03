@@ -1343,7 +1343,7 @@ function parseInlineAttributes(cx: InlineContext, attrString: string, offset: nu
 }
 
 // ============================================================================
-// Widget Parser (<$widget/>)
+// Widget Parser (<$widget>content</$widget> or <$widget/>)
 // ============================================================================
 
 const widgetStartRe = /^<(\$[a-zA-Z0-9\-\.]+)/
@@ -1365,7 +1365,7 @@ export const Widget: InlineParser = {
     const tagResult = findTagEnd(text.slice(afterName))
     if (!tagResult) return -1
 
-    const end = pos + afterName + tagResult.end
+    const openTagEnd = pos + afterName + tagResult.end
     const attrString = text.slice(afterName, afterName + tagResult.end - (tagResult.selfClose ? 2 : 1))
 
     const children: Element[] = [
@@ -1380,16 +1380,49 @@ export const Widget: InlineParser = {
     }
 
     if (tagResult.selfClose) {
-      children.push(cx.elt(Type.SelfClosingMarker, end - 2, end - 1))
+      children.push(cx.elt(Type.SelfClosingMarker, openTagEnd - 2, openTagEnd - 1))
+      children.push(cx.elt(Type.TagMark, openTagEnd - 1, openTagEnd)) // >
+      return cx.addElement(cx.elt(Type.InlineWidget, pos, openTagEnd, children))
     }
-    children.push(cx.elt(Type.TagMark, end - 1, end)) // >
 
-    return cx.addElement(cx.elt(Type.InlineWidget, pos, end, children))
+    children.push(cx.elt(Type.TagMark, openTagEnd - 1, openTagEnd)) // >
+
+    // Look for closing tag </$name>
+    const closeTagPattern = `</${name}>`
+    const restOfText = text.slice(afterName + tagResult.end)
+    const closeTagIndex = restOfText.indexOf(closeTagPattern)
+
+    if (closeTagIndex === -1) {
+      // No closing tag found - just return the opening tag
+      return cx.addElement(cx.elt(Type.InlineWidget, pos, openTagEnd, children))
+    }
+
+    // Parse content between opening and closing tags
+    const contentStart = openTagEnd
+    const contentEnd = openTagEnd + closeTagIndex
+    const contentText = cx.slice(contentStart, contentEnd)
+
+    if (contentText.length > 0) {
+      const contentElements = cx.parser.parseInline(contentText, contentStart)
+      children.push(...contentElements)
+    }
+
+    // Add closing tag elements
+    const closeTagStart = contentEnd
+    const closeTagEnd = closeTagStart + closeTagPattern.length
+    const closeTagChildren: Element[] = [
+      cx.elt(Type.TagMark, closeTagStart, closeTagStart + 2), // </
+      cx.elt(Type.WidgetName, closeTagStart + 2, closeTagEnd - 1),
+      cx.elt(Type.TagMark, closeTagEnd - 1, closeTagEnd) // >
+    ]
+    children.push(cx.elt(Type.WidgetEnd, closeTagStart, closeTagEnd, closeTagChildren))
+
+    return cx.addElement(cx.elt(Type.InlineWidget, pos, closeTagEnd, children))
   }
 }
 
 // ============================================================================
-// HTML Tag Parser (<tag/>)
+// HTML Tag Parser (<tag>content</tag> or <tag/>)
 // ============================================================================
 
 const htmlTagStartRe = /^<([a-zA-Z][a-zA-Z0-9\-]*)/
@@ -1412,7 +1445,7 @@ export const HTMLTag: InlineParser = {
     const tagResult = findTagEnd(text.slice(afterName))
     if (!tagResult) return -1
 
-    const end = pos + afterName + tagResult.end
+    const openTagEnd = pos + afterName + tagResult.end
     const attrString = text.slice(afterName, afterName + tagResult.end - (tagResult.selfClose ? 2 : 1))
 
     const children: Element[] = [
@@ -1427,11 +1460,44 @@ export const HTMLTag: InlineParser = {
     }
 
     if (tagResult.selfClose) {
-      children.push(cx.elt(Type.SelfClosingMarker, end - 2, end - 1))
+      children.push(cx.elt(Type.SelfClosingMarker, openTagEnd - 2, openTagEnd - 1))
+      children.push(cx.elt(Type.TagMark, openTagEnd - 1, openTagEnd)) // >
+      return cx.addElement(cx.elt(Type.HTMLTag, pos, openTagEnd, children))
     }
-    children.push(cx.elt(Type.TagMark, end - 1, end)) // >
 
-    return cx.addElement(cx.elt(Type.HTMLTag, pos, end, children))
+    children.push(cx.elt(Type.TagMark, openTagEnd - 1, openTagEnd)) // >
+
+    // Look for closing tag </name>
+    const closeTagPattern = `</${name}>`
+    const restOfText = text.slice(afterName + tagResult.end)
+    const closeTagIndex = restOfText.indexOf(closeTagPattern)
+
+    if (closeTagIndex === -1) {
+      // No closing tag found - just return the opening tag
+      return cx.addElement(cx.elt(Type.HTMLTag, pos, openTagEnd, children))
+    }
+
+    // Parse content between opening and closing tags
+    const contentStart = openTagEnd
+    const contentEnd = openTagEnd + closeTagIndex
+    const contentText = cx.slice(contentStart, contentEnd)
+
+    if (contentText.length > 0) {
+      const contentElements = cx.parser.parseInline(contentText, contentStart)
+      children.push(...contentElements)
+    }
+
+    // Add closing tag elements
+    const closeTagStart = contentEnd
+    const closeTagEnd = closeTagStart + closeTagPattern.length
+    const closeTagChildren: Element[] = [
+      cx.elt(Type.TagMark, closeTagStart, closeTagStart + 2), // </
+      cx.elt(Type.TagName, closeTagStart + 2, closeTagEnd - 1),
+      cx.elt(Type.TagMark, closeTagEnd - 1, closeTagEnd) // >
+    ]
+    children.push(cx.elt(Type.HTMLEndTag, closeTagStart, closeTagEnd, closeTagChildren))
+
+    return cx.addElement(cx.elt(Type.HTMLTag, pos, closeTagEnd, children))
   }
 }
 

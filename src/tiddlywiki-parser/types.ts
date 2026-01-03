@@ -65,6 +65,7 @@ export enum Type {
   CodeMark,             // The ``` markers
   CodeInfo,             // Language identifier
   CodeText,             // Code content
+  PlainText,            // Plain text content (no highlighting)
 
   // Typed blocks
   TypedBlock,

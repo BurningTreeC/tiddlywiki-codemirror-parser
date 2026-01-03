@@ -14,3 +14,9 @@ The indent size affects the visual width of tabs and the number of spaces when u
 <$checkbox tiddler="$:/config/codemirror-6/bracketMatching" field="text" checked="yes" unchecked="no" default="yes"> Highlight matching brackets</$checkbox>
 
 <$checkbox tiddler="$:/config/codemirror-6/closeBrackets" field="text" checked="yes" unchecked="no" default="yes"> Auto-close brackets and quotes</$checkbox>
+
+! Code Folding
+
+<$checkbox tiddler="$:/config/codemirror-6/foldGutter" field="text" checked="yes" unchecked="no" default="yes"> Show fold gutter</$checkbox>
+
+Allows folding code blocks, widgets, headings, and other block elements. Use Ctrl+Shift+[ to fold and Ctrl+Shift+] to unfold.

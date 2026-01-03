@@ -72,21 +72,20 @@ function hasWindowTimers() {
 // Focus Navigation (Ctrl+. / Ctrl+Shift+.)
 // ============================================================================
 
-var FOCUSABLE_SELECTOR = [
-	'a[href]',
-	'button:not([disabled])',
+// Only input-type elements for focus navigation (not buttons/links)
+var INPUT_SELECTOR = [
 	'textarea:not([disabled])',
-	'input:not([disabled])',
+	'input:not([disabled]):not([type="button"]):not([type="submit"]):not([type="reset"])',
 	'select:not([disabled])',
-	'[tabindex]:not([tabindex="-1"])'
+	'[contenteditable="true"]'
 ].join(', ');
 
 /**
- * Get all visible focusable elements in document order
+ * Get all visible input elements in document order
  */
-function getFocusableElements() {
+function getInputElements() {
 	return Array.prototype.slice.call(
-		document.querySelectorAll(FOCUSABLE_SELECTOR)
+		document.querySelectorAll(INPUT_SELECTOR)
 	).filter(function(el) {
 		// Filter out hidden elements
 		return el.offsetParent !== null;
@@ -94,20 +93,20 @@ function getFocusableElements() {
 }
 
 /**
- * Focus the next focusable element after the editor
+ * Focus the next input element after the editor
  */
 function focusNextElement(view) {
-	var elements = getFocusableElements();
+	var elements = getInputElements();
 	var editorDOM = view.dom;
-	
-	// Find the last focusable element inside the editor
+
+	// Find the last input element inside the editor
 	var editorIndex = -1;
 	for (var i = 0; i < elements.length; i++) {
 		if (editorDOM.contains(elements[i]) || elements[i] === editorDOM) {
 			editorIndex = i;
 		}
 	}
-	
+
 	// Focus the next element after the editor
 	if (editorIndex >= 0 && editorIndex < elements.length - 1) {
 		elements[editorIndex + 1].focus();
@@ -115,18 +114,18 @@ function focusNextElement(view) {
 		// Wrap around to first element
 		elements[0].focus();
 	}
-	
+
 	return true;
 }
 
 /**
- * Focus the previous focusable element before the editor
+ * Focus the previous input element before the editor
  */
 function focusPrevElement(view) {
-	var elements = getFocusableElements();
+	var elements = getInputElements();
 	var editorDOM = view.dom;
-	
-	// Find the first focusable element inside the editor
+
+	// Find the first input element inside the editor
 	var editorIndex = -1;
 	for (var i = 0; i < elements.length; i++) {
 		if (editorDOM.contains(elements[i]) || elements[i] === editorDOM) {
@@ -134,7 +133,7 @@ function focusPrevElement(view) {
 			break;
 		}
 	}
-	
+
 	// Focus the previous element before the editor
 	if (editorIndex > 0) {
 		elements[editorIndex - 1].focus();
@@ -142,7 +141,7 @@ function focusPrevElement(view) {
 		// Wrap around to last element
 		elements[elements.length - 1].focus();
 	}
-	
+
 	return true;
 }
 

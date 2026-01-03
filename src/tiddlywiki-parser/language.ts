@@ -44,11 +44,11 @@ function isList(type: NodeType): boolean {
 }
 
 /**
- * Check if a node type is a block element
+ * Check if a node type is a block element that can be folded
  */
 function isBlock(type: NodeType): boolean {
-  // Check common block types
-  return /^(Paragraph|Heading\d|BulletList|OrderedList|DefinitionList|BlockQuote|Table|FencedCode|TypedBlock|Widget|HTMLBlock|TransclusionBlock|FilteredTransclusionBlock|MacroCallBlock|CommentBlock|HorizontalRule)$/.test(type.name)
+  // Check common block types - includes all foldable TiddlyWiki elements
+  return /^(Paragraph|Heading\d|BulletList|OrderedList|DefinitionList|BlockQuote|Table|FencedCode|TypedBlock|Widget|HTMLBlock|TransclusionBlock|FilteredTransclusionBlock|MacroCallBlock|CommentBlock|HorizontalRule|ConditionalBlock|MacroDefinition|ProcedureDefinition|FunctionDefinition|WidgetDefinition|StyledBlock)$/.test(type.name)
 }
 
 /**
@@ -129,9 +129,15 @@ function containerIndent(context: TreeIndentContext): number | null {
         return baseIndent
       }
       // Check for opening widget/HTML tag - indent content
-      if (/<[$a-zA-Z][^>]*>\s*$/.test(lineText) && !/<\//.test(lineText)) {
+      // But NOT self-closing tags (ending with />)
+      if (/<[$a-zA-Z][^>]*>\s*$/.test(lineText) && !/<\//.test(lineText) && !/\/>\s*$/.test(lineText)) {
         if (DEBUG_INDENT) console.log(`  -> ${baseIndent + context.unit} (cursor after opening tag)`)
         return baseIndent + context.unit
+      }
+      // Check for self-closing tags - stay at same indent
+      if (/\/>\s*$/.test(lineText)) {
+        if (DEBUG_INDENT) console.log(`  -> ${baseIndent} (cursor after self-closing tag)`)
+        return baseIndent
       }
       // Check for closing widget/HTML tag - stay at same indent
       if (/<\/[$a-zA-Z][^>]*>\s*$/.test(lineText)) {
@@ -182,15 +188,156 @@ function containerIndent(context: TreeIndentContext): number | null {
  * the same instance at runtime as the one used for lookups.
  * It's configured in mkLang() instead.
  */
+/**
+ * Check if a node type is a pragma definition (macro, procedure, function, widget)
+ */
+function isPragmaDefinition(name: string): boolean {
+  return /^(MacroDefinition|ProcedureDefinition|FunctionDefinition|WidgetDefinition)$/.test(name)
+}
+
 const configured = baseParser.configure({
   props: [
-    // Folding support
+    // Folding support for TiddlyWiki5 syntax
     foldNodeProp.add(type => {
-      // Don't fold document, headings (they use section folding), or lists
+      // Don't fold document, headings (they use section folding via headerIndent), or lists
       if (!isBlock(type) || type.name === "Document" || isHeading(type) != null || isList(type)) {
         return undefined
       }
-      // Fold from end of first line to end of block
+
+      // Paragraph - don't fold single paragraphs
+      if (type.name === "Paragraph") {
+        return undefined
+      }
+
+      // Pragma definitions (\define, \procedure, \function, \widget)
+      // Fold from end of first line to before \end
+      if (isPragmaDefinition(type.name)) {
+        return (tree, state) => {
+          const firstLineEnd = state.doc.lineAt(tree.from).to
+          // Find PragmaEnd child to fold up to (but not including) it
+          let endNode = tree.lastChild
+          if (endNode && endNode.name === "PragmaEnd") {
+            // Fold to start of \end line
+            const endLine = state.doc.lineAt(endNode.from)
+            return { from: firstLineEnd, to: endLine.from > firstLineEnd ? endLine.from - 1 : tree.to }
+          }
+          return { from: firstLineEnd, to: tree.to }
+        }
+      }
+
+      // Widgets and HTML blocks - fold content between tags
+      if (type.name === "Widget" || type.name === "HTMLBlock") {
+        return (tree, state) => {
+          const firstLineEnd = state.doc.lineAt(tree.from).to
+          // Find closing tag to fold up to (but not including) it
+          const closeTag = type.name === "Widget" ? tree.getChild("WidgetEnd") : tree.getChild("HTMLEndTag")
+          if (closeTag) {
+            // Fold to start of closing tag line
+            const closeLine = state.doc.lineAt(closeTag.from)
+            if (closeLine.from > firstLineEnd) {
+              return { from: firstLineEnd, to: closeLine.from - 1 }
+            }
+          }
+          return { from: firstLineEnd, to: tree.to }
+        }
+      }
+
+      // Conditional blocks (<%if%>...<%endif%>)
+      if (type.name === "ConditionalBlock") {
+        return (tree, state) => {
+          const firstLineEnd = state.doc.lineAt(tree.from).to
+          // Find the last ConditionalMark (<%endif%>) to fold up to
+          let lastMark = tree.lastChild
+          while (lastMark && lastMark.name !== "ConditionalMark") {
+            lastMark = lastMark.prevSibling
+          }
+          if (lastMark) {
+            const endLine = state.doc.lineAt(lastMark.from)
+            if (endLine.from > firstLineEnd) {
+              return { from: firstLineEnd, to: endLine.from - 1 }
+            }
+          }
+          return { from: firstLineEnd, to: tree.to }
+        }
+      }
+
+      // Block quotes - fold from opening <<< to closing <<<
+      if (type.name === "BlockQuote") {
+        return (tree, state) => {
+          const firstLineEnd = state.doc.lineAt(tree.from).to
+          // Find closing QuoteMark
+          let lastQuote = tree.lastChild
+          while (lastQuote && lastQuote.name !== "QuoteMark") {
+            lastQuote = lastQuote.prevSibling
+          }
+          if (lastQuote && lastQuote.from > tree.from) {
+            const closeLine = state.doc.lineAt(lastQuote.from)
+            if (closeLine.from > firstLineEnd) {
+              return { from: firstLineEnd, to: closeLine.from - 1 }
+            }
+          }
+          return { from: firstLineEnd, to: tree.to }
+        }
+      }
+
+      // Fenced code blocks - fold from ``` to closing ```
+      if (type.name === "FencedCode") {
+        return (tree, state) => {
+          const firstLineEnd = state.doc.lineAt(tree.from).to
+          // Find closing CodeMark
+          let closeMark = tree.lastChild
+          while (closeMark && closeMark.name !== "CodeMark") {
+            closeMark = closeMark.prevSibling
+          }
+          if (closeMark && closeMark.from > tree.from) {
+            const closeLine = state.doc.lineAt(closeMark.from)
+            if (closeLine.from > firstLineEnd) {
+              return { from: firstLineEnd, to: closeLine.from - 1 }
+            }
+          }
+          return { from: firstLineEnd, to: tree.to }
+        }
+      }
+
+      // Typed blocks ($$$) - fold from $$$ to closing $$$
+      if (type.name === "TypedBlock") {
+        return (tree, state) => {
+          const firstLineEnd = state.doc.lineAt(tree.from).to
+          // Find closing TypedBlockMark
+          let closeMark = tree.lastChild
+          while (closeMark && closeMark.name !== "TypedBlockMark") {
+            closeMark = closeMark.prevSibling
+          }
+          if (closeMark && closeMark.from > tree.from) {
+            const closeLine = state.doc.lineAt(closeMark.from)
+            if (closeLine.from > firstLineEnd) {
+              return { from: firstLineEnd, to: closeLine.from - 1 }
+            }
+          }
+          return { from: firstLineEnd, to: tree.to }
+        }
+      }
+
+      // Tables - fold from header row to end
+      if (type.name === "Table") {
+        return (tree, state) => {
+          const firstLineEnd = state.doc.lineAt(tree.from).to
+          // For tables, we want to keep at least the header visible
+          // Fold from after first row to end of table
+          const header = tree.getChild("TableHeader") || tree.getChild("TableRow")
+          if (header) {
+            const headerEnd = state.doc.lineAt(header.to).to
+            if (headerEnd < tree.to) {
+              return { from: headerEnd, to: tree.to }
+            }
+          }
+          return { from: firstLineEnd, to: tree.to }
+        }
+      }
+
+      // Default: fold from end of first line to end of block
+      // This handles: TransclusionBlock, FilteredTransclusionBlock, MacroCallBlock,
+      // CommentBlock, StyledBlock, etc.
       return (tree, state) => ({
         from: state.doc.lineAt(tree.from).to,
         to: tree.to
@@ -223,10 +370,17 @@ const configured = baseParser.configure({
             return baseIndent + context.unit
           }
           // Check for widget/HTML opening tags: <$widget> or <div>
-          if (/<[$a-zA-Z][^>]*>\s*$/.test(lineText) && !/<\//.test(lineText)) {
+          // But NOT self-closing tags (ending with />)
+          if (/<[$a-zA-Z][^>]*>\s*$/.test(lineText) && !/<\//.test(lineText) && !/\/>\s*$/.test(lineText)) {
             const baseIndent = getLineIndent(context, cursorLine.from)
             if (DEBUG_INDENT) console.log(`  -> ${baseIndent + context.unit} (line is opening tag)`)
             return baseIndent + context.unit
+          }
+          // Check for self-closing tags - stay at same indent
+          if (/\/>\s*$/.test(lineText)) {
+            const baseIndent = getLineIndent(context, cursorLine.from)
+            if (DEBUG_INDENT) console.log(`  -> ${baseIndent} (line is self-closing tag)`)
+            return baseIndent
           }
           // Check for <%endif%> - return same level (base indent of the line)
           if (/<%\s*endif\s*%>\s*$/.test(lineText)) {

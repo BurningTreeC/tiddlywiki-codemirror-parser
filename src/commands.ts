@@ -4,7 +4,8 @@
  * TiddlyWiki-spezifische Editor-Befehle für CodeMirror 6.
  */
 
-import {StateCommand, Text, EditorState, EditorSelection, ChangeSpec, countColumn, Line} from "@codemirror/state"
+import {StateCommand, Text, EditorState, EditorSelection, ChangeSpec, countColumn, Line, Extension} from "@codemirror/state"
+import {EditorView} from "@codemirror/view"
 import {syntaxTree, indentUnit, getIndentation} from "@codemirror/language"
 import {SyntaxNode, Tree} from "@lezer/common"
 import {tiddlywikiLanguage} from "./tiddlywiki-parser/language"
@@ -617,4 +618,113 @@ export const insertHorizontalRule: StateCommand = ({state, dispatch}) => {
     userEvent: "input"
   }))
   return true
+}
+
+// ============================================================================
+// List Marker Upgrade Input Handler
+// ============================================================================
+
+/**
+ * Input handler that upgrades list markers when typing the marker character
+ * right after an existing marker. For example:
+ * - "* " + typing "*" → "** "
+ * - "# " + typing "#" → "## "
+ * - "** " + typing "*" → "*** "
+ */
+export const listMarkerUpgradeHandler: Extension = EditorView.inputHandler.of(
+  (view: EditorView, from: number, to: number, text: string) => {
+    // Only handle single character input of * or #
+    if (text !== "*" && text !== "#") return false
+
+    // Only handle when cursor is at a single position (not a selection)
+    if (from !== to) return false
+
+    let state = view.state
+    let line = state.doc.lineAt(from)
+    let lineStart = line.from
+    let cursorOffset = from - lineStart
+
+    // Check if cursor is right after a list marker + space
+    let lineText = line.text
+
+    // Match bullet list: starts with *+ followed by space, cursor right after space
+    if (text === "*") {
+      let match = /^(\*+) $/.exec(lineText.slice(0, cursorOffset))
+      if (match) {
+        // Upgrade: replace "* " with "** " (add one more *)
+        let newMarker = match[1] + "* "
+        view.dispatch({
+          changes: {from: lineStart, to: from, insert: newMarker},
+          selection: {anchor: lineStart + newMarker.length}
+        })
+        return true
+      }
+    }
+
+    // Match ordered list: starts with #+ followed by space, cursor right after space
+    if (text === "#") {
+      let match = /^(#+) $/.exec(lineText.slice(0, cursorOffset))
+      if (match) {
+        // Upgrade: replace "# " with "## " (add one more #)
+        let newMarker = match[1] + "# "
+        view.dispatch({
+          changes: {from: lineStart, to: from, insert: newMarker},
+          selection: {anchor: lineStart + newMarker.length}
+        })
+        return true
+      }
+    }
+
+    return false
+  }
+)
+
+// ============================================================================
+// List Marker Downgrade Command (for Backspace)
+// ============================================================================
+
+/**
+ * Command that downgrades list markers when pressing backspace at the end
+ * of a multi-level marker. For example:
+ * - "** " + backspace → "* "
+ * - "### " + backspace → "## "
+ */
+export const listMarkerDowngrade: StateCommand = ({state, dispatch}) => {
+  let {doc, selection} = state
+  let range = selection.main
+
+  // Only handle empty selection (cursor, not selection)
+  if (!range.empty) return false
+
+  let pos = range.from
+  let line = doc.lineAt(pos)
+  let cursorOffset = pos - line.from
+  let lineText = line.text
+
+  // Check if cursor is right after a multi-level list marker + space
+  // Match bullet list: **+ followed by space, cursor right after space
+  let bulletMatch = /^(\*{2,}) $/.exec(lineText.slice(0, cursorOffset))
+  if (bulletMatch && cursorOffset === bulletMatch[0].length) {
+    // Downgrade: replace "** " with "* " (remove one *)
+    let newMarker = bulletMatch[1].slice(0, -1) + " "
+    dispatch(state.update({
+      changes: {from: line.from, to: pos, insert: newMarker},
+      selection: EditorSelection.cursor(line.from + newMarker.length)
+    }))
+    return true
+  }
+
+  // Match ordered list: ##+ followed by space, cursor right after space
+  let orderedMatch = /^(#{2,}) $/.exec(lineText.slice(0, cursorOffset))
+  if (orderedMatch && cursorOffset === orderedMatch[0].length) {
+    // Downgrade: replace "## " with "# " (remove one #)
+    let newMarker = orderedMatch[1].slice(0, -1) + " "
+    dispatch(state.update({
+      changes: {from: line.from, to: pos, insert: newMarker},
+      selection: EditorSelection.cursor(line.from + newMarker.length)
+    }))
+    return true
+  }
+
+  return false
 }

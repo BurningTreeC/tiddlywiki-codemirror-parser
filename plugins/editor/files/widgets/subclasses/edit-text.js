@@ -230,6 +230,9 @@ exports.prototype._buildSettingsSnapshot = function () {
 		bracketMatching: boolConfig(wiki, "$:/config/codemirror-6/bracketMatching"),
 		closeBrackets: boolConfig(wiki, "$:/config/codemirror-6/closeBrackets"),
 
+		// code folding
+		foldGutter: boolConfig(wiki, "$:/config/codemirror-6/foldGutter") && body,
+
 		// indentation
 		indent: {
 			indentUnit: wiki.getTiddlerText("$:/config/codemirror-6/indentUnit"),

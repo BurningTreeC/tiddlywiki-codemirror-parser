@@ -49,7 +49,7 @@ export class BlockContext implements PartialParse {
   private buf = new Buffer()
   private stack: CompositeBlock[] = []
   private _line!: Line
-  private atEnd = false
+  private _atEnd = false
   private dontInject = new Set<Tree>()
 
   // Fragment parsing (for incremental updates)
@@ -63,6 +63,9 @@ export class BlockContext implements PartialParse {
 
   stoppedAt: number | null = null
 
+  /** Whether we've reached the end of the document */
+  get atEnd(): boolean { return this._atEnd }
+
   /**
    * Save the current parsing position for potential restore
    */
@@ -71,7 +74,7 @@ export class BlockContext implements PartialParse {
       lineStart: this.lineStart,
       lineEnd: this.lineEnd,
       lineText: this._line.text,
-      atEnd: this.atEnd
+      atEnd: this._atEnd
     }
   }
 
@@ -82,7 +85,7 @@ export class BlockContext implements PartialParse {
     this.lineStart = saved.lineStart
     this.lineEnd = saved.lineEnd
     this._line.reset(saved.lineText)
-    this.atEnd = saved.atEnd
+    this._atEnd = saved.atEnd
   }
 
   constructor(
@@ -143,7 +146,7 @@ export class BlockContext implements PartialParse {
   nextLine(): boolean {
     this.lineStart = this.lineEnd
     if (this.lineStart >= this.to) {
-      this.atEnd = true
+      this._atEnd = true
       return false
     }
     this.lineEnd = this.findLineEnd()
@@ -324,9 +327,10 @@ export class BlockContext implements PartialParse {
 
       // Check if this line starts with a pragma
       if (lineText.charCodeAt(this._line.skipSpace(0)) !== Ch.Backslash) {
-        // This line doesn't start with \
-        // Check if there's a pragma line coming up - if so, skip this orphan content
-        if (this.hasUpcomingPragma()) {
+        // This line doesn't start with \ - it's not a pragma
+        // Don't skip lines that look like valid block syntax (code fences, etc.)
+        // Only skip truly orphan content from malformed pragma bodies
+        if (!this.looksLikeBlockStart(trimmed) && this.hasUpcomingPragma()) {
           // Skip this non-pragma line and continue looking for pragmas
           this.nextLine()
           continue
@@ -365,6 +369,38 @@ export class BlockContext implements PartialParse {
   }
 
   /**
+   * Check if a line looks like the start of a valid block element
+   * (not orphan content from a malformed pragma)
+   */
+  private looksLikeBlockStart(text: string): boolean {
+    if (!text) return false
+    const ch = text.charCodeAt(0)
+    // Code fence ```
+    if (text.startsWith("```")) return true
+    // Typed block $$$
+    if (text.startsWith("$$$")) return true
+    // Heading !
+    if (ch === Ch.Exclamation) return true
+    // List items * # ; :
+    if (ch === Ch.Asterisk || ch === Ch.Hash || ch === Ch.Semicolon || ch === Ch.Colon) return true
+    // Block quote <<<
+    if (text.startsWith("<<<")) return true
+    // Horizontal rule ---
+    if (/^-{3,}\s*$/.test(text)) return true
+    // Table |
+    if (ch === Ch.Pipe) return true
+    // HTML/Widget <
+    if (ch === Ch.LessThan) return true
+    // Transclusion {{
+    if (text.startsWith("{{")) return true
+    // Macro call <<
+    if (text.startsWith("<<")) return true
+    // Conditional <%
+    if (text.startsWith("<%")) return true
+    return false
+  }
+
+  /**
    * Check if there's a pragma line anywhere in the remaining document
    * Used to be forgiving about malformed pragma bodies
    */
@@ -375,6 +411,22 @@ export class BlockContext implements PartialParse {
     while (this.nextLine()) {
       const text = this._line.text.trim()
       if (text === "") continue  // Skip blank lines
+
+      // Skip over code blocks - don't look for pragmas inside them
+      if (text.startsWith("```")) {
+        // Found a code fence, skip until closing fence
+        while (this.nextLine()) {
+          if (this._line.text.trim().startsWith("```")) break
+        }
+        continue
+      }
+      if (text.startsWith("$$$")) {
+        // Found a typed block, skip until closing marker
+        while (this.nextLine()) {
+          if (this._line.text.trim().startsWith("$$$")) break
+        }
+        continue
+      }
 
       // Check if this line starts with backslash (potential pragma)
       if (text.charCodeAt(0) === Ch.Backslash) {

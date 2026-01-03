@@ -138,13 +138,16 @@ export const TypedBlock: BlockParser = {
       children.push(elt(Type.TypedBlockType, start + 3, start + 3 + typeName.length))
     }
 
+    // Use PlainText for text/plain, CodeText for everything else
+    const contentType = typeName === "text/plain" ? Type.PlainText : Type.CodeText
+
     // Find closing $$$
     let contentStart = cx.lineStart + line.text.length + 1
     let foundEnd = false
 
     while (cx.nextLine()) {
       if (typedEndRe.test(cx.line.text)) {
-        children.push(elt(Type.CodeText, contentStart, cx.lineStart - 1))
+        children.push(elt(contentType, contentStart, cx.lineStart - 1))
         children.push(elt(Type.TypedBlockMark, cx.lineStart, cx.lineStart + 3))
         foundEnd = true
         break
@@ -152,7 +155,7 @@ export const TypedBlock: BlockParser = {
     }
 
     if (!foundEnd) {
-      children.push(elt(Type.CodeText, contentStart, cx.lineStart - 1))
+      children.push(elt(contentType, contentStart, cx.lineStart - 1))
     }
 
     const end = foundEnd ? cx.lineStart + cx.line.text.length : cx.lineStart
@@ -1329,15 +1332,19 @@ export const HTMLBlock: BlockParser = {
             children.push(...(inlineElements as Element[]))
           }
 
-          // Add closing tag element with marks
+          // Add closing tag element with marks - wrapped in WidgetEnd/HTMLEndTag
           const closingTagOpenBracket = openingTagEnd + sameLineClose.index
-          children.push(elt(Type.TagMark, closingTagOpenBracket, closingTagOpenBracket + 1)) // <
-          children.push(elt(Type.TagMark, closingTagOpenBracket + 1, closingTagOpenBracket + 2)) // /
-          const closeTagStart = openingTagEnd + sameLineClose.index + 2 // After </
-          children.push(elt(isWidget ? Type.WidgetName : Type.TagName, closeTagStart, closeTagStart + tagName.length))
-
           const closeTagEnd = openingTagEnd + sameLineClose.index + sameLineClose[0].length
-          children.push(elt(Type.TagMark, closeTagEnd - 1, closeTagEnd)) // >
+
+          const closeTagChildren: Element[] = []
+          closeTagChildren.push(elt(Type.TagMark, closingTagOpenBracket, closingTagOpenBracket + 1)) // <
+          closeTagChildren.push(elt(Type.TagMark, closingTagOpenBracket + 1, closingTagOpenBracket + 2)) // /
+          const closeTagStart = openingTagEnd + sameLineClose.index + 2 // After </
+          closeTagChildren.push(elt(isWidget ? Type.WidgetName : Type.TagName, closeTagStart, closeTagStart + tagName.length))
+          closeTagChildren.push(elt(Type.TagMark, closeTagEnd - 1, closeTagEnd)) // >
+
+          // Wrap in WidgetEnd/HTMLEndTag for proper tree structure (needed for folding)
+          children.push(elt(isWidget ? Type.WidgetEnd : Type.HTMLEndTag, closingTagOpenBracket, closeTagEnd, closeTagChildren))
 
           // Parse any inline content AFTER the closing tag on the same line
           const afterCloseTag = restOfLine.slice(sameLineClose.index + sameLineClose[0].length)
@@ -1392,19 +1399,24 @@ export const HTMLBlock: BlockParser = {
                 children.push(...contentElements)
               }
 
-              // Add closing tag element with marks
+              // Add closing tag element with marks - wrapped in WidgetEnd/HTMLEndTag
               const closeIndent = closeMatch[1].length
               const closingTagOpenBracket = cx.lineStart + closeIndent
-              children.push(elt(Type.TagMark, closingTagOpenBracket, closingTagOpenBracket + 1)) // <
-              children.push(elt(Type.TagMark, closingTagOpenBracket + 1, closingTagOpenBracket + 2)) // /
+              const closeTagFullEnd = closeMatch[0].length
+              const closingTagEndPos = cx.lineStart + closeTagFullEnd
+
+              const closeTagChildren: Element[] = []
+              closeTagChildren.push(elt(Type.TagMark, closingTagOpenBracket, closingTagOpenBracket + 1)) // <
+              closeTagChildren.push(elt(Type.TagMark, closingTagOpenBracket + 1, closingTagOpenBracket + 2)) // /
               const closeTagStart = cx.lineStart + closeIndent + 2
-              children.push(elt(isWidget ? Type.WidgetName : Type.TagName, closeTagStart, closeTagStart + tagName.length))
+              closeTagChildren.push(elt(isWidget ? Type.WidgetName : Type.TagName, closeTagStart, closeTagStart + tagName.length))
+              closeTagChildren.push(elt(Type.TagMark, closingTagEndPos - 1, closingTagEndPos)) // >
+
+              // Wrap in WidgetEnd/HTMLEndTag for proper tree structure (needed for folding)
+              children.push(elt(isWidget ? Type.WidgetEnd : Type.HTMLEndTag, closingTagOpenBracket, closingTagEndPos, closeTagChildren))
 
               // Parse any inline content AFTER the closing tag on the same line
               // Note: closeMatch[0].length already includes the indent
-              const closeTagFullEnd = closeMatch[0].length
-              const closingTagEndPos = cx.lineStart + closeTagFullEnd
-              children.push(elt(Type.TagMark, closingTagEndPos - 1, closingTagEndPos)) // >
               const afterCloseTag = lineText.slice(closeTagFullEnd)
               if (afterCloseTag.trim()) {
                 const afterCloseStart = cx.lineStart + closeTagFullEnd
