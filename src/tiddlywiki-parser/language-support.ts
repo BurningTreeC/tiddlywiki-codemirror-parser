@@ -490,7 +490,7 @@ export function tiddlywiki(config: TiddlyWikiLanguageConfig = {}): LanguageSuppo
 
   if (completeMacros) {
     support.push(lang.data.of({
-      autocomplete: macroCompletion(getMacroNames)
+      autocomplete: macroCompletion(getMacroNames, getFunctionNames, getVariableNames)
     }))
     // Add macro parameter completion if getMacroParams is provided
     if (getMacroParams) {
@@ -1088,8 +1088,13 @@ const filterOperatorMeta: Record<string, {
 
 /**
  * Macro completion source (<<macro or [<variable> or [operator<variable> in filters)
+ * Includes macros, procedures, functions, and variables since all are callable via <<name>>
  */
-function macroCompletion(getMacroNames?: () => string[]) {
+function macroCompletion(
+  getMacroNames?: () => string[],
+  getFunctionNames?: () => string[],
+  getVariableNames?: () => string[]
+) {
   return (context: CompletionContext): CompletionResult | null => {
     const { state, pos } = context
     const textBefore = state.sliceDoc(pos - 50, pos)
@@ -1113,18 +1118,90 @@ function macroCompletion(getMacroNames?: () => string[]) {
       node = node.parent!
     }
 
-    // Use provided macro names, fall back to common macros if empty
+    // Collect all callable names with their types
+    const seen = new Set<string>()
+    const allNames: { name: string, detail: string, type: 'function' | 'variable' | 'keyword' }[] = []
+
+    // Get local definitions from current document
+    const docText = state.doc.toString()
+    const localDefs = extractLocalDefinitions(docText)
+
+    // Add local macros
+    for (const name of localDefs.macros) {
+      if (!seen.has(name)) {
+        seen.add(name)
+        allNames.push({ name, detail: "macro (local)", type: "function" })
+      }
+    }
+
+    // Add local procedures
+    for (const name of localDefs.procedures) {
+      if (!seen.has(name)) {
+        seen.add(name)
+        allNames.push({ name, detail: "procedure (local)", type: "function" })
+      }
+    }
+
+    // Add local functions
+    for (const name of localDefs.functions) {
+      if (!seen.has(name)) {
+        seen.add(name)
+        allNames.push({ name, detail: "function (local)", type: "function" })
+      }
+    }
+
+    // Add local widget variables ($set, $let, etc.)
+    for (const name of localDefs.widgetVars) {
+      if (!seen.has(name)) {
+        seen.add(name)
+        allNames.push({ name, detail: "variable (local)", type: "variable" })
+      }
+    }
+
+    // Add built-in variables
+    for (const name of localDefs.builtIns) {
+      if (!seen.has(name)) {
+        seen.add(name)
+        allNames.push({ name, detail: "variable (built-in)", type: "keyword" })
+      }
+    }
+
+    // Add global macros
     const customMacros = getMacroNames ? getMacroNames() : []
     const macros = customMacros.length > 0 ? customMacros : commonMacros
+    for (const name of macros) {
+      if (!seen.has(name)) {
+        seen.add(name)
+        allNames.push({ name, detail: "macro", type: "function" })
+      }
+    }
+
+    // Add global functions
+    const functions = getFunctionNames ? getFunctionNames() : []
+    for (const name of functions) {
+      if (!seen.has(name)) {
+        seen.add(name)
+        allNames.push({ name, detail: "function", type: "function" })
+      }
+    }
+
+    // Add global variables
+    const variables = getVariableNames ? getVariableNames() : []
+    for (const name of variables) {
+      if (!seen.has(name)) {
+        seen.add(name)
+        allNames.push({ name, detail: "variable", type: "variable" })
+      }
+    }
 
     if (filterVarMatch) {
       // Variable reference in filter: [<variable>] or [operator<variable>]
       // Close with >], cursor positioned after > but before ]
       const prefix = m[0].slice(0, m[0].lastIndexOf('<') + 1)
-      const options: Completion[] = macros.map(name => ({
+      const options: Completion[] = allNames.map(({ name, detail, type }) => ({
         label: prefix + name,
-        type: "function",
-        detail: "variable",
+        type,
+        detail,
         apply: (view, _completion, from, to) => {
           const textAfter = view.state.sliceDoc(to, to + 2)
           const hasClosingAngle = textAfter[0] === ">"
@@ -1159,11 +1236,11 @@ function macroCompletion(getMacroNames?: () => string[]) {
     }
 
     // Regular macro call
-    const options: Completion[] = macros.map(m => ({
-      label: "<<" + m,
-      type: "function",
-      detail: "macro",
-      apply: "<<" + m + ">>"
+    const options: Completion[] = allNames.map(({ name, detail, type }) => ({
+      label: "<<" + name,
+      type,
+      detail,
+      apply: "<<" + name + ">>"
     }))
 
     return {
