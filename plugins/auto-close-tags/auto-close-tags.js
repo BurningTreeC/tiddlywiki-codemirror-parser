@@ -65,6 +65,15 @@ exports.plugin = {
         return false; // Let default handling occur
       }
 
+      // Check if we're inside a macro call (<<macro ...>)
+      // Don't auto-close if this > is closing a macro
+      var lastMacroOpen = textBefore.lastIndexOf("<<");
+      var lastMacroClose = textBefore.lastIndexOf(">>");
+      if (lastMacroOpen > -1 && lastMacroOpen > lastMacroClose) {
+        // We're inside an unclosed macro - don't auto-close
+        return false;
+      }
+
       // Look for an opening tag pattern
       // Match: <tagname or <$widgetname with optional attributes
       var tagMatch = textBefore.match(/<(\$?[a-zA-Z][a-zA-Z0-9\-\.]*)(?:\s[^>]*)?$/);
