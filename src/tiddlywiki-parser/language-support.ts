@@ -20,6 +20,7 @@ import { tiddlywikiLanguage, mkLang, getCodeParser, headerIndent } from "./langu
 import {
   insertNewlineContinueMarkup,
   deleteMarkupBackward,
+  deleteBracketPair,
   toggleBold,
   toggleItalic,
   toggleUnderline,
@@ -40,7 +41,9 @@ import {
   toggleNumberedList,
   insertCodeBlock,
   listMarkerUpgradeHandler,
-  listMarkerDowngrade
+  listMarkerDowngrade,
+  indentList,
+  outdentList
 } from "../commands"
 
 // Re-export core language
@@ -124,7 +127,9 @@ export const tiddlywikiHighlightStyle = HighlightStyle.define([
  */
 export const tiddlywikiKeymap: readonly KeyBinding[] = [
   {key: "Enter", run: insertNewlineContinueMarkup},
-  {key: "Backspace", run: (view) => listMarkerDowngrade(view) || deleteMarkupBackward(view)},
+  {key: "Backspace", run: (view) => deleteBracketPair(view) || listMarkerDowngrade(view) || deleteMarkupBackward(view)},
+  {key: "Tab", run: indentList},
+  {key: "Shift-Tab", run: outdentList},
   {key: "Mod-b", run: toggleBold},
   {key: "Mod-i", run: toggleItalic},
   {key: "Mod-u", run: toggleUnderline},
@@ -616,7 +621,19 @@ function widgetCompletion(getWidgetNames?: () => string[]) {
       label: "<" + w,
       type: "keyword",
       detail: "widget",
-      apply: "<" + w + ">"
+      apply: (view, _completion, from, to) => {
+        const widgetTag = "<" + w
+        // Check if there's already a > after cursor (from auto-close brackets)
+        const textAfter = view.state.sliceDoc(to, to + 1)
+        const hasClosingBracket = textAfter === ">"
+        const insert = hasClosingBracket ? widgetTag : widgetTag + ">"
+        // Position cursor before the >
+        const cursorPos = from + widgetTag.length
+        view.dispatch({
+          changes: { from, to: hasClosingBracket ? to + 1 : to, insert },
+          selection: { anchor: cursorPos }
+        })
+      }
     }))
 
     return {
@@ -684,7 +701,18 @@ function widgetAttributeCompletion(context: CompletionContext): CompletionResult
     label: attr,
     type: "property",
     detail: "widget attr",
-    apply: attr + '="'
+    apply: (view, _completion, from, to) => {
+      // Check if there's already a " after cursor (from auto-close brackets)
+      const textAfter = view.state.sliceDoc(to, to + 1)
+      const hasClosingQuote = textAfter === '"'
+      const insert = hasClosingQuote ? attr + '="' : attr + '=""'
+      // Position cursor between the quotes
+      const cursorPos = from + attr.length + 2
+      view.dispatch({
+        changes: { from, to: hasClosingQuote ? to + 1 : to, insert },
+        selection: { anchor: cursorPos }
+      })
+    }
   }))
 
   return {
@@ -1173,7 +1201,35 @@ function tiddlerCompletion(getTiddlerTitles?: () => string[]) {
       label: prefix + title,
       type: "variable",
       detail,
-      apply: prefix + title + suffix
+      apply: (view, _completion, from, to) => {
+        // Check what's after the cursor to handle auto-close brackets
+        const textAfter = view.state.sliceDoc(to, to + suffix.length)
+        let actualSuffix = suffix
+        let skipChars = 0
+
+        // Check for existing closing brackets
+        if (textAfter === suffix) {
+          // Full suffix already exists
+          actualSuffix = ""
+          skipChars = suffix.length
+        } else if (suffix === "]]" && textAfter.startsWith("]")) {
+          // Partial ]] exists
+          actualSuffix = "]"
+          skipChars = 1
+        } else if (suffix === "}}" && textAfter.startsWith("}")) {
+          // Partial }} exists
+          actualSuffix = "}"
+          skipChars = 1
+        }
+
+        const insert = prefix + title + actualSuffix
+        // Position cursor after the closing brackets
+        const cursorPos = from + insert.length + skipChars
+        view.dispatch({
+          changes: { from, to: to + skipChars, insert },
+          selection: { anchor: cursorPos }
+        })
+      }
     }))
 
     return {
@@ -1185,15 +1241,24 @@ function tiddlerCompletion(getTiddlerTitles?: () => string[]) {
   }
 }
 
-// Cached HTML tag completions
-let _tagCompletions: readonly Completion[] | null = null
-function htmlTagCompletions(): readonly Completion[] {
-  if (_tagCompletions) return _tagCompletions
-  const result = htmlCompletionSource(
-    new CompletionContext(EditorState.create({ extensions: htmlNoMatch }), 0, true)
-  )
-  return _tagCompletions = result ? result.options : []
-}
+// Common HTML tags for completion
+const commonHtmlTags = [
+  "div", "span", "p", "a", "img", "br", "hr",
+  "h1", "h2", "h3", "h4", "h5", "h6",
+  "ul", "ol", "li", "dl", "dt", "dd",
+  "table", "tr", "td", "th", "thead", "tbody", "tfoot",
+  "form", "input", "button", "select", "option", "textarea", "label",
+  "header", "footer", "nav", "main", "section", "article", "aside",
+  "strong", "em", "b", "i", "u", "s", "code", "pre", "blockquote",
+  "iframe", "video", "audio", "source", "canvas", "svg",
+  "script", "style", "link", "meta",
+]
+
+// Self-closing HTML tags (no closing tag needed)
+const selfClosingTags = new Set([
+  "area", "base", "br", "col", "embed", "hr", "img", "input",
+  "link", "meta", "param", "source", "track", "wbr"
+])
 
 /**
  * HTML tag completion source
@@ -1217,10 +1282,29 @@ function htmlTagCompletion(context: CompletionContext): CompletionResult | null 
     node = node.parent!
   }
 
+  const options: Completion[] = commonHtmlTags.map(tag => ({
+    label: "<" + tag,
+    type: "type",
+    detail: selfClosingTags.has(tag) ? "self-closing" : "tag",
+    apply: (view, _completion, from, to) => {
+      const tagText = "<" + tag
+      // Check if there's already a > after cursor (from auto-close brackets)
+      const textAfter = view.state.sliceDoc(to, to + 1)
+      const hasClosingBracket = textAfter === ">"
+      const insert = hasClosingBracket ? tagText : tagText + ">"
+      // Position cursor before the >
+      const cursorPos = from + tagText.length
+      view.dispatch({
+        changes: { from, to: hasClosingBracket ? to + 1 : to, insert },
+        selection: { anchor: cursorPos }
+      })
+    }
+  }))
+
   return {
     from: pos - m[0].length,
     to: pos,
-    options: htmlTagCompletions(),
+    options,
     validFor: /^<[:\-\.\w\u00b7-\uffff]*$/
   }
 }
@@ -1323,7 +1407,26 @@ function htmlAttributeCompletion(context: CompletionContext): CompletionResult |
   const options: Completion[] = allAttrs.map(attr => ({
     label: attr,
     type: "property",
-    apply: attr.endsWith("-") ? attr : attr + '="'
+    apply: (view, _completion, from, to) => {
+      // For data- and aria- prefixes, just insert the prefix
+      if (attr.endsWith("-")) {
+        view.dispatch({
+          changes: { from, to, insert: attr },
+          selection: { anchor: from + attr.length }
+        })
+        return
+      }
+      // Check if there's already a " after cursor (from auto-close brackets)
+      const textAfter = view.state.sliceDoc(to, to + 1)
+      const hasClosingQuote = textAfter === '"'
+      const insert = hasClosingQuote ? attr + '="' : attr + '=""'
+      // Position cursor between the quotes
+      const cursorPos = from + attr.length + 2
+      view.dispatch({
+        changes: { from, to: hasClosingQuote ? to + 1 : to, insert },
+        selection: { anchor: cursorPos }
+      })
+    }
   }))
 
   return {

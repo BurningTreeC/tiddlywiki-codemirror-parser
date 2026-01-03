@@ -374,6 +374,61 @@ export const deleteMarkupBackward: StateCommand = ({state, dispatch}) => {
 }
 
 // ============================================================================
+// Delete Matching Bracket Pair
+// ============================================================================
+
+// Matching bracket pairs: opening -> closing
+const bracketPairs: Record<string, string> = {
+  '"': '"',
+  "'": "'",
+  "`": "`",
+  "(": ")",
+  "[": "]",
+  "{": "}",
+}
+
+/**
+ * Delete matching bracket pair when cursor is between empty brackets.
+ * For example: "" -> (empty), [] -> (empty), () -> (empty)
+ */
+export const deleteBracketPair: StateCommand = ({state, dispatch}) => {
+  let changes: ChangeSpec[] = []
+  let newSelections: {anchor: number}[] = []
+
+  for (let range of state.selection.ranges) {
+    // Only handle empty selections (cursor)
+    if (!range.empty) return false
+
+    const pos = range.from
+    if (pos === 0) return false
+
+    const charBefore = state.doc.sliceString(pos - 1, pos)
+    const charAfter = state.doc.sliceString(pos, pos + 1)
+
+    // Check if we're between matching brackets
+    const expectedClosing = bracketPairs[charBefore]
+    if (expectedClosing && charAfter === expectedClosing) {
+      // Delete both the opening and closing bracket
+      changes.push({from: pos - 1, to: pos + 1})
+      newSelections.push({anchor: pos - 1})
+    } else {
+      // Not between matching brackets
+      return false
+    }
+  }
+
+  if (changes.length === 0) return false
+
+  dispatch(state.update({
+    changes,
+    selection: EditorSelection.create(newSelections.map(s => EditorSelection.cursor(s.anchor))),
+    scrollIntoView: true,
+    userEvent: "delete"
+  }))
+  return true
+}
+
+// ============================================================================
 // Toggle Formatting Commands
 // ============================================================================
 
@@ -727,4 +782,125 @@ export const listMarkerDowngrade: StateCommand = ({state, dispatch}) => {
   }
 
   return false
+}
+
+/**
+ * Indent list item (Tab): increases list nesting level
+ * - "* text" → "** text"
+ * - "# text" → "## text"
+ * Supports multi-line selections - all list lines in selection are indented
+ */
+export const indentList: StateCommand = ({state, dispatch}) => {
+  let {doc, selection} = state
+  let changes: ChangeSpec[] = []
+  let processedLines = new Set<number>()
+  let hasListLine = false
+
+  for (let range of selection.ranges) {
+    // Get all lines covered by this selection range
+    let startLine = doc.lineAt(range.from)
+    let endLine = doc.lineAt(range.to)
+
+    for (let lineNum = startLine.number; lineNum <= endLine.number; lineNum++) {
+      if (processedLines.has(lineNum)) continue
+      processedLines.add(lineNum)
+
+      let line = doc.line(lineNum)
+      let lineText = line.text
+
+      // Match bullet list: *+ followed by space
+      let bulletMatch = /^(\*+)( )/.exec(lineText)
+      if (bulletMatch) {
+        let marker = bulletMatch[1]
+        let insertPos = line.from + marker.length
+        changes.push({from: insertPos, to: insertPos, insert: "*"})
+        hasListLine = true
+        continue
+      }
+
+      // Match ordered list: #+ followed by space
+      let orderedMatch = /^(#+)( )/.exec(lineText)
+      if (orderedMatch) {
+        let marker = orderedMatch[1]
+        let insertPos = line.from + marker.length
+        changes.push({from: insertPos, to: insertPos, insert: "#"})
+        hasListLine = true
+        continue
+      }
+    }
+  }
+
+  if (!hasListLine || changes.length === 0) return false
+
+  // Apply changes and let CodeMirror adjust selection automatically
+  dispatch(state.update({
+    changes,
+    scrollIntoView: true,
+    userEvent: "input"
+  }))
+  return true
+}
+
+/**
+ * Outdent list item (Shift+Tab): decreases list nesting level
+ * - "** text" → "* text"
+ * - "## text" → "# text"
+ * Does nothing if already at level 1
+ * Supports multi-line selections - all list lines in selection are outdented
+ */
+export const outdentList: StateCommand = ({state, dispatch}) => {
+  let {doc, selection} = state
+  let changes: ChangeSpec[] = []
+  let processedLines = new Set<number>()
+  let hasListLine = false
+
+  for (let range of selection.ranges) {
+    // Get all lines covered by this selection range
+    let startLine = doc.lineAt(range.from)
+    let endLine = doc.lineAt(range.to)
+
+    for (let lineNum = startLine.number; lineNum <= endLine.number; lineNum++) {
+      if (processedLines.has(lineNum)) continue
+      processedLines.add(lineNum)
+
+      let line = doc.line(lineNum)
+      let lineText = line.text
+
+      // Match bullet list with 2+ markers: **+ followed by space
+      let bulletMatch = /^(\*{2,})( )/.exec(lineText)
+      if (bulletMatch) {
+        let marker = bulletMatch[1]
+        let deletePos = line.from + marker.length - 1
+        changes.push({from: deletePos, to: deletePos + 1})
+        hasListLine = true
+        continue
+      }
+
+      // Match ordered list with 2+ markers: ##+ followed by space
+      let orderedMatch = /^(#{2,})( )/.exec(lineText)
+      if (orderedMatch) {
+        let marker = orderedMatch[1]
+        let deletePos = line.from + marker.length - 1
+        changes.push({from: deletePos, to: deletePos + 1})
+        hasListLine = true
+        continue
+      }
+
+      // Check if it's a level-1 list (still counts as having a list line)
+      if (/^(\*|#) /.test(lineText)) {
+        hasListLine = true
+      }
+    }
+  }
+
+  if (!hasListLine) return false
+  if (changes.length === 0) return true // Already at level 1, consume the key
+
+  // Apply changes and let CodeMirror adjust selection automatically
+  dispatch(state.update({
+    changes,
+    scrollIntoView: true,
+    userEvent: "input"
+  }))
+  return true
 }

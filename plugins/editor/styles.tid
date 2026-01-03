@@ -87,8 +87,16 @@ tags: $:/tags/Stylesheet
     color: <<colour background>> !important;
 }
 
+.cm-tooltip-autocomplete li[aria-selected] .cm-completionLabel,
+.cm-tooltip-autocomplete li[aria-selected] .cm-completionDetail,
+.cm-tooltip-autocomplete li[aria-selected] .cm-completionIcon,
+.cm-tooltip-autocomplete li[aria-selected] .cm-completionMatchedText {
+    color: <<colour background>> !important;
+}
+
 .cm-tooltip-autocomplete .cm-completionLabel {
     flex: 1;
+    color: <<colour foreground>>;
 }
 
 .cm-tooltip-autocomplete .cm-completionDetail {
@@ -102,6 +110,7 @@ tags: $:/tags/Stylesheet
     width: 1.5em;
     text-align: center;
     padding-right: 4px;
+    color: <<colour muted-foreground>>;
 }
 
 /* ============================================================================
