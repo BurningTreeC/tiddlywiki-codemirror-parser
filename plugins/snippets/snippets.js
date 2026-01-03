@@ -5,7 +5,7 @@ module-type: codemirror6-plugin
 
 User-configurable snippets plugin.
 Allows users to define custom snippets via tiddlers tagged with $:/tags/CodeMirror/Snippet.
-Merges with built-in snippets from tw-snippets (user snippets can override built-in).
+Uses CodeMirror's built-in snippet system for proper Tab navigation between placeholders.
 
 \*/
 
@@ -22,90 +22,25 @@ var _snippetCache = null;
 var _cacheTime = 0;
 var CACHE_TTL = 5000; // 5 seconds
 
+// CodeMirror snippet function (loaded in init)
+var _snippetFn = null;
+var _core = null;
+
 
 // ============================================================================
-// Snippet Template Parser
+// Template Conversion
 // ============================================================================
 
 /**
- * Parse a snippet template and extract tab stops
- * Supports: ${1}, ${1:default}, $0, ${1|choice1,choice2|}
+ * Convert user template format to CodeMirror snippet format
+ * - $0 becomes ${} (final cursor position)
+ * - ${1}, ${2}, ${1:default} stay the same
+ * - Escape ${ that shouldn't be placeholders
  */
-function parseTemplate(template) {
-	var result = {
-		text: "",
-		tabStops: [],
-		finalStop: null
-	};
-
-	var regex = /\$\{(\d+)(?::([^}]*))?\}|\$(\d+)/g;
-	var lastIndex = 0;
-	var match;
-
-	while ((match = regex.exec(template)) !== null) {
-		// Add text before this tab stop
-		result.text += template.slice(lastIndex, match.index);
-
-		var stopNum = parseInt(match[1] || match[3], 10);
-		var defaultText = match[2] || "";
-
-		// Handle choice syntax: ${1|opt1,opt2,opt3|}
-		if (defaultText.startsWith("|") && defaultText.endsWith("|")) {
-			var choices = defaultText.slice(1, -1).split(",");
-			defaultText = choices[0] || "";
-		}
-
-		var tabStop = {
-			index: stopNum,
-			from: result.text.length,
-			to: result.text.length + defaultText.length,
-			default: defaultText
-		};
-
-		if (stopNum === 0) {
-			result.finalStop = tabStop;
-		} else {
-			result.tabStops.push(tabStop);
-		}
-
-		result.text += defaultText;
-		lastIndex = regex.lastIndex;
-	}
-
-	// Add remaining text
-	result.text += template.slice(lastIndex);
-
-	// Sort tab stops by index
-	result.tabStops.sort(function(a, b) { return a.index - b.index; });
-
-	return result;
-}
-
-/**
- * Insert snippet at current position
- */
-function insertSnippet(view, snippet) {
-	var state = view.state;
-	var sel = state.selection.main;
-	var from = sel.from;
-	var to = sel.to;
-
-	var parsed = parseTemplate(snippet.template);
-
-	// Insert the text
-	view.dispatch({
-		changes: { from: from, to: to, insert: parsed.text },
-		selection: parsed.tabStops.length > 0 ? {
-			anchor: from + parsed.tabStops[0].from,
-			head: from + parsed.tabStops[0].to
-		} : parsed.finalStop ? {
-			anchor: from + parsed.finalStop.from
-		} : {
-			anchor: from + parsed.text.length
-		}
-	});
-
-	return true;
+function convertTemplate(template) {
+	// Replace $0 with ${} (CodeMirror's final position syntax)
+	// But be careful not to replace ${0} or ${0:...}
+	return template.replace(/\$0(?!\d|{)/g, "${}");
 }
 
 // ============================================================================
@@ -212,18 +147,34 @@ function snippetCompletions(context) {
 			return s.trigger.toLowerCase().startsWith(prefix);
 		})
 		.map(function(s) {
+			var cmTemplate = convertTemplate(s.template);
+			var applyFn;
+
+			// Use CodeMirror's snippet function if available for Tab navigation
+			if (_snippetFn) {
+				applyFn = _snippetFn(cmTemplate);
+			} else {
+				// Fallback: simple text insertion without Tab navigation
+				applyFn = function(view, completion, from, to) {
+					// Strip placeholder syntax for plain insertion
+					var plainText = s.template
+						.replace(/\$\{(\d+)(?::([^}]*))?\}/g, function(m, num, def) {
+							return def || "";
+						})
+						.replace(/\$0/g, "");
+					view.dispatch({
+						changes: { from: from, to: to, insert: plainText }
+					});
+				};
+			}
+
 			return {
 				label: s.trigger,
 				displayLabel: s.label,
 				type: "snippet",
 				detail: s.detail,
 				boost: (s.priority || 0) + 2,
-				apply: function(view, completion, from, to) {
-					view.dispatch({
-						changes: { from: from, to: to, insert: "" }
-					});
-					insertSnippet(view, s);
-				}
+				apply: applyFn
 			};
 		});
 
@@ -247,6 +198,11 @@ exports.plugin = {
 
 	init: function(cm6Core) {
 		this._core = cm6Core;
+		_core = cm6Core;
+		// Load the snippet function from CodeMirror's autocomplete module
+		if (cm6Core.autocomplete && cm6Core.autocomplete.snippet) {
+			_snippetFn = cm6Core.autocomplete.snippet;
+		}
 	},
 
 	getExtensions: function(context) {
@@ -309,7 +265,27 @@ exports.plugin = {
 				var snippets = getSnippets(contentType);
 				for (var i = 0; i < snippets.length; i++) {
 					if (snippets[i].trigger === trigger) {
-						return insertSnippet(this.view, snippets[i]);
+						var s = snippets[i];
+						var view = this.view;
+						var from = view.state.selection.main.from;
+						var to = view.state.selection.main.to;
+
+						if (_snippetFn) {
+							// Use CodeMirror's snippet system
+							var cmTemplate = convertTemplate(s.template);
+							_snippetFn(cmTemplate)(view, null, from, to);
+						} else {
+							// Fallback: plain text insertion
+							var plainText = s.template
+								.replace(/\$\{(\d+)(?::([^}]*))?\}/g, function(m, num, def) {
+									return def || "";
+								})
+								.replace(/\$0/g, "");
+							view.dispatch({
+								changes: { from: from, to: to, insert: plainText }
+							});
+						}
+						return true;
 					}
 				}
 				return false;
@@ -325,5 +301,4 @@ exports.plugin = {
 exports.loadUserSnippets = loadUserSnippets;
 exports.getSnippets = getSnippets;
 exports.clearCache = clearCache;
-exports.parseTemplate = parseTemplate;
-exports.insertSnippet = insertSnippet;
+exports.convertTemplate = convertTemplate;
