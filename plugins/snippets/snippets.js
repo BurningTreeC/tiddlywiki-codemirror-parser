@@ -148,25 +148,36 @@ function snippetCompletions(context) {
 		})
 		.map(function(s) {
 			var cmTemplate = convertTemplate(s.template);
-			var applyFn;
 
-			// Use CodeMirror's snippet function if available for Tab navigation
-			if (_snippetFn) {
-				applyFn = _snippetFn(cmTemplate);
-			} else {
-				// Fallback: simple text insertion without Tab navigation
-				applyFn = function(view, completion, from, to) {
-					// Strip placeholder syntax for plain insertion
+			// Apply function that handles all selections
+			var applyFn = function(view, completion, from, to) {
+				var selections = view.state.selection.ranges;
+				var mainIndex = view.state.selection.mainIndex;
+				var triggerLen = word.text.length;
+
+				if (_snippetFn && selections.length === 1) {
+					// Single cursor: use CodeMirror's snippet system for Tab navigation
+					_snippetFn(cmTemplate)(view, completion, from, to);
+				} else {
+					// Multi-cursor: insert plain text at all cursors
 					var plainText = s.template
 						.replace(/\$\{(\d+)(?::([^}]*))?\}/g, function(m, num, def) {
 							return def || "";
 						})
 						.replace(/\$0/g, "");
-					view.dispatch({
-						changes: { from: from, to: to, insert: plainText }
+
+					// Build changes for all selections
+					var changes = selections.map(function(range, idx) {
+						if (idx === mainIndex) {
+							return { from: from, to: to, insert: plainText };
+						} else {
+							// Other cursors: replace the same trigger length
+							return { from: range.from - triggerLen, to: range.from, insert: plainText };
+						}
 					});
-				};
-			}
+					view.dispatch({ changes: changes });
+				}
+			};
 
 			return {
 				label: s.trigger,
@@ -257,7 +268,7 @@ exports.plugin = {
 			},
 
 			/**
-			 * Insert a snippet by trigger
+			 * Insert a snippet by trigger (handles all selections)
 			 */
 			insertUserSnippet: function(trigger, contentType) {
 				if (this._destroyed) return false;
@@ -267,23 +278,23 @@ exports.plugin = {
 					if (snippets[i].trigger === trigger) {
 						var s = snippets[i];
 						var view = this.view;
-						var from = view.state.selection.main.from;
-						var to = view.state.selection.main.to;
+						var selections = view.state.selection.ranges;
 
-						if (_snippetFn) {
-							// Use CodeMirror's snippet system
+						if (_snippetFn && selections.length === 1) {
+							// Use CodeMirror's snippet system for single cursor
 							var cmTemplate = convertTemplate(s.template);
-							_snippetFn(cmTemplate)(view, null, from, to);
+							_snippetFn(cmTemplate)(view, null, selections[0].from, selections[0].to);
 						} else {
-							// Fallback: plain text insertion
+							// Multi-cursor or fallback: plain text insertion at all cursors
 							var plainText = s.template
 								.replace(/\$\{(\d+)(?::([^}]*))?\}/g, function(m, num, def) {
 									return def || "";
 								})
 								.replace(/\$0/g, "");
-							view.dispatch({
-								changes: { from: from, to: to, insert: plainText }
+							var changes = selections.map(function(range) {
+								return { from: range.from, to: range.to, insert: plainText };
 							});
+							view.dispatch({ changes: changes });
 						}
 						return true;
 					}
