@@ -14,7 +14,7 @@ tags: $:/tags/Stylesheet
 }
 
 .tc-editor-codemirror6 .cm-editor {
-    height: 100%;
+    height: {{{ [[$:/config/TextEditor/EditorHeight/Mode]get[text]match[fixed]then{$:/config/TextEditor/EditorHeight/Height}] :else[[100%]] }}};
     font-family: {{$:/themes/tiddlywiki/vanilla/settings/editorfontfamily}};
     font-size: {{$:/themes/tiddlywiki/vanilla/metrics/bodyfontsize}};
 }

@@ -1097,8 +1097,8 @@ function tiddlerCompletion(getTiddlerTitles?: () => string[]) {
 
     // Match [[ for links (also works inside filters for literal titles)
     const linkMatch = /\[\[[^\]|]*$/.exec(textBefore)
-    // Match {{ for transclusions
-    const transcludeMatch = /\{\{[^{}|]*$/.exec(textBefore)
+    // Match {{ for transclusions (but not {{{ which is filtered transclusion)
+    const transcludeMatch = /(?<!\{)\{\{[^{}|]*$/.exec(textBefore)
     // Match [img[ or [img ...attrs[ for images (source is inside the last [)
     const imageMatch = /\[img(?:\s+[^\[]*)?\[[^\]|]*$/.exec(textBefore)
     // Match [operator[ or ]operator[ or }operator[ or >operator[ for filter operand (tiddler title)
@@ -1216,7 +1216,7 @@ function tiddlerCompletion(getTiddlerTitles?: () => string[]) {
     } else if (transcludeMatch) {
       prefix = "{{"
       suffix = "}}"
-      validFor = /^\{\{[^{}|]*$/
+      validFor = /^(?<!\{)\{\{[^{}|]*$/
       detail = "tiddler"
     } else {
       // Image match - we need to find where the [ starts for the source
