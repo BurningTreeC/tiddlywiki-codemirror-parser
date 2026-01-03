@@ -8,8 +8,6 @@ node_modules/
 CLAUDE.md
 
 # Reference repos
-markdown/
-lang-markdown/
 TiddlyWiki5/
 
 # Library build outputs (npm)
