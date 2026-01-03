@@ -39,20 +39,27 @@ class Context {
 
   marker(doc: Text, add: number): string {
     let marker = ""
-    if (this.node.name == "OrderedList") {
-      // Find current number and increment
-      let text = doc.sliceString(this.item!.from, this.item!.from + 10)
-      let match = /^(#+)/.exec(text)
-      if (match) marker = match[1]
-    } else if (this.node.name == "BulletList") {
-      let text = doc.sliceString(this.item!.from, this.item!.from + 10)
-      let match = /^(\*+)/.exec(text)
+    if (this.node.name == "OrderedList" || this.node.name == "BulletList") {
+      // Match any combination of list markers: *, #, or mixed like *#, #*, **#, etc.
+      let text = doc.sliceString(this.item!.from, this.item!.from + 20)
+      let match = /^([*#]+)/.exec(text)
       if (match) marker = match[1]
     } else if (this.node.name == "DefinitionList") {
-      marker = this.type
-    } else if (this.node.name == "BlockQuote" && this.type == ">") {
-      // Single-line > quote style
-      marker = ">"
+      // Definition lists can have mixed markers
+      let text = doc.sliceString(this.item!.from, this.item!.from + 20)
+      let match = /^([;:*#]+)/.exec(text)
+      if (match) marker = match[1]
+      else marker = this.type
+    } else if (this.node.name == "BlockQuote") {
+      // Block quotes can have mixed markers with > or <<<
+      if (this.type == "<<<") {
+        marker = "<<<" // Multi-line block quote doesn't continue
+      } else {
+        let text = doc.sliceString(this.item!.from, this.item!.from + 20)
+        let match = /^([>*#]+)/.exec(text)
+        if (match) marker = match[1]
+        else marker = ">"
+      }
     }
     return this.spaceBefore + marker + this.spaceAfter
   }
@@ -79,37 +86,35 @@ function getContext(node: SyntaxNode, doc: Text): Context[] {
     let line = doc.lineAt(node.from)
     let startPos = node.from - line.from
     let match: RegExpExecArray | null
-    
+
     if (node.name == "BlockQuote") {
       match = /^(\s*)(<<<)(\s*)/.exec(line.text.slice(startPos))
       if (match) {
         context.push(new Context(node, startPos, startPos + match[0].length, match[1], match[3], "<<<", null))
       }
-    } else if (node.name == "ListItem" && node.parent?.name == "OrderedList") {
-      match = /^(\s*)(#+)(\s+)/.exec(line.text.slice(startPos))
-      if (match) {
-        context.push(new Context(node.parent!, startPos, startPos + match[0].length, match[1], match[3], match[2], node))
-      }
-    } else if (node.name == "ListItem" && node.parent?.name == "BulletList") {
-      match = /^(\s*)(\*+)(\s+)/.exec(line.text.slice(startPos))
+    } else if (node.name == "ListItem" && (node.parent?.name == "OrderedList" || node.parent?.name == "BulletList")) {
+      // Match any combination of list markers: *, #, or mixed like *#, #*, **#, etc.
+      match = /^(\s*)([*#]+)(\s+)/.exec(line.text.slice(startPos))
       if (match) {
         context.push(new Context(node.parent!, startPos, startPos + match[0].length, match[1], match[3], match[2], node))
       }
     } else if (node.name == "ListItem" && node.parent?.name == "BlockQuote") {
-      // Single-line > quote style
-      match = /^(\s*)(>)(\s*)/.exec(line.text.slice(startPos))
+      // Single-line > quote style - can also be mixed with * or #
+      match = /^(\s*)([>*#]+)(\s*)/.exec(line.text.slice(startPos))
       if (match) {
-        context.push(new Context(node.parent!, startPos, startPos + match[0].length, match[1], match[3], ">", node))
+        context.push(new Context(node.parent!, startPos, startPos + match[0].length, match[1], match[3], match[2], node))
       }
     } else if (node.name == "DefinitionTerm") {
-      match = /^(\s*)(;)(\s*)/.exec(line.text.slice(startPos))
+      // Definition terms can be mixed with other markers
+      match = /^(\s*)([;:*#]+)(\s*)/.exec(line.text.slice(startPos))
       if (match) {
-        context.push(new Context(node.parent!, startPos, startPos + match[0].length, match[1], match[3], ";", node))
+        context.push(new Context(node.parent!, startPos, startPos + match[0].length, match[1], match[3], match[2], node))
       }
     } else if (node.name == "DefinitionDescription") {
-      match = /^(\s*)(:)(\s*)/.exec(line.text.slice(startPos))
+      // Definition descriptions can be mixed with other markers
+      match = /^(\s*)([;:*#]+)(\s*)/.exec(line.text.slice(startPos))
       if (match) {
-        context.push(new Context(node.parent!, startPos, startPos + match[0].length, match[1], match[3], ":", node))
+        context.push(new Context(node.parent!, startPos, startPos + match[0].length, match[1], match[3], match[2], node))
       }
     }
   }
@@ -713,11 +718,15 @@ export const insertHorizontalRule: StateCommand = ({state, dispatch}) => {
  * - "* " + typing "*" → "** "
  * - "# " + typing "#" → "## "
  * - "** " + typing "*" → "*** "
+ * - "*# " + typing "#" → "*## " (mixed markers)
+ * - "*# " + typing "*" → "*#* " (mixed markers)
+ * - "> " + typing ">" → ">> "
+ * - "; " + typing ":" → ";: " (definition list)
  */
 export const listMarkerUpgradeHandler: Extension = EditorView.inputHandler.of(
   (view: EditorView, from: number, to: number, text: string) => {
-    // Only handle single character input of * or #
-    if (text !== "*" && text !== "#") return false
+    // Only handle single character input of list marker characters
+    if (!/^[*#>;:]$/.test(text)) return false
 
     // Only handle when cursor is at a single position (not a selection)
     if (from !== to) return false
@@ -730,32 +739,16 @@ export const listMarkerUpgradeHandler: Extension = EditorView.inputHandler.of(
     // Check if cursor is right after a list marker + space
     let lineText = line.text
 
-    // Match bullet list: starts with *+ followed by space, cursor right after space
-    if (text === "*") {
-      let match = /^(\*+) $/.exec(lineText.slice(0, cursorOffset))
-      if (match) {
-        // Upgrade: replace "* " with "** " (add one more *)
-        let newMarker = match[1] + "* "
-        view.dispatch({
-          changes: {from: lineStart, to: from, insert: newMarker},
-          selection: {anchor: lineStart + newMarker.length}
-        })
-        return true
-      }
-    }
-
-    // Match ordered list: starts with #+ followed by space, cursor right after space
-    if (text === "#") {
-      let match = /^(#+) $/.exec(lineText.slice(0, cursorOffset))
-      if (match) {
-        // Upgrade: replace "# " with "## " (add one more #)
-        let newMarker = match[1] + "# "
-        view.dispatch({
-          changes: {from: lineStart, to: from, insert: newMarker},
-          selection: {anchor: lineStart + newMarker.length}
-        })
-        return true
-      }
+    // Match any list marker combination followed by space, cursor right after space
+    let match = /^([*#>;:]+) $/.exec(lineText.slice(0, cursorOffset))
+    if (match) {
+      // Upgrade: add the typed marker character to the existing markers
+      let newMarker = match[1] + text + " "
+      view.dispatch({
+        changes: {from: lineStart, to: from, insert: newMarker},
+        selection: {anchor: lineStart + newMarker.length}
+      })
+      return true
     }
 
     return false
@@ -813,9 +806,11 @@ export const listMarkerDowngrade: StateCommand = ({state, dispatch}) => {
 }
 
 /**
- * Indent list item (Tab): increases list nesting level
+ * Indent list item (Tab): increases list nesting level by duplicating the last marker
  * - "* text" → "** text"
  * - "# text" → "## text"
+ * - "*# text" → "*## text" (duplicates the last marker #)
+ * - "*#* text" → "*#** text" (duplicates the last marker *)
  * Supports multi-line selections - all list lines in selection are indented
  */
 export const indentList: StateCommand = ({state, dispatch}) => {
@@ -836,22 +831,24 @@ export const indentList: StateCommand = ({state, dispatch}) => {
       let line = doc.line(lineNum)
       let lineText = line.text
 
-      // Match bullet list: *+ followed by space
-      let bulletMatch = /^(\*+)( )/.exec(lineText)
-      if (bulletMatch) {
-        let marker = bulletMatch[1]
+      // Match any list marker combination: *#>; followed by space
+      let listMatch = /^([*#>]+)( )/.exec(lineText)
+      if (listMatch) {
+        let marker = listMatch[1]
+        let lastChar = marker[marker.length - 1]
         let insertPos = line.from + marker.length
-        changes.push({from: insertPos, to: insertPos, insert: "*"})
+        changes.push({from: insertPos, to: insertPos, insert: lastChar})
         hasListLine = true
         continue
       }
 
-      // Match ordered list: #+ followed by space
-      let orderedMatch = /^(#+)( )/.exec(lineText)
-      if (orderedMatch) {
-        let marker = orderedMatch[1]
+      // Match definition list: ;/: markers followed by optional space
+      let defMatch = /^([;:]+)(\s*)/.exec(lineText)
+      if (defMatch) {
+        let marker = defMatch[1]
+        let lastChar = marker[marker.length - 1]
         let insertPos = line.from + marker.length
-        changes.push({from: insertPos, to: insertPos, insert: "#"})
+        changes.push({from: insertPos, to: insertPos, insert: lastChar})
         hasListLine = true
         continue
       }
@@ -870,9 +867,11 @@ export const indentList: StateCommand = ({state, dispatch}) => {
 }
 
 /**
- * Outdent list item (Shift+Tab): decreases list nesting level
+ * Outdent list item (Shift+Tab): decreases list nesting level by removing the last marker
  * - "** text" → "* text"
  * - "## text" → "# text"
+ * - "*## text" → "*# text" (removes the last marker #)
+ * - "*#** text" → "*#* text" (removes the last marker *)
  * Does nothing if already at level 1
  * Supports multi-line selections - all list lines in selection are outdented
  */
@@ -894,20 +893,20 @@ export const outdentList: StateCommand = ({state, dispatch}) => {
       let line = doc.line(lineNum)
       let lineText = line.text
 
-      // Match bullet list with 2+ markers: **+ followed by space
-      let bulletMatch = /^(\*{2,})( )/.exec(lineText)
-      if (bulletMatch) {
-        let marker = bulletMatch[1]
+      // Match any list marker combination with 2+ characters: *#> followed by space
+      let listMatch = /^([*#>]{2,})( )/.exec(lineText)
+      if (listMatch) {
+        let marker = listMatch[1]
         let deletePos = line.from + marker.length - 1
         changes.push({from: deletePos, to: deletePos + 1})
         hasListLine = true
         continue
       }
 
-      // Match ordered list with 2+ markers: ##+ followed by space
-      let orderedMatch = /^(#{2,})( )/.exec(lineText)
-      if (orderedMatch) {
-        let marker = orderedMatch[1]
+      // Match definition list with 2+ markers: ;/: followed by optional space
+      let defMatch = /^([;:]{2,})(\s*)/.exec(lineText)
+      if (defMatch) {
+        let marker = defMatch[1]
         let deletePos = line.from + marker.length - 1
         changes.push({from: deletePos, to: deletePos + 1})
         hasListLine = true
@@ -915,7 +914,7 @@ export const outdentList: StateCommand = ({state, dispatch}) => {
       }
 
       // Check if it's a level-1 list (still counts as having a list line)
-      if (/^(\*|#) /.test(lineText)) {
+      if (/^([*#>]|[;:]) /.test(lineText)) {
         hasListLine = true
       }
     }
