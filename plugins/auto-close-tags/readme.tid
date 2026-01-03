@@ -14,6 +14,8 @@ This plugin automatically inserts closing tags when you type the `>` character a
 ** Self-closing action widgets (`<$action-sendmessage>`, etc.)
 * '''Close tag completion''': When you type `</`, the nearest unclosed tag name is inserted
 
+''Note:'' When using autocompletion to insert a tag or widget (e.g., selecting `<$list` from the completion menu), the closing tag is also inserted and the cursor is positioned between the opening and closing tags: `<$list>|</$list>`
+
 !! Configuration
 
 The feature can be enabled or disabled via the CodeMirror settings panel.
