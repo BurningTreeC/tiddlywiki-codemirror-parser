@@ -1,6 +1,8 @@
 title: $:/plugins/BurningTreeC/tiddlywiki-codemirror/styles
 tags: $:/tags/Stylesheet
 
+\rules only filteredtranscludeinline transcludeinline macrodef macrocallinline macrocallblock conditional
+
 /* CodeMirror 6 Editor - Base Styles */
 
 /* ============================================================================
@@ -50,10 +52,12 @@ tags: $:/tags/Stylesheet
 
 /* Selection */
 .tc-editor-codemirror6 .cm-selectionBackground {
+    background: HighLight;
     background: <<colour selection-background>> !important;
 }
 
 .tc-editor-codemirror6 .cm-focused .cm-selectionBackground {
+    background: HighLight;
     background: <<colour selection-background>> !important;
 }
 
@@ -345,6 +349,49 @@ tags: $:/tags/Stylesheet
 .cm-nonmatchingBracket {
     background: rgba(200, 100, 100, 0.3);
     outline: 1px solid rgba(200, 100, 100, 0.5);
+}
+
+/* ============================================================================
+   Multi-cursor Support
+   ============================================================================ */
+
+.tc-editor-codemirror6 .cm-cursorLayer {
+    pointer-events: none;
+    z-index: 200;
+}
+
+.tc-editor-codemirror6 .cm-cursor {
+    position: absolute;
+    border-left: 2px solid <<colour foreground>>;
+    margin-left: -1px;
+    pointer-events: none;
+}
+
+.tc-editor-codemirror6 .cm-cursor-secondary {
+    border-left-color: <<colour primary>>;
+}
+
+/* Secondary selection background (for multi-cursor selections) */
+.tc-editor-codemirror6 .cm-selectionBackground-secondary {
+    background: HighLight;
+    background: <<colour selection-background>>;
+    color: <<colour tiddler-background>>;
+}
+
+@keyframes cm-blink {
+    0% {}
+    50% { border-color: transparent; }
+    100% {}
+}
+
+@keyframes cm-blink2 {
+    0% {}
+    50% { border-color: transparent; }
+    100% {}
+}
+
+.tc-editor-codemirror6 .cm-cursorLayer {
+    animation: cm-blink {{$:/config/codemirror-6/cursorBlinkRate}}ms infinite;
 }
 
 /* ============================================================================

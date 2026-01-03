@@ -253,7 +253,10 @@ exports.prototype._buildSettingsSnapshot = function () {
 		theme: this._getCurrentTheme(),
 
 		// keymap (vim/emacs/default)
-		keymap: wiki.getTiddlerText("$:/config/codemirror-6/keymap", "default")
+		keymap: wiki.getTiddlerText("$:/config/codemirror-6/keymap", "default"),
+
+		// multi-cursor support
+		multiCursor: boolConfig(wiki, "$:/config/codemirror-6/multiCursor")
 	};
 };
 
