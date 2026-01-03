@@ -2,21 +2,56 @@ title: $:/plugins/BurningTreeC/tiddlywiki-codemirror/ui/ControlPanel/Editor
 tags: $:/tags/ControlPanel/Settings/CodeMirror
 caption: Editor
 
-! Indentation
+\define render-checkbox(configTiddler)
+<div class="cm-config-item">
+<$checkbox tiddler=<<__configTiddler__>> field="text" checked="yes" unchecked="no" default={{{ [<__configTiddler__>get[default]] }}}> <$transclude tiddler=<<__configTiddler__>> field="caption"/></$checkbox>
+<$list filter="[<__configTiddler__>has[description]]" variable="ignore">
+<div class="cm-config-description"><em><$transclude tiddler=<<__configTiddler__>> field="description"/></em></div>
+</$list>
+</div>
+\end
 
-|!Indent with |<$select tiddler="$:/config/codemirror-6/indentUnit" default="tab"><option value="tab">Tabs</option><option value="spaces">Spaces</option></$select> |
-|!Indent size |<$select tiddler="$:/config/codemirror-6/indentUnitMultiplier" default="4"><option value="2">2</option><option value="4">4</option><option value="8">8</option></$select> |
+\define render-select(configTiddler)
+<div class="cm-config-item">
+<label><$transclude tiddler=<<__configTiddler__>> field="caption"/></label>
+<$select tiddler=<<__configTiddler__>> default={{{ [<__configTiddler__>get[default]] }}}><$list filter="[<__configTiddler__>get[config-options]jsonindexes[]]" variable="idx"><$set name="optionData" filter="[<__configTiddler__>get[config-options]jsonextract<idx>]"><option value={{{ [<optionData>jsonget[value]] }}}><$text text={{{ [<optionData>jsonget[label]] }}}/></option></$set></$list></$select>
+<$list filter="[<__configTiddler__>has[description]]" variable="ignore">
+<div class="cm-config-description"><em><$transclude tiddler=<<__configTiddler__>> field="description"/></em></div>
+</$list>
+</div>
+\end
 
-The indent size affects the visual width of tabs and the number of spaces when using space indentation.
+\define render-input(configTiddler)
+<div class="cm-config-item">
+<label><$transclude tiddler=<<__configTiddler__>> field="caption"/></label>
+<$edit-text tiddler=<<__configTiddler__>> tag="input" default={{{ [<__configTiddler__>get[default]] }}}/>
+<$list filter="[<__configTiddler__>has[description]]" variable="ignore">
+<div class="cm-config-description"><em><$transclude tiddler=<<__configTiddler__>> field="description"/></em></div>
+</$list>
+</div>
+\end
 
-! Brackets
+\define render-config(configTiddler)
+<$list filter="[<__configTiddler__>get[config-type]match[checkbox]]" variable="ignore">
+<$macrocall $name="render-checkbox" configTiddler=<<__configTiddler__>>/>
+</$list>
+<$list filter="[<__configTiddler__>get[config-type]match[select]]" variable="ignore">
+<$macrocall $name="render-select" configTiddler=<<__configTiddler__>>/>
+</$list>
+<$list filter="[<__configTiddler__>get[config-type]match[input]]" variable="ignore">
+<$macrocall $name="render-input" configTiddler=<<__configTiddler__>>/>
+</$list>
+\end
 
-<$checkbox tiddler="$:/config/codemirror-6/bracketMatching" field="text" checked="yes" unchecked="no" default="yes"> Highlight matching brackets</$checkbox>
+\define render-category(category)
+<div class="cm-config-category">
+<h2><<__category__>></h2>
+<$list filter="[all[tiddlers+shadows]tag[$:/tags/Config/CodeMirror/Editor]config-category<__category__>sort[caption]]" variable="configTiddler">
+<$macrocall $name="render-config" configTiddler=<<configTiddler>>/>
+</$list>
+</div>
+\end
 
-<$checkbox tiddler="$:/config/codemirror-6/closeBrackets" field="text" checked="yes" unchecked="no" default="yes"> Auto-close brackets and quotes</$checkbox>
-
-! Code Folding
-
-<$checkbox tiddler="$:/config/codemirror-6/foldGutter" field="text" checked="yes" unchecked="no" default="yes"> Show fold gutter</$checkbox>
-
-Allows folding code blocks, widgets, headings, and other block elements. Use Ctrl+Shift+[ to fold and Ctrl+Shift+] to unfold.
+<$list filter="[all[tiddlers+shadows]tag[$:/tags/Config/CodeMirror/Editor]each[config-category]get[config-category]sort[]]" variable="category">
+<$macrocall $name="render-category" category=<<category>>/>
+</$list>

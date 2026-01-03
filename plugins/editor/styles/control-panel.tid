@@ -1,0 +1,40 @@
+title: $:/plugins/BurningTreeC/tiddlywiki-codemirror/styles/control-panel
+tags: $:/tags/Stylesheet
+
+.cm-config-category {
+  margin-bottom: 1.5em;
+}
+
+.cm-config-category h2 {
+  font-size: 1.1em;
+  font-weight: 600;
+  margin: 0 0 0.5em 0;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid <<colour tiddler-editor-border>>;
+}
+
+.cm-config-item {
+  margin: 0.5em 0;
+  padding: 0.4em 0;
+}
+
+.cm-config-item label {
+  display: inline-block;
+  min-width: 180px;
+  margin-right: 0.5em;
+}
+
+.cm-config-item select,
+.cm-config-item input[type="text"] {
+  padding: 0.3em 0.5em;
+  border: 1px solid <<colour tiddler-editor-border>>;
+  border-radius: 3px;
+  background: <<colour tiddler-editor-background>>;
+}
+
+.cm-config-description {
+  margin-top: 0.2em;
+  margin-left: 1.5em;
+  font-size: 0.9em;
+  color: <<colour muted-foreground>>;
+}
