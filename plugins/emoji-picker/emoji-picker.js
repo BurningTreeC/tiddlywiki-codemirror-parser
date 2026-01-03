@@ -250,6 +250,7 @@ function emojiCompletions(context) {
   var results = searchEmojis(query);
   if (results.length === 0) return null;
 
+  var triggerLen = match.text.length;
   var options = results.map(function(entry) {
     var shortcode = entry.shortcodes[0] || entry.annotation.replace(/\s+/g, "_").toLowerCase();
     return {
@@ -259,9 +260,19 @@ function emojiCompletions(context) {
       type: "emoji",
       boost: 1,
       apply: function(view, completion, from, to) {
-        view.dispatch({
-          changes: { from: from, to: to, insert: entry.emoji }
+        var selections = view.state.selection.ranges;
+        var mainIndex = view.state.selection.mainIndex;
+
+        // Insert emoji at all cursor positions
+        var changes = selections.map(function(range, idx) {
+          if (idx === mainIndex) {
+            return { from: from, to: to, insert: entry.emoji };
+          } else {
+            // Other cursors: replace the same trigger length
+            return { from: range.from - triggerLen, to: range.from, insert: entry.emoji };
+          }
         });
+        view.dispatch({ changes: changes });
       }
     };
   });

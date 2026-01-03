@@ -50,6 +50,34 @@ import {
 export { tiddlywikiLanguage, headerIndent }
 
 /**
+ * Helper to build changes for all selections (multi-cursor support)
+ * @param view - The editor view
+ * @param from - The main cursor's from position
+ * @param to - The main cursor's to position
+ * @param insert - The text to insert
+ * @param patternLen - Length of the matched pattern to replace at other cursors
+ */
+function buildMultiSelectionChanges(
+  view: { state: EditorState },
+  from: number,
+  to: number,
+  insert: string,
+  patternLen: number
+): { from: number; to: number; insert: string }[] {
+  const selections = view.state.selection.ranges
+  const mainIndex = view.state.selection.mainIndex
+
+  return selections.map((range, idx) => {
+    if (idx === mainIndex) {
+      return { from, to, insert }
+    } else {
+      // Other cursors: replace the same pattern length before cursor
+      return { from: range.from - patternLen, to: range.from, insert }
+    }
+  })
+}
+
+/**
  * TiddlyWiki-specific highlight style mapping semantic tags to CSS classes
  */
 export const tiddlywikiHighlightStyle = HighlightStyle.define([
@@ -671,6 +699,7 @@ function widgetCompletion(getWidgetNames?: () => string[]) {
     // Use provided widget names, fall back to core widgets if empty
     const customWidgets = getWidgetNames ? getWidgetNames() : []
     const widgets = customWidgets.length > 0 ? customWidgets : coreWidgets
+    const patternLen = m[0].length
     const options: Completion[] = widgets.map(w => {
       const isSelfClosing = selfClosingWidgets.has(w)
       return {
@@ -684,24 +713,22 @@ function widgetCompletion(getWidgetNames?: () => string[]) {
           const hasClosingBracket = textAfter === ">"
           const endTo = hasClosingBracket ? to + 1 : to
 
+          let insert: string
+          let cursorOffset: number
           if (isSelfClosing) {
-            // Self-closing widget: just insert opening tag with />
-            const insert = widgetTag + "/>"
-            view.dispatch({
-              changes: { from, to: endTo, insert },
-              selection: { anchor: from + widgetTag.length }
-            })
+            insert = widgetTag + "/>"
+            cursorOffset = widgetTag.length
           } else {
-            // Regular widget: insert opening and closing tags
             const closingTag = "</" + w + ">"
-            const insert = widgetTag + ">" + closingTag
-            // Position cursor between opening and closing tags
-            const cursorPos = from + widgetTag.length + 1
-            view.dispatch({
-              changes: { from, to: endTo, insert },
-              selection: { anchor: cursorPos }
-            })
+            insert = widgetTag + ">" + closingTag
+            cursorOffset = widgetTag.length + 1
           }
+
+          const changes = buildMultiSelectionChanges(view, from, endTo, insert, patternLen)
+          view.dispatch({
+            changes,
+            selection: { anchor: from + cursorOffset }
+          })
         }
       }
     })
@@ -766,6 +793,7 @@ function widgetAttributeCompletion(context: CompletionContext): CompletionResult
   // Collect attributes for this widget
   const widgetSpecific = widgetAttributes[widgetName] || []
   const allAttrs = [...new Set([...widgetSpecific, ...commonWidgetAttributes])]
+  const patternLen = partial.length
 
   const options: Completion[] = allAttrs.map(attr => ({
     label: attr,
@@ -776,10 +804,12 @@ function widgetAttributeCompletion(context: CompletionContext): CompletionResult
       const textAfter = view.state.sliceDoc(to, to + 1)
       const hasClosingQuote = textAfter === '"'
       const insert = hasClosingQuote ? attr + '="' : attr + '=""'
+      const endTo = hasClosingQuote ? to + 1 : to
       // Position cursor between the quotes
       const cursorPos = from + attr.length + 2
+      const changes = buildMultiSelectionChanges(view, from, endTo, insert, patternLen)
       view.dispatch({
-        changes: { from, to: hasClosingQuote ? to + 1 : to, insert },
+        changes,
         selection: { anchor: cursorPos }
       })
     }
@@ -818,6 +848,7 @@ function attributeValueCompletion(
     const quoteChar = attrValueMatch[2]
     const partial = attrValueMatch[3]
     const from = pos - partial.length
+    const patternLen = partial.length
 
     // Check we're not in a code block or comment
     const tree = syntaxTree(state).resolveInner(pos, -1)
@@ -919,9 +950,11 @@ function attributeValueCompletion(
           // Check if there's already a closing quote after cursor
           const textAfter = view.state.sliceDoc(to, to + 1)
           const suffix = textAfter === quoteChar ? "" : quoteChar
+          const insert = name + suffix
+          const changes = buildMultiSelectionChanges(view, from, to, insert, patternLen)
           view.dispatch({
-            changes: { from, to, insert: name + suffix },
-            selection: { anchor: from + name.length + suffix.length }
+            changes,
+            selection: { anchor: from + insert.length }
           })
         }
       }))
@@ -938,9 +971,11 @@ function attributeValueCompletion(
         apply: (view, _completion, from, to) => {
           const textAfter = view.state.sliceDoc(to, to + 1)
           const suffix = textAfter === quoteChar ? "" : quoteChar
+          const insert = title + suffix
+          const changes = buildMultiSelectionChanges(view, from, to, insert, patternLen)
           view.dispatch({
-            changes: { from, to, insert: title + suffix },
-            selection: { anchor: from + title.length + suffix.length }
+            changes,
+            selection: { anchor: from + insert.length }
           })
         }
       }))
@@ -957,9 +992,11 @@ function attributeValueCompletion(
         apply: (view, _completion, from, to) => {
           const textAfter = view.state.sliceDoc(to, to + 1)
           const suffix = textAfter === quoteChar ? "" : quoteChar
+          const insert = title + suffix
+          const changes = buildMultiSelectionChanges(view, from, to, insert, patternLen)
           view.dispatch({
-            changes: { from, to, insert: title + suffix },
-            selection: { anchor: from + title.length + suffix.length }
+            changes,
+            selection: { anchor: from + insert.length }
           })
         }
       }))
@@ -975,9 +1012,11 @@ function attributeValueCompletion(
         apply: (view, _completion, from, to) => {
           const textAfter = view.state.sliceDoc(to, to + 1)
           const suffix = textAfter === quoteChar ? "" : quoteChar
+          const insert = name + suffix
+          const changes = buildMultiSelectionChanges(view, from, to, insert, patternLen)
           view.dispatch({
-            changes: { from, to, insert: name + suffix },
-            selection: { anchor: from + name.length + suffix.length }
+            changes,
+            selection: { anchor: from + insert.length }
           })
         }
       }))
@@ -1274,6 +1313,7 @@ function macroCompletion(
       // Variable reference in filter: [<variable>] or [operator<variable>]
       // Close with >], cursor positioned after > but before ]
       const prefix = m[0].slice(0, m[0].lastIndexOf('<') + 1)
+      const patternLen = filterVarMatch[0].length
       const options: Completion[] = allNames.map(({ name, detail, type }) => ({
         label: prefix + name,
         type,
@@ -1296,8 +1336,9 @@ function macroCompletion(
           const insert = prefix + name + suffix
           // Cursor after >, before ]
           const cursorPos = from + prefix.length + name.length + 1
+          const changes = buildMultiSelectionChanges(view, from, to, insert, patternLen)
           view.dispatch({
-            changes: { from, to, insert },
+            changes,
             selection: { anchor: cursorPos }
           })
         }
@@ -1477,6 +1518,7 @@ function tiddlerCompletion(getTiddlerTitles?: () => string[]) {
       prefix = match[0].slice(0, match[0].lastIndexOf('{') + 1)
       validFor = /^[\[\]}>][\w\-:!]*\{[^}]*$/
       detail = "text reference"
+      const patternLen = match[0].length
 
       const options: Completion[] = titles.map(title => ({
         label: prefix + title,
@@ -1497,8 +1539,9 @@ function tiddlerCompletion(getTiddlerTitles?: () => string[]) {
           const insert = prefix + title + (hasClosingBrace ? "" : "}") + (needsOuterBracket ? "]" : "")
           // Cursor after }, before ]
           const cursorPos = from + prefix.length + title.length + 1
+          const changes = buildMultiSelectionChanges(view, from, to, insert, patternLen)
           view.dispatch({
-            changes: { from, to, insert },
+            changes,
             selection: { anchor: cursorPos }
           })
         }
@@ -1527,6 +1570,7 @@ function tiddlerCompletion(getTiddlerTitles?: () => string[]) {
       prefix = match[0].slice(0, match[0].lastIndexOf('[') + 1)
       validFor = /^[\[\]}>][\w\-:!]*\[[^\]]*$/
       detail = "filter operand"
+      const patternLen = match[0].length
 
       const options: Completion[] = titles.map(title => ({
         label: prefix + title,
@@ -1548,8 +1592,9 @@ function tiddlerCompletion(getTiddlerTitles?: () => string[]) {
           const insert = prefix + title + suffix
           // Cursor after first ], before second ]
           const cursorPos = from + prefix.length + title.length + 1
+          const changes = buildMultiSelectionChanges(view, from, to, insert, patternLen)
           view.dispatch({
-            changes: { from, to, insert },
+            changes,
             selection: { anchor: cursorPos }
           })
         }
@@ -1580,6 +1625,7 @@ function tiddlerCompletion(getTiddlerTitles?: () => string[]) {
       detail = "image"
     }
 
+    const patternLen = match[0].length
     const options: Completion[] = titles.map(title => ({
       label: prefix + title,
       type: "variable",
@@ -1608,8 +1654,9 @@ function tiddlerCompletion(getTiddlerTitles?: () => string[]) {
         const insert = prefix + title + actualSuffix
         // Position cursor after the closing brackets (including any we skipped)
         const cursorPos = from + insert.length + skipChars
+        const changes = buildMultiSelectionChanges(view, from, to, insert, patternLen)
         view.dispatch({
-          changes: { from, to, insert },
+          changes,
           selection: { anchor: cursorPos }
         })
       }
@@ -1665,6 +1712,7 @@ function htmlTagCompletion(context: CompletionContext): CompletionResult | null 
     node = node.parent!
   }
 
+  const patternLen = m[0].length
   const options: Completion[] = commonHtmlTags.map(tag => {
     const isSelfClosing = selfClosingTags.has(tag)
     return {
@@ -1678,24 +1726,22 @@ function htmlTagCompletion(context: CompletionContext): CompletionResult | null 
         const hasClosingBracket = textAfter === ">"
         const endTo = hasClosingBracket ? to + 1 : to
 
+        let insert: string
+        let cursorOffset: number
         if (isSelfClosing) {
-          // Self-closing tag: just insert the tag
-          const insert = tagText + ">"
-          view.dispatch({
-            changes: { from, to: endTo, insert },
-            selection: { anchor: from + insert.length }
-          })
+          insert = tagText + ">"
+          cursorOffset = insert.length
         } else {
-          // Regular tag: insert opening and closing tags
           const closingTag = "</" + tag + ">"
-          const insert = tagText + ">" + closingTag
-          // Position cursor between opening and closing tags
-          const cursorPos = from + tagText.length + 1
-          view.dispatch({
-            changes: { from, to: endTo, insert },
-            selection: { anchor: cursorPos }
-          })
+          insert = tagText + ">" + closingTag
+          cursorOffset = tagText.length + 1
         }
+
+        const changes = buildMultiSelectionChanges(view, from, endTo, insert, patternLen)
+        view.dispatch({
+          changes,
+          selection: { anchor: from + cursorOffset }
+        })
       }
     }
   })
@@ -1802,6 +1848,7 @@ function htmlAttributeCompletion(context: CompletionContext): CompletionResult |
   // Collect attributes for this tag
   const tagSpecific = htmlTagAttributes[tagName] || []
   const allAttrs = [...new Set([...tagSpecific, ...htmlGlobalAttributes])]
+  const patternLen = partial.length
 
   const options: Completion[] = allAttrs.map(attr => ({
     label: attr,
@@ -1809,8 +1856,9 @@ function htmlAttributeCompletion(context: CompletionContext): CompletionResult |
     apply: (view, _completion, from, to) => {
       // For data- and aria- prefixes, just insert the prefix
       if (attr.endsWith("-")) {
+        const changes = buildMultiSelectionChanges(view, from, to, attr, patternLen)
         view.dispatch({
-          changes: { from, to, insert: attr },
+          changes,
           selection: { anchor: from + attr.length }
         })
         return
@@ -1819,10 +1867,12 @@ function htmlAttributeCompletion(context: CompletionContext): CompletionResult |
       const textAfter = view.state.sliceDoc(to, to + 1)
       const hasClosingQuote = textAfter === '"'
       const insert = hasClosingQuote ? attr + '="' : attr + '=""'
+      const endTo = hasClosingQuote ? to + 1 : to
       // Position cursor between the quotes
       const cursorPos = from + attr.length + 2
+      const changes = buildMultiSelectionChanges(view, from, endTo, insert, patternLen)
       view.dispatch({
-        changes: { from, to: hasClosingQuote ? to + 1 : to, insert },
+        changes,
         selection: { anchor: cursorPos }
       })
     }
@@ -2468,6 +2518,7 @@ function conditionalCompletion(context: CompletionContext): CompletionResult | n
   const partial = match[2]
   // Replace from after <% (including any whitespace typed)
   const from = pos - whitespace.length - partial.length
+  const patternLen = whitespace.length + partial.length
 
   // Calculate the position of <% on the line
   const openMarkPos = textBefore.lastIndexOf('<%')
@@ -2480,7 +2531,8 @@ function conditionalCompletion(context: CompletionContext): CompletionResult | n
       const insert = kw.insert
 
       // For outdenting keywords (else, elseif, endif), remove one level of indentation
-      if (kw.outdent && openMarkPos > 0) {
+      // Note: outdenting only works for single cursor (complex line manipulation)
+      if (kw.outdent && openMarkPos > 0 && view.state.selection.ranges.length === 1) {
         const unit = getIndentUnit(view.state)
         const leadingWhitespace = textBefore.slice(0, openMarkPos)
 
@@ -2504,12 +2556,13 @@ function conditionalCompletion(context: CompletionContext): CompletionResult | n
           selection: { anchor: line.from + cursorOffset }
         })
       } else {
-        // Normal insert (for "if" or when not indented)
+        // Normal insert (for "if" or when not indented, or multi-cursor)
         const cursorOffset = (kw.label === "if" || kw.label === "elseif")
           ? insert.indexOf('[') + 1
           : insert.length
+        const changes = buildMultiSelectionChanges(view, from, to, insert, patternLen)
         view.dispatch({
-          changes: { from, to, insert },
+          changes,
           selection: { anchor: from + cursorOffset }
         })
       }

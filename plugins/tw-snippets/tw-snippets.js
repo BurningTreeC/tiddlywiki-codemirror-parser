@@ -448,29 +448,34 @@ function parseTemplate(template) {
 }
 
 /**
- * Insert snippet at current position
+ * Insert snippet at current position (handles all selections)
  */
 function insertSnippet(view, snippet) {
 	var state = view.state;
-	var sel = state.selection.main;
-	var from = sel.from;
-	var to = sel.to;
-	
+	var selections = state.selection.ranges;
 	var parsed = parseTemplate(snippet.template);
-	
-	// Insert the text
+
+	// Build changes for all selections
+	var changes = selections.map(function(range) {
+		return { from: range.from, to: range.to, insert: parsed.text };
+	});
+
+	// For selection, only handle the main selection with tab stops
+	var mainRange = state.selection.main;
+	var mainFrom = mainRange.from;
+
 	view.dispatch({
-		changes: { from: from, to: to, insert: parsed.text },
+		changes: changes,
 		selection: parsed.tabStops.length > 0 ? {
-			anchor: from + parsed.tabStops[0].from,
-			head: from + parsed.tabStops[0].to
+			anchor: mainFrom + parsed.tabStops[0].from,
+			head: mainFrom + parsed.tabStops[0].to
 		} : parsed.finalStop ? {
-			anchor: from + parsed.finalStop.from
+			anchor: mainFrom + parsed.finalStop.from
 		} : {
-			anchor: from + parsed.text.length
+			anchor: mainFrom + parsed.text.length
 		}
 	});
-	
+
 	return true;
 }
 
@@ -542,6 +547,7 @@ function snippetCompletions(context) {
 	var options = SNIPPETS.filter(function(s) {
 		return s.trigger.toLowerCase().startsWith(prefix);
 	}).map(function(s) {
+		var triggerLen = word.text.length;
 		return {
 			label: s.trigger,
 			displayLabel: s.label,
@@ -549,9 +555,20 @@ function snippetCompletions(context) {
 			detail: s.detail,
 			boost: 2, // Prioritize snippets
 			apply: function(view, completion, from, to) {
-				view.dispatch({
-					changes: { from: from, to: to, insert: "" }
+				var selections = view.state.selection.ranges;
+				var mainIndex = view.state.selection.mainIndex;
+
+				// Clear trigger at all cursor positions
+				var clearChanges = selections.map(function(range, idx) {
+					if (idx === mainIndex) {
+						return { from: from, to: to, insert: "" };
+					} else {
+						return { from: range.from - triggerLen, to: range.from, insert: "" };
+					}
 				});
+				view.dispatch({ changes: clearChanges });
+
+				// Now insert snippet at all positions
 				insertSnippet(view, s);
 			}
 		};
