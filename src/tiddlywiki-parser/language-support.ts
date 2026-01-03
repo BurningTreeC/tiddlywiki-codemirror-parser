@@ -831,6 +831,7 @@ function attributeValueCompletion(
     }
 
     let options: Completion[] = []
+    let detail = ""
 
     // $variable attribute - complete with all callable types (macros, procedures, functions, variables)
     if (attrName === "$variable") {
