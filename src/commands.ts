@@ -168,37 +168,66 @@ export const insertNewlineContinueMarkupCommand = (config: {
 
     // No list/quote context - fall back to language indentation
     if (!context.length) {
+      const lineText = line.text
+      const unit = state.facet(indentUnit)
+      const unitSize = unit === "\t" ? state.tabSize : unit.length
+
+      // Get base indent of current line
+      let baseIndent = 0
+      for (let i = 0; i < lineText.length; i++) {
+        const ch = lineText.charCodeAt(i)
+        if (ch === 32) baseIndent++ // space
+        else if (ch === 9) baseIndent += state.tabSize // tab
+        else break
+      }
+
+      const cursorCol = pos - line.from
+      const textBeforeCursor = lineText.slice(0, cursorCol)
+      const textAfterCursor = lineText.slice(cursorCol)
+
+      // Check if cursor is between opening and closing tag: <tag>|</tag> or <$widget>|</$widget>
+      // Pattern: text ends with > and next text starts with </
+      const betweenTagsMatch = />$/.test(textBeforeCursor) && /^<\//.test(textAfterCursor)
+      if (betweenTagsMatch) {
+        // Build indentation strings
+        let baseIndentStr = ""
+        let innerIndentStr = ""
+        if (unit === "\t") {
+          baseIndentStr = "\t".repeat(Math.floor(baseIndent / state.tabSize))
+          const remainder = baseIndent % state.tabSize
+          if (remainder > 0) baseIndentStr += " ".repeat(remainder)
+          innerIndentStr = baseIndentStr + "\t"
+        } else {
+          baseIndentStr = " ".repeat(baseIndent)
+          innerIndentStr = " ".repeat(baseIndent + unitSize)
+        }
+
+        // Insert: newline + inner indent (cursor here) + newline + base indent (closing tag follows)
+        const insert = state.lineBreak + innerIndentStr + state.lineBreak + baseIndentStr
+        const cursorPos = pos + state.lineBreak.length + innerIndentStr.length
+        return {
+          range: EditorSelection.cursor(cursorPos),
+          changes: {from: pos, insert}
+        }
+      }
+
       // Get the indentation for the next line from the language
       let indent = getIndentation(state, pos)
 
       // Fallback: if indentation is null/0, check line text for patterns that need indentation
       if (indent == null || indent === 0) {
-        const lineText = line.text
-        const unit = state.facet(indentUnit)
-        const unitSize = unit === "\t" ? state.tabSize : unit.length
-
-        // Get base indent of current line
-        let baseIndent = 0
-        for (let i = 0; i < lineText.length; i++) {
-          const ch = lineText.charCodeAt(i)
-          if (ch === 32) baseIndent++ // space
-          else if (ch === 9) baseIndent += state.tabSize // tab
-          else break
-        }
-
         // Check for patterns that need indentation on next line
         const trimmed = lineText.trim()
-        const cursorCol = pos - line.from
-        const textAfterCursor = lineText.slice(cursorCol).trim()
+        const textAfterCursorTrimmed = textAfterCursor.trim()
 
         // If line is empty (just whitespace), preserve current indentation
         if (trimmed === "") {
           indent = baseIndent
         // If cursor is BEFORE a tag (opening or closing), keep current indentation (don't add)
         // This handles cases like cursor before <$list>, <div>, <%if, </$list>, <%endif%>, \end, etc.
-        } else if (/^<[$a-zA-Z\/]/.test(textAfterCursor) ||
-            /^<%/.test(textAfterCursor) ||
-            /^\\end\b/.test(textAfterCursor)) {
+        } else if (/^<[$a-zA-Z\/]/.test(textAfterCursorTrimmed) ||
+            /^<%/.test(textAfterCursorTrimmed) ||
+            /^\\end\b/.test(textAfterCursorTrimmed)) {
           indent = baseIndent
         } else if (/<%\s*(if|elseif)\s+.+%>\s*$/.test(trimmed) || /<%\s*else\s*%>\s*$/.test(trimmed)) {
           // Conditional opener - indent next line
@@ -215,7 +244,6 @@ export const insertNewlineContinueMarkupCommand = (config: {
       let indentStr = ""
       if (indent != null && indent > 0) {
         // Build the indentation string
-        const unit = state.facet(indentUnit)
         if (unit === "\t") {
           // Tab indentation
           indentStr = "\t".repeat(Math.floor(indent / state.tabSize))

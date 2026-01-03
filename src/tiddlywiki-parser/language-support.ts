@@ -594,6 +594,14 @@ const widgetAttributes: Record<string, string[]> = {
   "$wikify": ["name", "text", "type", "mode", "output"],
 }
 
+// Self-closing widgets (action widgets that don't have content)
+const selfClosingWidgets = new Set([
+  "$action-confirm", "$action-createtiddler", "$action-deletetiddler",
+  "$action-deletefield", "$action-listops", "$action-log",
+  "$action-navigate", "$action-popup", "$action-sendmessage",
+  "$action-setfield", "$action-setmultiplefields"
+])
+
 /**
  * Widget completion source (<$widget)
  */
@@ -617,25 +625,40 @@ function widgetCompletion(getWidgetNames?: () => string[]) {
     // Use provided widget names, fall back to core widgets if empty
     const customWidgets = getWidgetNames ? getWidgetNames() : []
     const widgets = customWidgets.length > 0 ? customWidgets : coreWidgets
-    const options: Completion[] = widgets.map(w => ({
-      label: "<" + w,
-      type: "keyword",
-      detail: "widget",
-      apply: (view, _completion, from, to) => {
-        const widgetTag = "<" + w
-        // Check if there's already a > after cursor (from auto-close brackets)
-        const textAfter = view.state.sliceDoc(to, to + 1)
-        const hasClosingBracket = textAfter === ">"
-        // Always include > in the insert, extend replacement range if > exists
-        const insert = widgetTag + ">"
-        // Position cursor before the >
-        const cursorPos = from + widgetTag.length
-        view.dispatch({
-          changes: { from, to: hasClosingBracket ? to + 1 : to, insert },
-          selection: { anchor: cursorPos }
-        })
+    const options: Completion[] = widgets.map(w => {
+      const isSelfClosing = selfClosingWidgets.has(w)
+      return {
+        label: "<" + w,
+        type: "keyword",
+        detail: isSelfClosing ? "action" : "widget",
+        apply: (view, _completion, from, to) => {
+          const widgetTag = "<" + w
+          // Check if there's already a > after cursor (from auto-close brackets)
+          const textAfter = view.state.sliceDoc(to, to + 1)
+          const hasClosingBracket = textAfter === ">"
+          const endTo = hasClosingBracket ? to + 1 : to
+
+          if (isSelfClosing) {
+            // Self-closing widget: just insert opening tag with />
+            const insert = widgetTag + "/>"
+            view.dispatch({
+              changes: { from, to: endTo, insert },
+              selection: { anchor: from + widgetTag.length }
+            })
+          } else {
+            // Regular widget: insert opening and closing tags
+            const closingTag = "</" + w + ">"
+            const insert = widgetTag + ">" + closingTag
+            // Position cursor between opening and closing tags
+            const cursorPos = from + widgetTag.length + 1
+            view.dispatch({
+              changes: { from, to: endTo, insert },
+              selection: { anchor: cursorPos }
+            })
+          }
+        }
       }
-    }))
+    })
 
     return {
       from: pos - m[0].length,
@@ -1312,25 +1335,40 @@ function htmlTagCompletion(context: CompletionContext): CompletionResult | null 
     node = node.parent!
   }
 
-  const options: Completion[] = commonHtmlTags.map(tag => ({
-    label: "<" + tag,
-    type: "type",
-    detail: selfClosingTags.has(tag) ? "self-closing" : "tag",
-    apply: (view, _completion, from, to) => {
-      const tagText = "<" + tag
-      // Check if there's already a > after cursor (from auto-close brackets)
-      const textAfter = view.state.sliceDoc(to, to + 1)
-      const hasClosingBracket = textAfter === ">"
-      // Always include > in the insert, extend replacement range if > exists
-      const insert = tagText + ">"
-      // Position cursor before the >
-      const cursorPos = from + tagText.length
-      view.dispatch({
-        changes: { from, to: hasClosingBracket ? to + 1 : to, insert },
-        selection: { anchor: cursorPos }
-      })
+  const options: Completion[] = commonHtmlTags.map(tag => {
+    const isSelfClosing = selfClosingTags.has(tag)
+    return {
+      label: "<" + tag,
+      type: "type",
+      detail: isSelfClosing ? "self-closing" : "tag",
+      apply: (view, _completion, from, to) => {
+        const tagText = "<" + tag
+        // Check if there's already a > after cursor (from auto-close brackets)
+        const textAfter = view.state.sliceDoc(to, to + 1)
+        const hasClosingBracket = textAfter === ">"
+        const endTo = hasClosingBracket ? to + 1 : to
+
+        if (isSelfClosing) {
+          // Self-closing tag: just insert the tag
+          const insert = tagText + ">"
+          view.dispatch({
+            changes: { from, to: endTo, insert },
+            selection: { anchor: from + insert.length }
+          })
+        } else {
+          // Regular tag: insert opening and closing tags
+          const closingTag = "</" + tag + ">"
+          const insert = tagText + ">" + closingTag
+          // Position cursor between opening and closing tags
+          const cursorPos = from + tagText.length + 1
+          view.dispatch({
+            changes: { from, to: endTo, insert },
+            selection: { anchor: cursorPos }
+          })
+        }
+      }
     }
-  }))
+  })
 
   return {
     from: pos - m[0].length,
