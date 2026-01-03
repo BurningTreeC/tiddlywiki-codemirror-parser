@@ -2,7 +2,7 @@
     "title": "$:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/lang-html",
     "name": "CodeMirror 6 HTML Language",
     "description": "HTML syntax highlighting for CodeMirror 6",
-    "version": "1.0.0",
+    "version": "0.0.1",
     "plugin-type": "plugin",
     "dependents": "",
     "list": "readme",
