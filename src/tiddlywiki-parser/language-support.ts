@@ -678,11 +678,13 @@ const selfClosingWidgets = new Set([
 
 /**
  * Widget completion source (<$widget)
+ * Supports namespaced widgets like <$my.widget
  */
 function widgetCompletion(getWidgetNames?: () => string[]) {
   return (context: CompletionContext): CompletionResult | null => {
     const { state, pos } = context
-    const m = /<\$[\w\-]*$/.exec(state.sliceDoc(pos - 30, pos))
+    // Allow dots in widget names for namespaced widgets like <$my.widget
+    const m = /<\$[\w\-\.]*$/.exec(state.sliceDoc(pos - 50, pos))
     if (!m) return null
 
     // Don't complete inside code blocks or comments
@@ -696,18 +698,40 @@ function widgetCompletion(getWidgetNames?: () => string[]) {
       node = node.parent!
     }
 
-    // Use provided widget names, fall back to core widgets if empty
+    // Collect all widget names with their sources
+    const seen = new Set<string>()
+    const allWidgets: { name: string, detail: string }[] = []
+
+    // Get local widget definitions from current document (\widget pragma)
+    const docText = state.doc.toString()
+    const localDefs = extractLocalDefinitions(docText)
+    for (const name of localDefs.widgets) {
+      if (!seen.has(name)) {
+        seen.add(name)
+        allWidgets.push({ name, detail: "widget (local)" })
+      }
+    }
+
+    // Add global/custom widgets
     const customWidgets = getWidgetNames ? getWidgetNames() : []
-    const widgets = customWidgets.length > 0 ? customWidgets : coreWidgets
+    const globalWidgets = customWidgets.length > 0 ? customWidgets : coreWidgets
+    for (const name of globalWidgets) {
+      if (!seen.has(name)) {
+        seen.add(name)
+        const isSelfClosing = selfClosingWidgets.has(name)
+        allWidgets.push({ name, detail: isSelfClosing ? "action" : "widget" })
+      }
+    }
+
     const patternLen = m[0].length
-    const options: Completion[] = widgets.map(w => {
-      const isSelfClosing = selfClosingWidgets.has(w)
+    const options: Completion[] = allWidgets.map(({ name, detail }) => {
+      const isSelfClosing = selfClosingWidgets.has(name)
       return {
-        label: "<" + w,
+        label: "<" + name,
         type: "keyword",
-        detail: isSelfClosing ? "action" : "widget",
+        detail,
         apply: (view, _completion, from, to) => {
-          const widgetTag = "<" + w
+          const widgetTag = "<" + name
           // Check if there's already a > after cursor (from auto-close brackets)
           const textAfter = view.state.sliceDoc(to, to + 1)
           const hasClosingBracket = textAfter === ">"
@@ -719,7 +743,7 @@ function widgetCompletion(getWidgetNames?: () => string[]) {
             insert = widgetTag + "/>"
             cursorOffset = widgetTag.length
           } else {
-            const closingTag = "</" + w + ">"
+            const closingTag = "</" + name + ">"
             insert = widgetTag + ">" + closingTag
             cursorOffset = widgetTag.length + 1
           }
@@ -737,7 +761,7 @@ function widgetCompletion(getWidgetNames?: () => string[]) {
       from: pos - m[0].length,
       to: pos,
       options,
-      validFor: /^<\$[\w\-]*$/
+      validFor: /^<\$[\w\-\.]*$/
     }
   }
 }
@@ -752,8 +776,8 @@ function widgetAttributeCompletion(context: CompletionContext): CompletionResult
   // Look back to find if we're inside a widget tag
   const textBefore = state.sliceDoc(Math.max(0, pos - 200), pos)
 
-  // Match: <$widgetname followed by attributes
-  const tagMatch = /<\$([a-zA-Z][a-zA-Z0-9\-]*)\s+[^>]*$/.exec(textBefore)
+  // Match: <$widgetname followed by attributes (supports dots for namespaced widgets)
+  const tagMatch = /<\$([a-zA-Z][a-zA-Z0-9\-\.]*)\s+[^>]*$/.exec(textBefore)
   if (!tagMatch) return null
 
   const widgetName = "$" + tagMatch[1]
