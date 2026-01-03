@@ -3,6 +3,31 @@ tags:
 
 ! Changelog
 
+!! Version 0.0.5
+
+!!! New Features
+
+* '''Enhanced Variable/Macro Completions''' - All callable types now appear in completions
+** `<<name>>` and `<name>` in filters now complete macros, procedures, functions, and variables
+** `$variable="..."` attribute (e.g., in `<$transclude>`) completes all callable types
+** Local definitions from current document shown with "(local)" detail
+** Built-in variables (`transclusion`, `currentTiddler`, `tv-*`, etc.) shown with "(built-in)" detail
+
+* '''Widget Variable Extraction''' - Variables set by widgets are now detected in current document
+** `<$set name="...">` - extracts name attribute
+** `<$vars attr="...">` and `<$let attr="...">` - all attributes become variables
+** `<$list variable="..." counter="...">` - extracts variable and counter
+** `<$range variable="...">` - extracts variable attribute
+** `<$wikify name="...">` - extracts name attribute
+
+* '''Built-in Variables''' - Common TiddlyWiki variables always available in completions
+** `transclusion`, `currentTiddler`, `storyTiddler`
+** `tv-story-list`, `tv-history-list` (from `$navigator`)
+** `tv-config-toolbar-icons`, `tv-config-toolbar-text`, `tv-config-toolbar-class`
+** `tv-wikilinks`, `tv-show-missing-links`, `tv-tiddler-preview`
+
+---
+
 !! Version 0.0.4
 
 !!! New Features
