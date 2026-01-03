@@ -3,6 +3,28 @@ tags:
 
 ! Changelog
 
+!! Version 0.0.6
+
+!!! New Features
+
+* '''User Snippets Plugin''' - Define custom code snippets via tiddlers
+** Create tiddlers tagged `$:/tags/CodeMirror/Snippet` with custom templates
+** Full placeholder support: `${1}`, `${1:default}`, `$0` for final cursor position
+** Tab/Shift+Tab navigation between placeholders (uses CodeMirror's built-in snippet system)
+** Scope filtering by content type (e.g., `text/vnd.tiddlywiki`, `application/javascript`)
+** Priority ordering for snippet display order
+** API methods: `getUserSnippets()`, `getSnippets()`, `clearSnippetCache()`, `insertUserSnippet()`
+
+!!! Improvements
+
+* '''Multi-Selection Autocompletion''' - All completions now work with multiple cursors
+** Snippets insert at all cursor positions (Tab navigation for single cursor only)
+** Emoji picker inserts at all cursors
+** Widget, attribute, tiddler title, macro, and HTML completions all support multi-cursor
+** Added `buildMultiSelectionChanges` helper for consistent multi-cursor handling
+
+---
+
 !! Version 0.0.5
 
 !!! New Features
