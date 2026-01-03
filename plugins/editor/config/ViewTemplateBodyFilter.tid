@@ -1,0 +1,2 @@
+$:/config/ViewTemplateBodyFilters/CodeMirror-6/snippets
+text: [tag[$:/tags/CodeMirror/Snippet]then[$:/core/ui/ViewTemplate/body/code]]
