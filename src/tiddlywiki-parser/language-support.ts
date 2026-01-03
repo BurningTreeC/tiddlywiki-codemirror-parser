@@ -1963,9 +1963,9 @@ function extractLocalDefinitions(text: string): {
 
   // Match \define name, \procedure name, \function name, \widget name
   // with optional (params) after the name
-  const regex = /\\(define|procedure|function|widget)\s+([^\s(]+)/g
+  const pragmaRegex = /\\(define|procedure|function|widget)\s+([^\s(]+)/g
   let match
-  while ((match = regex.exec(text)) !== null) {
+  while ((match = pragmaRegex.exec(text)) !== null) {
     const type = match[1]
     const name = match[2]
     if (!seen[name]) {
@@ -1987,8 +1987,82 @@ function extractLocalDefinitions(text: string): {
     }
   }
 
-  // All definitions are also variables
-  const variables = [...functions, ...procedures, ...macros, ...widgets]
+  // Extract variables set by widgets
+  const widgetVars: string[] = []
+
+  // <$set name="varname" ...> - extract name attribute
+  const setRegex = /<\$set\s+[^>]*name\s*=\s*["']([^"']+)["']/gi
+  while ((match = setRegex.exec(text)) !== null) {
+    const varName = match[1]
+    if (!seen[varName]) {
+      seen[varName] = true
+      widgetVars.push(varName)
+    }
+  }
+
+  // <$vars attr1="val1" attr2="val2" ...> - all attributes are variables
+  const varsRegex = /<\$vars\s+([^>]+)>/gi
+  while ((match = varsRegex.exec(text)) !== null) {
+    const attrs = match[1]
+    // Extract all attribute names (attr="..." or attr=<<...>> or attr={{...}})
+    const attrRegex = /([a-zA-Z_][\w-]*)\s*=/g
+    let attrMatch
+    while ((attrMatch = attrRegex.exec(attrs)) !== null) {
+      const varName = attrMatch[1]
+      if (!seen[varName]) {
+        seen[varName] = true
+        widgetVars.push(varName)
+      }
+    }
+  }
+
+  // <$let attr1="val1" attr2="val2" ...> - all attributes are variables
+  const letRegex = /<\$let\s+([^>]+)>/gi
+  while ((match = letRegex.exec(text)) !== null) {
+    const attrs = match[1]
+    const attrRegex = /([a-zA-Z_][\w-]*)\s*=/g
+    let attrMatch
+    while ((attrMatch = attrRegex.exec(attrs)) !== null) {
+      const varName = attrMatch[1]
+      if (!seen[varName]) {
+        seen[varName] = true
+        widgetVars.push(varName)
+      }
+    }
+  }
+
+  // <$list variable="item" counter="idx" ...> - extract variable and counter
+  const listRegex = /<\$list\s+[^>]*(?:variable|counter)\s*=\s*["']([^"']+)["']/gi
+  while ((match = listRegex.exec(text)) !== null) {
+    const varName = match[1]
+    if (!seen[varName]) {
+      seen[varName] = true
+      widgetVars.push(varName)
+    }
+  }
+
+  // <$range variable="i" ...> - extract variable attribute
+  const rangeRegex = /<\$range\s+[^>]*variable\s*=\s*["']([^"']+)["']/gi
+  while ((match = rangeRegex.exec(text)) !== null) {
+    const varName = match[1]
+    if (!seen[varName]) {
+      seen[varName] = true
+      widgetVars.push(varName)
+    }
+  }
+
+  // <$wikify name="html" ...> - extract name attribute
+  const wikifyRegex = /<\$wikify\s+[^>]*name\s*=\s*["']([^"']+)["']/gi
+  while ((match = wikifyRegex.exec(text)) !== null) {
+    const varName = match[1]
+    if (!seen[varName]) {
+      seen[varName] = true
+      widgetVars.push(varName)
+    }
+  }
+
+  // All definitions and widget variables are variables
+  const variables = [...functions, ...procedures, ...macros, ...widgets, ...widgetVars]
 
   return { functions, procedures, macros, widgets, variables }
 }
