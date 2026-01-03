@@ -746,9 +746,9 @@ export const FilteredTransclusion: InlineParser = {
     }
     if (filterEnd === -1) {
       // Handle incomplete filtered transclusion - {{{ without }}}
-      // Match content up to end of line
-      const incompleteMatch = /^\{\{\{([^\n]*)$/.exec(text)
-      if (incompleteMatch) {
+      // Don't match if there are formatting delimiters after {{{ (they should close their own constructs)
+      const incompleteMatch = /^\{\{\{([^\n~'^/_`<\[]*?)(?=~~|''|\/\/|^^|,,|``|<<|__|$)/.exec(text)
+      if (incompleteMatch && incompleteMatch[0].length > 3) {
         const end = pos + incompleteMatch[0].length
         const filter = incompleteMatch[1]
 
