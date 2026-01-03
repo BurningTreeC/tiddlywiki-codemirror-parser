@@ -23,6 +23,11 @@ tags:
 ** Widget, attribute, tiddler title, macro, and HTML completions all support multi-cursor
 ** Added `buildMultiSelectionChanges` helper for consistent multi-cursor handling
 
+* '''Enhanced Widget Completion'''
+** Support for namespaced widgets with dots (e.g., `<$my.widget`)
+** Widgets defined by `\widget` pragma now appear in completions with "(local)" detail
+** Widget attribute completion also supports namespaced widgets
+
 ---
 
 !! Version 0.0.5
