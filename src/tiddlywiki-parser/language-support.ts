@@ -484,7 +484,7 @@ export function tiddlywiki(config: TiddlyWikiLanguageConfig = {}): LanguageSuppo
     }))
     // Add attribute value completion (for $variable=", tiddler=", etc.)
     support.push(lang.data.of({
-      autocomplete: attributeValueCompletion(getMacroNames, getTiddlerTitles)
+      autocomplete: attributeValueCompletion(getMacroNames, getTiddlerTitles, getFunctionNames, getVariableNames)
     }))
   }
 
@@ -800,7 +800,9 @@ function widgetAttributeCompletion(context: CompletionContext): CompletionResult
  */
 function attributeValueCompletion(
   getMacroNames?: () => string[],
-  getTiddlerTitles?: () => string[]
+  getTiddlerTitles?: () => string[],
+  getFunctionNames?: () => string[],
+  getVariableNames?: () => string[]
 ) {
   return (context: CompletionContext): CompletionResult | null => {
     const { state, pos } = context
@@ -829,15 +831,88 @@ function attributeValueCompletion(
     }
 
     let options: Completion[] = []
-    let detail = ""
 
-    // $variable attribute - complete with macro/procedure/function names
+    // $variable attribute - complete with all callable types (macros, procedures, functions, variables)
     if (attrName === "$variable") {
-      const macros = getMacroNames ? getMacroNames() : commonMacros
-      detail = "variable"
-      options = macros.map(name => ({
+      // Collect all callable names with their types
+      const seen = new Set<string>()
+      const allNames: { name: string, detail: string, type: 'function' | 'variable' | 'keyword' }[] = []
+
+      // Get local definitions from current document
+      const docText = state.doc.toString()
+      const localDefs = extractLocalDefinitions(docText)
+
+      // Add local macros
+      for (const name of localDefs.macros) {
+        if (!seen.has(name)) {
+          seen.add(name)
+          allNames.push({ name, detail: "macro (local)", type: "function" })
+        }
+      }
+
+      // Add local procedures
+      for (const name of localDefs.procedures) {
+        if (!seen.has(name)) {
+          seen.add(name)
+          allNames.push({ name, detail: "procedure (local)", type: "function" })
+        }
+      }
+
+      // Add local functions
+      for (const name of localDefs.functions) {
+        if (!seen.has(name)) {
+          seen.add(name)
+          allNames.push({ name, detail: "function (local)", type: "function" })
+        }
+      }
+
+      // Add local widget variables
+      for (const name of localDefs.widgetVars) {
+        if (!seen.has(name)) {
+          seen.add(name)
+          allNames.push({ name, detail: "variable (local)", type: "variable" })
+        }
+      }
+
+      // Add built-in variables
+      for (const name of localDefs.builtIns) {
+        if (!seen.has(name)) {
+          seen.add(name)
+          allNames.push({ name, detail: "variable (built-in)", type: "keyword" })
+        }
+      }
+
+      // Add global macros
+      const customMacros = getMacroNames ? getMacroNames() : []
+      const macros = customMacros.length > 0 ? customMacros : commonMacros
+      for (const name of macros) {
+        if (!seen.has(name)) {
+          seen.add(name)
+          allNames.push({ name, detail: "macro", type: "function" })
+        }
+      }
+
+      // Add global functions
+      const functions = getFunctionNames ? getFunctionNames() : []
+      for (const name of functions) {
+        if (!seen.has(name)) {
+          seen.add(name)
+          allNames.push({ name, detail: "function", type: "function" })
+        }
+      }
+
+      // Add global variables
+      const variables = getVariableNames ? getVariableNames() : []
+      for (const name of variables) {
+        if (!seen.has(name)) {
+          seen.add(name)
+          allNames.push({ name, detail: "variable", type: "variable" })
+        }
+      }
+
+      options = allNames.map(({ name, detail, type }) => ({
         label: name,
-        type: "function",
+        type,
         detail,
         apply: (view, _completion, from, to) => {
           // Check if there's already a closing quote after cursor
