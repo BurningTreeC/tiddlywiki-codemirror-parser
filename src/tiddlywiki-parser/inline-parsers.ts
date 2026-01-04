@@ -1431,6 +1431,8 @@ export const CamelCaseLink: InlineParser = {
 // ============================================================================
 
 const sysLinkRe = /^\$:\/[^\s\[\]{}|]*/
+// Trailing punctuation that should not be part of a link
+const trailingPunctRe = /[.,;:!?'")\]]+$/
 
 export const SystemLink: InlineParser = {
   name: "SystemLink",
@@ -1441,7 +1443,12 @@ export const SystemLink: InlineParser = {
     const match = sysLinkRe.exec(text)
     if (!match) return -1
 
-    return cx.addElement(cx.elt(Type.SystemLink, pos, pos + match[0].length))
+    // Strip trailing punctuation
+    let linkText = match[0]
+    linkText = linkText.replace(trailingPunctRe, "")
+    if (linkText.length <= 3) return -1 // Must have more than just "$:/"
+
+    return cx.addElement(cx.elt(Type.SystemLink, pos, pos + linkText.length))
   }
 }
 
@@ -1460,7 +1467,12 @@ export const URLAutoLink: InlineParser = {
     const match = urlRe.exec(text)
     if (!match) return -1
 
-    return cx.addElement(cx.elt(Type.URLLink, pos, pos + match[0].length))
+    // Strip trailing punctuation
+    let linkText = match[0]
+    linkText = linkText.replace(trailingPunctRe, "")
+    if (linkText.length <= 8) return -1 // Must have more than just "https://"
+
+    return cx.addElement(cx.elt(Type.URLLink, pos, pos + linkText.length))
   }
 }
 

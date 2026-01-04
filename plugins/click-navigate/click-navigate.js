@@ -28,6 +28,7 @@ var TIDDLER_TITLE_NODES = {
 	"FilterTextRef": "textref",
 	"FilterTextRefTarget": "textref",
 	"CamelCaseLink": "camelcase",
+	"SystemLink": "systemlink",
 	"ImageSource": "image"
 };
 
@@ -38,6 +39,15 @@ var TIDDLER_TITLE_OPERATORS = {
 	"tag": true,    // operand is tag name (= tiddler title)
 	"list": true    // operand is text reference (tiddler!!field or tiddler##index)
 };
+
+/**
+ * Check if CamelCase wikilinks are enabled
+ */
+function isCamelCaseEnabled() {
+	if (!$tw || !$tw.wiki) return true; // Default to enabled
+	var config = $tw.wiki.getTiddlerText("$:/config/WikiParserRules/Inline/wikilink", "enable");
+	return config !== "disable";
+}
 
 /**
  * Get the operator name for a FilterOperand node by finding the FilterOperatorName sibling
@@ -98,6 +108,14 @@ function getLinkAtPos(state, pos) {
 						current = current.parent;
 						continue;
 					}
+				}
+			}
+
+			// For CamelCaseLink, check if wikilinks are enabled
+			if (current.name === "CamelCaseLink") {
+				if (!isCamelCaseEnabled()) {
+					current = current.parent;
+					continue;
 				}
 			}
 

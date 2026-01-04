@@ -24,6 +24,7 @@ var TIDDLER_TITLE_NODES = {
 	"FilterTextRef": true,
 	"FilterTextRefTarget": true,
 	"CamelCaseLink": true,
+	"SystemLink": true,
 	"ImageSource": true
 };
 
@@ -34,6 +35,15 @@ var TIDDLER_TITLE_OPERATORS = {
 	"tag": true,    // operand is tag name (= tiddler title)
 	"list": true    // operand is text reference (tiddler!!field or tiddler##index)
 };
+
+/**
+ * Check if CamelCase wikilinks are enabled
+ */
+function isCamelCaseEnabled() {
+	if (!$tw || !$tw.wiki) return true; // Default to enabled
+	var config = $tw.wiki.getTiddlerText("$:/config/WikiParserRules/Inline/wikilink", "enable");
+	return config !== "disable";
+}
 
 /**
  * Get the operator name for a FilterOperand node by finding the FilterOperatorName sibling
@@ -191,6 +201,14 @@ function getLinkAtPos(state, pos) {
 				}
 			}
 
+			// For CamelCaseLink, check if wikilinks are enabled
+			if (current.name === "CamelCaseLink") {
+				if (!isCamelCaseEnabled()) {
+					current = current.parent;
+					continue;
+				}
+			}
+
 			// For FilterTextRef, extract just the tiddler title (before !! or ##)
 			if (current.name === "FilterTextRef" || current.name === "FilterTextRefTarget") {
 				// Get content without braces
@@ -207,7 +225,6 @@ function getLinkAtPos(state, pos) {
 					target = content;
 				}
 			}
-
 
 			return target;
 		}
@@ -249,10 +266,22 @@ function getLinkAtPos(state, pos) {
  */
 function getTiddlerPreview(title) {
 	if (!$tw || !$tw.wiki) return null;
-	
+
 	var tiddler = $tw.wiki.getTiddler(title);
+
+	// Handle shadow tiddlers (e.g., $:/core/ui/ViewTemplate)
+	if (!tiddler && $tw.wiki.isShadowTiddler(title)) {
+		var pluginTitle = $tw.wiki.getShadowSource(title);
+		if (pluginTitle) {
+			var pluginInfo = $tw.wiki.getPluginInfo(pluginTitle);
+			if (pluginInfo && pluginInfo.tiddlers && pluginInfo.tiddlers[title]) {
+				tiddler = new $tw.Tiddler(pluginInfo.tiddlers[title]);
+			}
+		}
+	}
+
 	if (!tiddler) {
-		return '<div class="cm6-preview-missing">Tiddler not found: <em>' + 
+		return '<div class="cm6-preview-missing">Tiddler not found: <em>' +
 			$tw.utils.htmlEncode(title) + '</em></div>';
 	}
 	
