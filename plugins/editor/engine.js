@@ -1433,6 +1433,26 @@ CodeMirrorEngine.prototype.hasFocus = function() {
 	return this.view.hasFocus;
 };
 
+CodeMirrorEngine.prototype.undo = function() {
+	if (this._destroyed) return false;
+	var core = this.cm;
+	var undoCmd = (core.commands || {}).undo;
+	if (undoCmd && this.view) {
+		return undoCmd(this.view);
+	}
+	return false;
+};
+
+CodeMirrorEngine.prototype.redo = function() {
+	if (this._destroyed) return false;
+	var core = this.cm;
+	var redoCmd = (core.commands || {}).redo;
+	if (redoCmd && this.view) {
+		return redoCmd(this.view);
+	}
+	return false;
+};
+
 // ============================================================================
 // Compartment API
 // ============================================================================
