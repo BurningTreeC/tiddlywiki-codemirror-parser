@@ -1400,8 +1400,6 @@ function macroCompletion(
  */
 function macroParamCompletion(getMacroParams?: (name: string) => string[] | null) {
   return (context: CompletionContext): CompletionResult | null => {
-    if (!getMacroParams) return null
-
     const { state, pos } = context
     const textBefore = state.sliceDoc(Math.max(0, pos - 200), pos)
 
@@ -1454,8 +1452,21 @@ function macroParamCompletion(getMacroParams?: (name: string) => string[] | null
       node = node.parent!
     }
 
-    // Get parameters for this macro
-    const params = getMacroParams(macroName)
+    // Get parameters for this macro/procedure/function/widget
+    // First check local definitions in the current document
+    const docText = state.doc.toString()
+    const localDefs = extractLocalDefinitions(docText)
+    let params: string[] | null = null
+
+    // Check local definitions first
+    if (localDefs.definitionParams[macroName]) {
+      params = localDefs.definitionParams[macroName]
+    }
+    // Fall back to external callback if not found locally
+    else if (getMacroParams) {
+      params = getMacroParams(macroName)
+    }
+
     if (!params || params.length === 0) return null
 
     const options: Completion[] = params.map(param => ({
@@ -2206,20 +2217,25 @@ function extractLocalDefinitions(text: string): {
   widgetVars: string[]  // Variables set by widgets like $set, $let, $vars
   builtIns: string[]    // Built-in/implicit variables
   variables: string[]   // All of the above combined
+  /** Maps definition names to their parameter names */
+  definitionParams: Record<string, string[]>
 } {
   const functions: string[] = []
   const procedures: string[] = []
   const macros: string[] = []
   const widgets: string[] = []
   const seen: Record<string, boolean> = {}
+  const definitionParams: Record<string, string[]> = {}
 
   // Match \define name, \procedure name, \function name, \widget name
   // with optional (params) after the name
-  const pragmaRegex = /\\(define|procedure|function|widget)\s+([^\s(]+)/g
+  // Group 3 captures the parameters inside parentheses
+  const pragmaRegex = /\\(define|procedure|function|widget)\s+([^\s(]+)(?:\(([^)]*)\))?/g
   let match
   while ((match = pragmaRegex.exec(text)) !== null) {
     const type = match[1]
     const name = match[2]
+    const paramsStr = match[3]
     if (!seen[name]) {
       seen[name] = true
       switch (type) {
@@ -2235,6 +2251,17 @@ function extractLocalDefinitions(text: string): {
         case 'widget':
           widgets.push(name)
           break
+      }
+      // Parse parameters if present
+      if (paramsStr !== undefined && paramsStr.trim()) {
+        const params = paramsStr.split(',').map(p => {
+          // Each param can be "name" or "name:default" - extract just the name
+          const paramName = p.trim().split(':')[0].trim()
+          return paramName
+        }).filter(p => p.length > 0)
+        if (params.length > 0) {
+          definitionParams[name] = params
+        }
       }
     }
   }
@@ -2323,7 +2350,7 @@ function extractLocalDefinitions(text: string): {
     ...widgetVars
   ]
 
-  return { functions, procedures, macros, widgets, widgetVars, builtIns: builtInVariables, variables }
+  return { functions, procedures, macros, widgets, widgetVars, builtIns: builtInVariables, variables, definitionParams }
 }
 
 /**
