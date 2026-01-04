@@ -3,6 +3,34 @@ tags:
 
 ! Changelog
 
+!! Version 0.0.7
+
+!!! New Features
+
+* '''Dynamic Widget Discovery''' - Widgets are now discovered automatically at runtime
+** Uses `$tw.modules.forEachModuleOfType("widget")` to find all registered widgets
+** Custom widget modules automatically appear in completions without configuration
+** Widget definitions from `\widget` pragma also included
+
+* '''Widget Attribute Introspection''' - Attributes are now extracted from widget source code
+** Parses `this.getAttribute()` calls from widget JavaScript source
+** Custom widgets with accessible source get automatic attribute completions
+** Falls back to built-in attribute list when source introspection unavailable
+
+* '''Configurable Self-Closing Widgets''' - Control which widgets auto-complete with `/>` syntax
+** New Control Panel configuration: `$:/config/codemirror-6/selfClosingWidgets`
+** Changes apply immediately without editor reload
+** Action widgets (`$action-*`) always self-close regardless of configuration
+** Default self-closing widgets: `$transclude`, `$macrocall`, `$slot`, `$text`, `$image`, `$entity`, `$view`, `$codeblock`, `$count`
+
+!!! Improvements
+
+* '''Widget Attribute Filtering''' - `class` and `style` attributes only shown for DOM-rendering widgets
+** Utility widgets like `$list`, `$set`, `$vars` no longer show irrelevant DOM attributes
+** Action widgets properly excluded from class/style completions
+
+---
+
 !! Version 0.0.6
 
 !!! New Features
