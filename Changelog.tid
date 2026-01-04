@@ -16,6 +16,10 @@ tags:
 ** Config tiddler `$:/config/codemirror-6/showTrailingWhitespace`
 ** Uses CodeMirror compartments for live toggling
 
+* '''Remove Trailing Whitespace''' - Toolbar button to clean up trailing whitespace
+** Removes trailing whitespace from all lines in a single operation
+** Single undo step for the entire cleanup
+
 * '''Multi-line Macro Calls''' - Parser now supports macros spanning multiple lines
 ** Macros like `<<tabs\n  param:"value"\n>>` are now properly parsed
 ** Parameters on separate lines are correctly highlighted
