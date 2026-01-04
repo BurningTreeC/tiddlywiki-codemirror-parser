@@ -419,7 +419,8 @@ function CodeMirrorEngine(options) {
 		closeBrackets: new Compartment(),
 		keymap: new Compartment(),
 		multiCursor: new Compartment(),
-		trailingWhitespace: new Compartment()
+		trailingWhitespace: new Compartment(),
+		spellcheck: new Compartment()
 	};
 
 	// Track registered keymap plugins for dynamic switching
@@ -531,6 +532,16 @@ function CodeMirrorEngine(options) {
 	var tabIndex = this.widget && this.widget.editTabIndex;
 	if (tabIndex !== undefined && tabIndex !== null) {
 		extensions.push(EditorView.contentAttributes.of({ tabindex: String(tabIndex) }));
+	}
+
+	// Core: Spellcheck (with compartment for dynamic toggle)
+	var spellcheckEnabled = $tw.wiki.getTiddlerText("$:/config/codemirror-6/spellcheck") === "yes";
+	if (this._compartments.spellcheck) {
+		extensions.push(
+			this._compartments.spellcheck.of(
+				spellcheckEnabled ? EditorView.contentAttributes.of({ spellcheck: "true" }) : []
+			)
+		);
 	}
 
 	// Core: Undo/redo history
@@ -1239,6 +1250,15 @@ CodeMirrorEngine.prototype._handleSettingsChanged = function(settings) {
 			twExtensions.push(highlightTrailingWhitespace());
 		}
 		effects.push(this._compartments.trailingWhitespace.reconfigure(twExtensions));
+	}
+
+	// Spellcheck toggle
+	if (settings.spellcheck !== undefined && this._compartments.spellcheck) {
+		var EditorView = core.view.EditorView;
+		var spellcheckExtension = settings.spellcheck
+			? EditorView.contentAttributes.of({ spellcheck: "true" })
+			: [];
+		effects.push(this._compartments.spellcheck.reconfigure(spellcheckExtension));
 	}
 
 	// Apply all effects
