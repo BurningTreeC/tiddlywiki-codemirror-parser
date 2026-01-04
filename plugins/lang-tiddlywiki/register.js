@@ -191,21 +191,23 @@ function getMacroParams(macroName) {
 function getWidgetNames() {
 	if (_cache.widgets) return _cache.widgets;
 
-	// Core widgets
-	var widgets = [
-		"$action-confirm", "$action-createtiddler", "$action-deletefield", "$action-deletetiddler",
-		"$action-listops", "$action-log", "$action-navigate", "$action-popup", "$action-sendmessage",
-		"$action-setfield", "$action-setmultiplefields", "$browse", "$button", "$checkbox",
-		"$codeblock", "$count", "$draggable", "$droppable", "$dropzone", "$edit", "$edit-bitmap",
-		"$edit-text", "$element", "$encrypt", "$entity", "$eventcatcher", "$fieldmangler", "$fields",
-		"$fill", "$genesis", "$image", "$importvariables", "$jsontiddler", "$keyboard", "$let",
-		"$link", "$linkcatcher", "$list", "$list-empty", "$list-item", "$list-item-body", "$log",
-		"$macrocall", "$messagecatcher", "$navigator", "$parameters", "$password", "$qualify",
-		"$radio", "$range", "$raw", "$reveal", "$scrollable", "$select", "$set", "$setmultiplevariables",
-		"$slot", "$slots", "$text", "$tiddler", "$transclude", "$vars", "$view", "$wikify"
-	];
+	var widgets = [];
+	var seen = {};
 
-	// Add custom widgets defined in wiki
+	// Discover all widgets from JavaScript modules using TiddlyWiki's API
+	$tw.modules.forEachModuleOfType("widget", function(title, mod) {
+		for (var exportName in mod) {
+			if (mod.hasOwnProperty(exportName) && typeof mod[exportName] === "function") {
+				var name = "$" + exportName;
+				if (!seen[name]) {
+					seen[name] = true;
+					widgets.push(name);
+				}
+			}
+		}
+	});
+
+	// Add custom widgets defined via \widget pragma in wiki
 	if ($tw && $tw.wiki) {
 		var customWidgets = $tw.wiki.filterTiddlers(
 			"[all[tiddlers+shadows]tag[$:/tags/Global]] [all[tiddlers+shadows]tag[$:/tags/Macro]]"
@@ -218,13 +220,17 @@ function getWidgetNames() {
 				var match;
 				while ((match = regex.exec(text)) !== null) {
 					var name = "$" + match[1].replace(/^\$/, "");
-					if (widgets.indexOf(name) === -1) {
+					if (!seen[name]) {
+						seen[name] = true;
 						widgets.push(name);
 					}
 				}
 			}
 		});
 	}
+
+	// Sort alphabetically
+	widgets.sort();
 
 	_cache.widgets = widgets;
 	return widgets;
@@ -473,6 +479,76 @@ exports.startup = function() {
 
 	var LanguageDescription = core.language.LanguageDescription;
 
+	// Callback to get self-closing widgets config (called dynamically for live updates)
+	function getSelfClosingWidgets() {
+		var text = $tw.wiki.getTiddlerText("$:/config/codemirror-6/selfClosingWidgets", "");
+		return text
+			.split(/[\s,]+/)
+			.map(function(w) { return w.trim(); })
+			.filter(function(w) { return w.length > 0; });
+	}
+
+	// Cache for widget attributes (parsed from widget source code)
+	var widgetAttributesCache = {};
+
+	/**
+	 * Parse getAttribute calls from widget source code
+	 */
+	function parseAttributesFromSource(source) {
+		var attrRegex = /this\.getAttribute\s*\(\s*["']([^"']+)["']/g;
+		var attrs = [];
+		var seen = {};
+		var match;
+
+		while ((match = attrRegex.exec(source)) !== null) {
+			var attrName = match[1];
+			if (!seen[attrName]) {
+				seen[attrName] = true;
+				attrs.push(attrName);
+			}
+		}
+		return attrs;
+	}
+
+	/**
+	 * Callback to get widget attributes by introspecting widget modules
+	 * Parses the widget source code to find getAttribute() calls
+	 * Returns null if introspection fails (to trigger fallback in lang-tiddlywiki)
+	 */
+	function getWidgetAttributes(widgetName) {
+		// Check cache first
+		if (widgetAttributesCache.hasOwnProperty(widgetName)) {
+			return widgetAttributesCache[widgetName];
+		}
+
+		// Get the widget module name (remove $ prefix for module lookup)
+		var moduleName = widgetName.slice(1); // e.g., "$button" -> "button"
+
+		// Try to find and parse widget source code
+		var allAttrs = [];
+		var seenAttrs = {};
+
+		$tw.modules.forEachModuleOfType("widget", function(title, mod) {
+			if (mod && mod[moduleName]) {
+				var source = $tw.wiki.getTiddlerText(title, "");
+				if (source) {
+					var attrs = parseAttributesFromSource(source);
+					for (var i = 0; i < attrs.length; i++) {
+						if (!seenAttrs[attrs[i]]) {
+							seenAttrs[attrs[i]] = true;
+							allAttrs.push(attrs[i]);
+						}
+					}
+				}
+			}
+		});
+
+		// Return null if no attributes found (triggers fallback in lang-tiddlywiki)
+		var result = allAttrs.length > 0 ? allAttrs : null;
+		widgetAttributesCache[widgetName] = result;
+		return result;
+	}
+
 	// Register TiddlyWiki wikitext with completion callbacks
 	core.registerLanguage(LanguageDescription.of({
 		name: "TiddlyWiki",
@@ -484,6 +560,7 @@ exports.startup = function() {
 			getMacroNames: getMacroNames,
 			getMacroParams: getMacroParams,
 			getWidgetNames: getWidgetNames,
+			getWidgetAttributes: getWidgetAttributes,
 			getFilterOperators: getFilterOperators,
 			getFieldNames: getFieldNames,
 			getTagNames: getTagNames,
@@ -496,7 +573,10 @@ exports.startup = function() {
 			completeWidgets: true,
 			completeFilterOperators: true,
 			completeFilterRunPrefixes: true,
-			completeHTMLTags: true
+			completeHTMLTags: true,
+
+			// Self-closing widgets callback (called dynamically for live config updates)
+			getSelfClosingWidgets: getSelfClosingWidgets
 		})
 	}));
 

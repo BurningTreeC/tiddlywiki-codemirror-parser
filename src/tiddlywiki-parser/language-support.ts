@@ -254,6 +254,13 @@ export interface TiddlyWikiLanguageConfig {
   getWidgetNames?: () => string[]
 
   /**
+   * Function to get widget attributes for completion.
+   * Returns array of attribute names for the widget, or null to use built-in defaults.
+   * This allows TiddlyWiki to introspect widget modules dynamically.
+   */
+  getWidgetAttributes?: (widgetName: string) => string[] | null
+
+  /**
    * Whether to enable filter operator completion (default: true)
    */
   completeFilterOperators?: boolean
@@ -292,6 +299,14 @@ export interface TiddlyWikiLanguageConfig {
    * Language support for HTML tags (default: html without tag matching)
    */
   htmlTagLanguage?: LanguageSupport
+
+  /**
+   * Callback to get additional widgets that should auto-close with /> on completion.
+   * Action widgets always auto-close. This callback returns more widgets to add to that set.
+   * Called dynamically on each completion to support live configuration updates.
+   * Example return: ["$transclude", "$macrocall", "$slot"]
+   */
+  getSelfClosingWidgets?: () => string[]
 }
 
 // ============================================================================
@@ -419,12 +434,14 @@ export function tiddlywiki(config: TiddlyWikiLanguageConfig = {}): LanguageSuppo
     getMacroNames,
     getMacroParams,
     getWidgetNames,
+    getWidgetAttributes,
     getFilterOperators,
     getFieldNames,
     getTagNames,
     getFunctionNames,
     getVariableNames,
     htmlTagLanguage = htmlNoMatch,
+    getSelfClosingWidgets,
   } = config
 
   // Validate parser
@@ -505,10 +522,10 @@ export function tiddlywiki(config: TiddlyWikiLanguageConfig = {}): LanguageSuppo
   // Add completions via language data
   if (completeWidgets) {
     support.push(lang.data.of({
-      autocomplete: widgetCompletion(getWidgetNames)
+      autocomplete: widgetCompletion(getWidgetNames, getSelfClosingWidgets)
     }))
     support.push(lang.data.of({
-      autocomplete: widgetAttributeCompletion(getMacroParams)
+      autocomplete: widgetAttributeCompletion(getMacroParams, getWidgetAttributes)
     }))
     // Add attribute value completion (for $variable=", tiddler=", etc.)
     support.push(lang.data.of({
@@ -604,13 +621,10 @@ const coreWidgets = [
   "$slot", "$text", "$tiddler", "$transclude", "$type", "$vars", "$view", "$wikify"
 ]
 
-// Common widget attributes (shared by many widgets)
-const commonWidgetAttributes = ["class", "style"]
-
-// Widget-specific attributes
+// Fallback widget attributes (used when dynamic introspection fails)
 const widgetAttributes: Record<string, string[]> = {
   "$action-confirm": ["$message", "$prompt"],
-  "$action-createtiddler": ["$basetitle", "$savetitle", "$saveoriginal", "$template", "$overwrite"],
+  "$action-createtiddler": ["$basetitle", "$savetitle", "$saveoriginal", "$template", "$overwrite", "$timestamp"],
   "$action-deletefield": ["$tiddler", "$field"],
   "$action-deletetiddler": ["$tiddler", "$filter"],
   "$action-listops": ["$tiddler", "$field", "$index", "$filter", "$subfilter", "$tags"],
@@ -620,42 +634,42 @@ const widgetAttributes: Record<string, string[]> = {
   "$action-sendmessage": ["$message", "$param", "$name", "$value"],
   "$action-setfield": ["$tiddler", "$field", "$index", "$value", "$timestamp"],
   "$action-setmultiplefields": ["$tiddler", "$fields", "$values", "$indexes"],
-  "$browse": ["multiple", "accept", "message", "param", "tooltip", "deserializer"],
-  "$button": ["message", "param", "set", "setTo", "actions", "to", "tooltip", "aria-label", "popup", "popupAbsolute", "hoverpopup", "selectedClass", "default", "disabled", "tag", "dragTiddler", "dragFilter"],
-  "$checkbox": ["tiddler", "field", "index", "tag", "invertTag", "checked", "unchecked", "default", "indeterminate", "disabled", "actions", "uncheckactions", "checkactions"],
-  "$codeblock": ["code", "language"],
+  "$browse": ["multiple", "accept", "message", "param", "tooltip", "deserializer", "class"],
+  "$button": ["message", "param", "set", "setTo", "actions", "to", "tooltip", "aria-label", "popup", "popupAbsolute", "hoverpopup", "selectedClass", "default", "disabled", "tag", "dragTiddler", "dragFilter", "class", "style"],
+  "$checkbox": ["tiddler", "field", "index", "tag", "invertTag", "checked", "unchecked", "default", "indeterminate", "disabled", "actions", "uncheckactions", "checkactions", "class"],
+  "$codeblock": ["code", "language", "class"],
   "$count": ["filter"],
-  "$draggable": ["tiddler", "filter", "tag", "enable", "startactions", "endactions"],
-  "$droppable": ["actions", "effect", "tag", "enable", "disabledClass"],
-  "$dropzone": ["deserializer", "enable", "autoOpenOnImport", "importTitle", "actions", "contentTypesFilter", "filesOnly"],
-  "$edit": ["tiddler", "field", "index", "default", "placeholder", "tabindex", "focus", "cancelPopups", "inputActions", "refreshTitle", "autocomplete"],
-  "$edit-bitmap": ["tiddler"],
-  "$edit-text": ["tiddler", "field", "index", "default", "tag", "type", "placeholder", "focusPopup", "focus", "tabindex", "autocomplete", "cancelPopups", "inputActions", "refreshTitle", "disabled", "fileDrop", "rows", "minHeight", "size"],
+  "$draggable": ["tiddler", "filter", "tag", "enable", "startactions", "endactions", "class"],
+  "$droppable": ["actions", "effect", "tag", "enable", "disabledClass", "class"],
+  "$dropzone": ["deserializer", "enable", "autoOpenOnImport", "importTitle", "actions", "contentTypesFilter", "filesOnly", "class"],
+  "$edit": ["tiddler", "field", "index", "default", "placeholder", "tabindex", "focus", "cancelPopups", "inputActions", "refreshTitle", "autocomplete", "class"],
+  "$edit-bitmap": ["tiddler", "class"],
+  "$edit-text": ["tiddler", "field", "index", "default", "tag", "type", "placeholder", "focusPopup", "focus", "tabindex", "autocomplete", "cancelPopups", "inputActions", "refreshTitle", "disabled", "fileDrop", "rows", "minHeight", "size", "class"],
   "$element": ["tag", "attributes"],
   "$encrypt": ["filter"],
-  "$eventcatcher": ["type", "actions", "tag", "events"],
+  "$eventcatcher": ["type", "actions", "tag", "events", "class"],
   "$fieldmangler": ["tiddler"],
-  "$fill": ["name"],
-  "$genesis": ["$type", "$tag", "$names", "$values"],
-  "$image": ["source", "width", "height", "tooltip", "alt", "loading", "usemap"],
+  "$fill": ["$name"],
+  "$genesis": ["$type", "$tag", "$names", "$values", "$mode"],
+  "$image": ["source", "width", "height", "tooltip", "alt", "loading", "usemap", "class"],
   "$importvariables": ["filter"],
-  "$keyboard": ["key", "actions", "tag"],
-  "$let": [],  // Dynamic attributes
-  "$link": ["to", "tooltip", "aria-label", "tabindex", "draggable", "tag", "overrideClass"],
+  "$keyboard": ["key", "actions", "tag", "class"],
+  "$let": [],
+  "$link": ["to", "tooltip", "aria-label", "tabindex", "draggable", "tag", "overrideClass", "class"],
   "$linkcatcher": ["to", "message", "set", "setTo", "actions"],
   "$list": ["filter", "variable", "counter", "emptyMessage", "storyview", "history", "template", "editTemplate", "join"],
   "$log": ["$$filter", "$$message", "$$all"],
-  "$macrocall": ["$name", "$type", "$output"],  // Plus dynamic params
+  "$macrocall": ["$name", "$type", "$output"],
   "$messagecatcher": ["$message", "$count", "actions"],
   "$navigator": ["story", "history", "openLinkFromInsideRiver", "openLinkFromOutsideRiver", "relinkOnRename"],
-  "$password": ["name"],
+  "$password": ["name", "class"],
   "$qualify": ["name"],
-  "$radio": ["tiddler", "field", "index", "value", "default", "disabled", "actions"],
-  "$range": ["tiddler", "field", "index", "min", "max", "increment", "default", "disabled", "actions", "actionsStart", "actionsStop"],
+  "$radio": ["tiddler", "field", "index", "value", "default", "disabled", "actions", "class"],
+  "$range": ["tiddler", "field", "index", "min", "max", "increment", "default", "disabled", "actions", "actionsStart", "actionsStop", "class"],
   "$raw": [],
-  "$reveal": ["type", "text", "state", "tag", "retain", "default", "popup", "popupAbsolute", "animate", "stateTitle", "stateIndex", "stateField"],
-  "$scrollable": ["tag", "fallthrough"],
-  "$select": ["tiddler", "field", "index", "default", "multiple", "size", "actions"],
+  "$reveal": ["type", "text", "state", "tag", "retain", "default", "popup", "popupAbsolute", "animate", "stateTitle", "stateIndex", "stateField", "class", "style"],
+  "$scrollable": ["tag", "fallthrough", "class"],
+  "$select": ["tiddler", "field", "index", "default", "multiple", "size", "actions", "class"],
   "$set": ["name", "value", "filter", "select", "tiddler", "field", "index", "emptyValue"],
   "$setvariable": ["name", "value", "filter", "select", "tiddler", "field", "index", "emptyValue"],
   "$slot": ["$name", "$depth"],
@@ -663,9 +677,9 @@ const widgetAttributes: Record<string, string[]> = {
   "$tiddler": ["tiddler"],
   "$transclude": ["$tiddler", "$field", "$index", "$subtiddler", "$mode", "$type", "$output", "$recursionMarker", "$variable", "$fillignore"],
   "$type": ["type", "text", "tiddler", "field", "index", "mode"],
-  "$vars": [],  // Dynamic attributes
+  "$vars": [],
   "$view": ["tiddler", "field", "index", "format", "template", "subtiddler", "mode"],
-  "$wikify": ["name", "text", "type", "mode", "output"],
+  "$wikify": ["name", "text", "type", "mode", "output"]
 }
 
 // Self-closing widgets (action widgets that don't have content)
@@ -680,8 +694,15 @@ const selfClosingWidgets = new Set([
  * Widget completion source (<$widget)
  * Supports namespaced widgets like <$my.widget
  */
-function widgetCompletion(getWidgetNames?: () => string[]) {
+function widgetCompletion(getWidgetNames?: () => string[], getSelfClosingWidgets?: () => string[]) {
   return (context: CompletionContext): CompletionResult | null => {
+    // Build self-closing set dynamically to support live config updates
+    const allSelfClosing = new Set(selfClosingWidgets)
+    if (getSelfClosingWidgets) {
+      for (const w of getSelfClosingWidgets()) {
+        allSelfClosing.add(w)
+      }
+    }
     const { state, pos } = context
     // Allow dots in widget names for namespaced widgets like <$my.widget
     const m = /<\$[\w\-\.]*$/.exec(state.sliceDoc(pos - 50, pos))
@@ -718,14 +739,14 @@ function widgetCompletion(getWidgetNames?: () => string[]) {
     for (const name of globalWidgets) {
       if (!seen.has(name)) {
         seen.add(name)
-        const isSelfClosing = selfClosingWidgets.has(name)
+        const isSelfClosing = allSelfClosing.has(name)
         allWidgets.push({ name, detail: isSelfClosing ? "action" : "widget" })
       }
     }
 
     const patternLen = m[0].length
     const options: Completion[] = allWidgets.map(({ name, detail }) => {
-      const isSelfClosing = selfClosingWidgets.has(name)
+      const isSelfClosing = allSelfClosing.has(name)
       return {
         label: "<" + name,
         type: "keyword",
@@ -770,7 +791,10 @@ function widgetCompletion(getWidgetNames?: () => string[]) {
  * Widget attribute completion source
  * Triggers when cursor is inside a widget tag after the widget name
  */
-function widgetAttributeCompletion(getMacroParams?: (name: string) => string[] | null) {
+function widgetAttributeCompletion(
+  getMacroParams?: (name: string) => string[] | null,
+  getWidgetAttributes?: (widgetName: string) => string[] | null
+) {
   return (context: CompletionContext): CompletionResult | null => {
     const { state, pos } = context
 
@@ -816,8 +840,10 @@ function widgetAttributeCompletion(getMacroParams?: (name: string) => string[] |
     }
 
     // Collect attributes for this widget
-    const widgetSpecific = widgetAttributes[widgetName] || []
-    let allAttrs = [...new Set([...widgetSpecific, ...commonWidgetAttributes])]
+    // Try dynamic introspection first, fall back to hardcoded list
+    const dynamicAttrs = getWidgetAttributes ? getWidgetAttributes(widgetName) : null
+    const fallbackAttrs = widgetAttributes[widgetName] || []
+    let allAttrs = dynamicAttrs !== null ? [...dynamicAttrs] : [...fallbackAttrs]
 
     // For $macrocall, also add parameters of the macro specified in $name
     // For $transclude, also add parameters of the variable specified in $variable
