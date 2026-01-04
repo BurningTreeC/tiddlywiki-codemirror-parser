@@ -1,5 +1,8 @@
 title: $:/config/codemirror-6/linkPreview
-caption: Link Preview
-description: Show tiddler preview on hover over links
-
-yes
+tags: $:/tags/Config/CodeMirror/Editor
+caption: Link preview
+description: Show tiddler preview tooltip when hovering over links
+config-type: checkbox
+config-category: Navigation
+default: yes
+text: yes

@@ -1741,6 +1741,28 @@ CodeMirrorEngine.prototype.isDestroyed = function() {
 	return this._destroyed;
 };
 
+/**
+ * Dispatch an event to all active plugins
+ * @param {string} eventName - The event/hook name (e.g., "onRefresh")
+ * @param {...*} args - Arguments to pass to the handler
+ */
+CodeMirrorEngine.prototype.dispatchPluginEvent = function(eventName) {
+	if (this._destroyed || !this._activePlugins) return;
+
+	var args = Array.prototype.slice.call(arguments, 1);
+
+	for (var i = 0; i < this._activePlugins.length; i++) {
+		var plugin = this._activePlugins[i];
+		if (isFunction(plugin[eventName])) {
+			try {
+				plugin[eventName].apply(plugin, args);
+			} catch (e) {
+				console.error("Plugin event '" + eventName + "' failed for '" + plugin.name + "':", e);
+			}
+		}
+	}
+};
+
 // ============================================================================
 // Exports
 // ============================================================================

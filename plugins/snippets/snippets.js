@@ -254,6 +254,12 @@ exports.plugin = {
 	description: "User-configurable code snippets",
 	priority: 560, // After emoji-picker (550), after tw-snippets (540)
 
+	// Check if enabled in config
+	condition: function(context) {
+		var enabled = $tw.wiki.getTiddlerText("$:/config/codemirror-6/snippets", "yes");
+		return enabled === "yes";
+	},
+
 	init: function(cm6Core) {
 		this._core = cm6Core;
 		_core = cm6Core;

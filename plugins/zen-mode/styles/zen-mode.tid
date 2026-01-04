@@ -1,7 +1,15 @@
 title: $:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/zen-mode/styles/zen-mode
 tags: $:/tags/Stylesheet
 
-\rules only
+\define sidebarbreakpoint()
+<$text text={{$:/themes/tiddlywiki/vanilla/metrics/sidebarbreakpoint}}/>
+\end
+
+\define sidebarbreakpoint-minus-one()
+<$text text={{{ [{$:/themes/tiddlywiki/vanilla/metrics/sidebarbreakpoint}removesuffix[px]subtract[1]addsuffix[px]] :else[<sidebarbreakpoint>] }}}/>
+\end
+
+\rules only filteredtranscludeinline transcludeinline macrodef macrocallinline
 
 /* ============================================================================
    Zen Mode for CodeMirror 6
@@ -52,7 +60,6 @@ tags: $:/tags/Stylesheet
 .cm6-zen-editor-container {
   position: relative;
   width: 100%;
-  max-width: var(--zen-max-width, 700px);
   height: calc(100vh - 120px);
   padding: 0 2rem;
   z-index: 1;
@@ -293,17 +300,23 @@ tags: $:/tags/Stylesheet
    Responsive
    ============================================================================ */
 
-@media (max-width: 768px) {
+@media (min-width: <<sidebarbreakpoint>>) {
+  .cm6-zen-editor-container {
+    max-width: {{$:/config/codemirror-6/zen-mode/max-width}};
+  }
+}
+
+@media (max-width: <<sidebarbreakpoint-minus-one>>) {
   .cm6-zen-editor-container {
     padding: 0 1rem;
     max-width: 100%;
   }
-  
+
   .cm6-zen-stats {
     gap: 1rem;
     font-size: 0.75rem;
   }
-  
+
   .cm6-zen-close {
     top: 0.5rem;
     right: 0.5rem;

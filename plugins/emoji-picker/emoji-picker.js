@@ -227,10 +227,46 @@ function searchEmojis(query) {
 // Completion Source
 // ============================================================
 
+// Cache syntaxTree function
+var _syntaxTree = null;
+
+/**
+ * Check if position is inside a filter expression
+ */
+function isInsideFilter(context) {
+  if (!_syntaxTree) return false;
+
+  try {
+    var tree = _syntaxTree(context.state);
+    if (!tree) return false;
+
+    var node = tree.resolveInner(context.pos, -1);
+    while (node) {
+      var name = node.type.name;
+      // Check for filter-related nodes
+      if (name === "FilterExpression" || name === "FilterOperator" ||
+          name === "FilterRun" || name === "FilterStep" ||
+          name === "FilterOperand" || name === "Filter" ||
+          name === "TranscludedFilter" || name === "FilteredTransclusion") {
+        return true;
+      }
+      node = node.parent;
+    }
+  } catch (e) {
+    // Ignore errors
+  }
+  return false;
+}
+
 /**
  * Emoji completion source for CM6 autocomplete
  */
 function emojiCompletions(context) {
+  // Don't trigger inside filter expressions (where : is used for suffixes like search:literal)
+  if (isInsideFilter(context)) {
+    return null;
+  }
+
   // Look for :query pattern
   var match = context.matchBefore(/:[a-zA-Z0-9_+-]*$/);
   if (!match) return null;
@@ -293,8 +329,18 @@ exports.plugin = {
   description: "Emoji picker with :shortcode: autocomplete",
   priority: 550,
 
+  // Check if enabled in config
+  condition: function(context) {
+    var enabled = $tw.wiki.getTiddlerText("$:/config/codemirror-6/emojiPicker", "yes");
+    return enabled === "yes";
+  },
+
   init: function(cm6Core) {
     this._core = cm6Core;
+    // Get syntaxTree function for checking context
+    if (cm6Core.language && cm6Core.language.syntaxTree) {
+      _syntaxTree = cm6Core.language.syntaxTree;
+    }
     // Preload emoji data
     setTimeout(function() { loadEmojiData(); }, 100);
   },

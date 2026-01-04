@@ -3,6 +3,43 @@ tags:
 
 ! Changelog
 
+!! Version 0.0.10
+
+!!! New Features
+
+* '''Lint Plugin''' - TiddlyWiki-specific linting with live config updates
+** Unclosed widgets detection (e.g., `<$list>` without `</$list>`)
+** Unclosed wikilinks (e.g., `[[link` without closing `]]`)
+** Unclosed transclusions (e.g., `{{tiddler` without closing `}}`)
+** Unclosed macro calls (e.g., `<<macro` without closing `>>`)
+** Unclosed conditionals (e.g., `<%if%>` without `<%endif%>`)
+** Individual rules can be toggled on/off in ControlPanel
+** Live updates: lint settings take effect immediately without reload
+** Uses CodeMirror compartments for dynamic reconfiguration
+
+* '''Keymap Reference''' - New ControlPanel tab showing keyboard shortcuts
+** Displays shortcuts for current keymap (Default, Vim, Emacs)
+** Tag-based system for extensibility (`$:/tags/CodeMirror/KeymapTable`)
+** Separate KeymapTable tiddlers in each keymap plugin
+
+* '''Plugin Event System''' - New `dispatchPluginEvent` method on engine
+** Allows engine to notify plugins of events (e.g., `onRefresh`)
+** Plugins can respond to tiddler changes dynamically
+** Used by lint plugin for live config updates
+
+!!! Improvements
+
+* '''Zen Mode Responsive Width'''
+** 75% width on large screens (configurable via `$:/config/codemirror-6/zen-mode/max-width`)
+** Full width (100%) on small screens below sidebar breakpoint
+** Uses TiddlyWiki's `sidebarbreakpoint` metric for responsive behavior
+
+* '''Snippets Plugin''' - Config tiddler for enable/disable
+
+* '''Emoji Picker Plugin''' - Config tiddler for enable/disable
+
+---
+
 !! Version 0.0.9
 
 !!! New Features

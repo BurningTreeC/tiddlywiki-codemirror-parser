@@ -2,7 +2,7 @@
     "title": "$:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/lang-tiddlywiki",
     "name": "CodeMirror 6 TiddlyWiki Mode",
     "description": "TiddlyWiki5 syntax highlighting and language support for CodeMirror 6",
-    "version": "0.0.9",
+    "version": "0.0.10",
     "plugin-type": "plugin",
     "dependents": "",
     "list": "readme license",

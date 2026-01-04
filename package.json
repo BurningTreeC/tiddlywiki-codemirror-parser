@@ -30,6 +30,7 @@
     "build:cm6-languages": "rollup -c rollup.config.cm6-languages.js",
     "build:cm6-keymaps": "rollup -c rollup.config.cm6-keymaps.js",
     "build:search": "rollup -c rollup.config.search.js",
+    "build:lint": "rollup -c rollup.config.lint.js",
     "prepublishOnly": "npm run clean && npm run typecheck && npm run build",
     "test": "echo \"No tests yet\" && exit 0"
   },

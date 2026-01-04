@@ -404,11 +404,13 @@ exports.plugin = {
 	description: "Show tiddler preview on hover over links and transclusions",
 	priority: 400,
 
-	// Only load for TiddlyWiki content
+	// Only load for TiddlyWiki content when enabled
 	condition: function(context) {
 		var type = context.tiddlerType;
-		// Also check if preview is not disabled
 		if (context.options.linkPreview === false) return false;
+		// Check config tiddler
+		var enabled = $tw.wiki.getTiddlerText("$:/config/codemirror-6/linkPreview", "yes");
+		if (enabled !== "yes") return false;
 		return !type || type === "" || type === "text/vnd.tiddlywiki" || type === "text/x-tiddlywiki";
 	},
 

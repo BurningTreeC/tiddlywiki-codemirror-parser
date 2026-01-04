@@ -2,7 +2,7 @@
     "title": "$:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/lang-markdown",
     "name": "CodeMirror 6 Markdown Language",
     "description": "Markdown syntax highlighting for CodeMirror 6 code blocks",
-    "version": "0.0.9",
+    "version": "0.0.10",
     "plugin-type": "plugin",
     "dependents": "",
     "list": "readme",

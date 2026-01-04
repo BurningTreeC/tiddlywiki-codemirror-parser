@@ -547,6 +547,11 @@ exports.prototype.refresh = function (changedTiddlers) {
 	// Notify registered plugins of refresh
 	pluginRegistry.callHook("onRefresh", this, changedTiddlers);
 
+	// Notify engine plugins of refresh (codemirror6-plugin modules)
+	if (this.engine && typeof this.engine.dispatchPluginEvent === "function") {
+		this.engine.dispatchPluginEvent("onRefresh", this, changedTiddlers);
+	}
+
 	// Call base refresh
 	return Object.getPrototypeOf(Object.getPrototypeOf(this)).refresh.call(this, changedTiddlers);
 };

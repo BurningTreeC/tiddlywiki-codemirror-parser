@@ -434,10 +434,13 @@ exports.plugin = {
 	description: "Ctrl+Click (Cmd+Click on Mac) to navigate to tiddler",
 	priority: 450,
 
-	// Only load for TiddlyWiki content
+	// Only load for TiddlyWiki content when enabled
 	condition: function(context) {
 		var type = context.tiddlerType;
 		if (context.options.clickNavigate === false) return false;
+		// Check config tiddler
+		var enabled = $tw.wiki.getTiddlerText("$:/config/codemirror-6/clickNavigate", "yes");
+		if (enabled !== "yes") return false;
 		return !type || type === "" || type === "text/vnd.tiddlywiki" || type === "text/x-tiddlywiki";
 	},
 

@@ -1637,6 +1637,8 @@ function tiddlerCompletion(getTiddlerTitles?: () => string[]) {
 
     // Match [[ for links (also works inside filters for literal titles)
     const linkMatch = /\[\[[^\]|]*$/.exec(textBefore)
+    // Match [[display|target for wikilinks with display text (completing the target part)
+    const linkTargetMatch = /\[\[.*?\|[^\]]*$/.exec(textBefore)
     // Match {{ for transclusions (but not {{{ which is filtered transclusion)
     // Also exclude matches containing !! or ## (those are handled by transclusionFieldCompletion)
     let transcludeMatch = /(?<!\{)\{\{[^{}|]*$/.exec(textBefore)
@@ -1672,7 +1674,7 @@ function tiddlerCompletion(getTiddlerTitles?: () => string[]) {
       // Inside filter: [[ is a literal title operand, not a wikilink
       match = filterOperandMatch
     } else {
-      match = linkMatch || transcludeMatch || imageMatch || filterOperandMatch || filterTextRefMatch
+      match = linkMatch || linkTargetMatch || transcludeMatch || imageMatch || filterOperandMatch || filterTextRefMatch
     }
     if (!match) return null
 
@@ -1696,7 +1698,7 @@ function tiddlerCompletion(getTiddlerTitles?: () => string[]) {
     let validFor: RegExp
     let detail: string
 
-    if (filterTextRefMatch) {
+    if (match === filterTextRefMatch) {
       // Text reference inside filter: [operator{tiddler}] or [{tiddler}]
       // Close with }], cursor positioned after } but before ]
       prefix = match[0].slice(0, match[0].lastIndexOf('{') + 1)
@@ -1737,7 +1739,7 @@ function tiddlerCompletion(getTiddlerTitles?: () => string[]) {
         options,
         validFor
       }
-    } else if (filterOperandMatch) {
+    } else if (match === filterOperandMatch) {
       // Filter operand: [operator[value]] or [[value]]
       // Check if this operator has special handling in filterOperatorMeta
       // If so, skip tiddler completion - filterOperandValueCompletion will handle it
@@ -1790,23 +1792,33 @@ function tiddlerCompletion(getTiddlerTitles?: () => string[]) {
         options,
         validFor
       }
-    } else if (linkMatch) {
+    } else if (match === linkMatch) {
       prefix = "[["
       suffix = "]]"
       validFor = /^\[\[[^\]|]*$/
       detail = "tiddler"
-    } else if (transcludeMatch) {
+    } else if (match === linkTargetMatch) {
+      // [[display|target - completing the target part after |
+      const pipePos = match[0].lastIndexOf('|')
+      prefix = match[0].slice(0, pipePos + 1)
+      suffix = "]]"
+      validFor = /^\[\[.*?\|[^\]]*$/
+      detail = "tiddler"
+    } else if (match === transcludeMatch) {
       prefix = "{{"
       suffix = "}}"
       validFor = /^(?<!\{)\{\{[^{}|]*$/
       detail = "tiddler"
-    } else {
+    } else if (match === imageMatch) {
       // Image match - we need to find where the [ starts for the source
       const bracketPos = match[0].lastIndexOf('[')
       prefix = match[0].slice(0, bracketPos + 1)
       suffix = "]]"
       validFor = /^\[img(?:\s+[^\[]*)?\[[^\]|]*$/
       detail = "image"
+    } else {
+      // Should not reach here, but return null for safety
+      return null
     }
 
     const patternLen = match[0].length

@@ -406,3 +406,35 @@ tags: $:/tags/Stylesheet
     margin-top: 0;
     margin-bottom: 1px;
 }
+
+/* ============================================================================
+   ControlPanel - Keymap Reference
+   ============================================================================ */
+
+.cm-keymap-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1em 0;
+}
+
+.cm-keymap-table th,
+.cm-keymap-table td {
+    border: 1px solid <<colour table-border>>;
+    padding: 0.4em 0.8em;
+    text-align: left;
+}
+
+.cm-keymap-table th {
+    background: <<colour table-header-background>>;
+    font-weight: bold;
+}
+
+.cm-keymap-table tr:nth-child(even) {
+    background: <<colour table-header-background>>;
+}
+
+.cm-keymap-key {
+    font-family: monospace;
+    font-weight: bold;
+    white-space: nowrap;
+}

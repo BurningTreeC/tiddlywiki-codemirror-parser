@@ -309,13 +309,22 @@ export class BlockContext implements PartialParse {
   /**
    * Parse pragmas at document start
    *
+   * Pragmas are only valid at the very top of the document (or within another
+   * pragma's body). Once we encounter non-pragma content, no more pragmas.
+   *
    * For better editor UX, we're forgiving about malformed pragma bodies:
-   * - If a line doesn't start with \, but a subsequent line does, we skip
-   *   the non-pragma lines and continue parsing pragmas
+   * - After parsing at least one pragma, if orphan content appears but more
+   *   pragmas follow, we skip the orphan lines and continue
    * - This handles cases like `\define foo() <<` where the body is malformed
    *   but subsequent \procedure/\function lines should still be recognized
+   * - However, if no pragma has been parsed yet, any non-pragma content
+   *   immediately ends the pragma section (no forgiving behavior)
    */
   private parsePragmas() {
+    // Track whether we've parsed at least one pragma
+    // Only be "forgiving" about orphan content AFTER parsing a pragma
+    let parsedAnyPragma = false
+
     while (!this.atEnd) {
       // Skip whitespace lines
       const lineText = this._line.text
@@ -328,10 +337,11 @@ export class BlockContext implements PartialParse {
       // Check if this line starts with a pragma
       if (lineText.charCodeAt(this._line.skipSpace(0)) !== Ch.Backslash) {
         // This line doesn't start with \ - it's not a pragma
-        // Don't skip lines that look like valid block syntax (code fences, etc.)
-        // Only skip truly orphan content from malformed pragma bodies
-        if (!this.looksLikeBlockStart(trimmed) && this.hasUpcomingPragma()) {
-          // Skip this non-pragma line and continue looking for pragmas
+        // Only be forgiving about orphan content if we've already parsed at least one pragma
+        // (handles malformed pragma bodies leaking content)
+        // If we haven't parsed any pragma yet, this is regular content - stop immediately
+        if (parsedAnyPragma && !this.looksLikeBlockStart(trimmed) && this.hasUpcomingPragma()) {
+          // Skip this orphan non-pragma line and continue looking for pragmas
           this.nextLine()
           continue
         }
@@ -353,13 +363,15 @@ export class BlockContext implements PartialParse {
             this.addElement(elt)
           }
           matched = true
+          parsedAnyPragma = true
           break
         }
       }
 
       if (!matched) {
         // Unknown \something - skip and continue if more pragmas are coming
-        if (this.hasUpcomingPragma()) {
+        // Only be forgiving if we've already parsed at least one pragma
+        if (parsedAnyPragma && this.hasUpcomingPragma()) {
           this.nextLine()
           continue
         }
