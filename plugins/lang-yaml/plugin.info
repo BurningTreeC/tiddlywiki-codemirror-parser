@@ -2,7 +2,7 @@
     "title": "$:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/lang-yaml",
     "name": "CodeMirror 6 YAML Language",
     "description": "YAML syntax highlighting for CodeMirror 6 code blocks",
-    "version": "0.0.6",
+    "version": "0.0.7",
     "plugin-type": "plugin",
     "dependents": "",
     "list": "readme",
