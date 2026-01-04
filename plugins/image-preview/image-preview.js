@@ -145,8 +145,7 @@ exports.plugin = {
 				var img = images[i];
 				var deco = Decoration.widget({
 					widget: new ImagePreviewWidget(img.src),
-					side: 1, // After the image syntax
-					block: true // Display as block
+					side: 1 // After the image syntax
 				});
 				widgets.push(deco.range(img.from));
 			}

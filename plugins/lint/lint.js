@@ -214,31 +214,111 @@ function extractLocalDefinitions(text) {
 		macros: new Set(),
 		procedures: new Set(),
 		functions: new Set(),
-		widgets: new Set()
+		widgets: new Set(),
+		variables: new Set()  // Variables defined with <$set>, <$let>, <$vars>
 	};
 
-	// Match \define
+	// Match \define (supports indented pragmas)
 	var defineMatches = text.matchAll(/\\define\s+([^\s(]+)/g);
 	for (var match of defineMatches) {
-		definitions.macros.add(match[1]);
+		definitions.macros.add(match[1].trim());
 	}
 
-	// Match \procedure
+	// Match \procedure (supports indented pragmas)
 	var procMatches = text.matchAll(/\\procedure\s+([^\s(]+)/g);
 	for (var match of procMatches) {
-		definitions.procedures.add(match[1]);
+		definitions.procedures.add(match[1].trim());
 	}
 
-	// Match \function
+	// Match \function (supports indented pragmas)
 	var funcMatches = text.matchAll(/\\function\s+([^\s(]+)/g);
 	for (var match of funcMatches) {
-		definitions.functions.add(match[1]);
+		definitions.functions.add(match[1].trim());
 	}
 
-	// Match \widget
+	// Match \widget (supports indented pragmas)
 	var widgetMatches = text.matchAll(/\\widget\s+([^\s(]+)/g);
 	for (var match of widgetMatches) {
-		definitions.widgets.add(match[1]);
+		definitions.widgets.add(match[1].trim());
+	}
+
+	// Match <$set name="varName">, <$setvariable name="varName">, <$qualify name="varName"> - extract name attribute
+	var setMatches = text.matchAll(/<\$(?:set|setvariable|qualify)\s+[^>]*name\s*=\s*["']([^"']+)["']/gi);
+	for (var match of setMatches) {
+		if (match[1]) definitions.variables.add(match[1]);
+	}
+
+	// Match <$let varName="value"> - all attributes are variables
+	var letMatches = text.matchAll(/<\$let\s+([^>]+)>/gi);
+	for (var match of letMatches) {
+		var attrs = match[1];
+		var attrMatches = attrs.matchAll(/([a-zA-Z_][\w-]*)\s*=/g);
+		for (var attrMatch of attrMatches) {
+			definitions.variables.add(attrMatch[1]);
+		}
+	}
+
+	// Match <$vars varName="value"> - all attributes are variables
+	var varsMatches = text.matchAll(/<\$vars\s+([^>]+)>/gi);
+	for (var match of varsMatches) {
+		var attrs = match[1];
+		var attrMatches = attrs.matchAll(/([a-zA-Z_][\w-]*)\s*=/g);
+		for (var attrMatch of attrMatches) {
+			definitions.variables.add(attrMatch[1]);
+		}
+	}
+
+	// Match <$list variable="item" counter="idx"> - extract variable and counter
+	var listMatches = text.matchAll(/<\$list\s+[^>]*(?:variable|counter)\s*=\s*["']([^"']+)["']/gi);
+	for (var match of listMatches) {
+		if (match[1]) definitions.variables.add(match[1]);
+	}
+
+	// Match <$range variable="i"> - extract variable attribute
+	var rangeMatches = text.matchAll(/<\$range\s+[^>]*variable\s*=\s*["']([^"']+)["']/gi);
+	for (var match of rangeMatches) {
+		if (match[1]) definitions.variables.add(match[1]);
+	}
+
+	// Match <$wikify name="html"> - extract name attribute
+	var wikifyMatches = text.matchAll(/<\$wikify\s+[^>]*name\s*=\s*["']([^"']+)["']/gi);
+	for (var match of wikifyMatches) {
+		if (match[1]) definitions.variables.add(match[1]);
+	}
+
+	// Match <$parameters> which defines parameter variables
+	var paramWidgetMatches = text.matchAll(/<\$parameters\s+([^>\/]+)/gi);
+	for (var match of paramWidgetMatches) {
+		var attrs = match[1];
+		var attrMatches = attrs.matchAll(/([a-zA-Z_][\w-]*)\s*=/g);
+		for (var attrMatch of attrMatches) {
+			definitions.variables.add(attrMatch[1]);
+		}
+	}
+
+	// Match \parameters(param1:"default" param2) pragma - extracts parameter names
+	var paramsPragmaMatches = text.matchAll(/\\parameters\s*\(([^)]*)\)/g);
+	for (var match of paramsPragmaMatches) {
+		var paramsStr = match[1];
+		// Parameters can be: name, name:"default", name:<<macro>>
+		var paramMatches = paramsStr.matchAll(/([a-zA-Z][a-zA-Z0-9_-]*)/g);
+		for (var paramMatch of paramMatches) {
+			definitions.variables.add(paramMatch[1]);
+		}
+	}
+
+	// Extract parameter names from procedure/function/macro definitions
+	// \procedure name(param1, param2:"default")
+	var defWithParamsMatches = text.matchAll(/\\(?:define|procedure|function|widget)\s+[^\s(]+\s*\(([^)]*)\)/g);
+	for (var match of defWithParamsMatches) {
+		var paramsStr = match[1];
+		if (paramsStr) {
+			// Parameters are comma or space separated, may have defaults
+			var paramMatches = paramsStr.matchAll(/([a-zA-Z][a-zA-Z0-9_-]*)/g);
+			for (var paramMatch of paramMatches) {
+				definitions.variables.add(paramMatch[1]);
+			}
+		}
 	}
 
 	return definitions;
@@ -1388,15 +1468,17 @@ function createTiddlyWikiLinter(view) {
 
 			// Check macro calls
 			if (nodeType === "MacroName" && isRuleEnabled("undefinedMacros")) {
-				if (!isDefinitionKnown(text, "any") &&
-					!localDefs.macros.has(text) &&
-					!localDefs.procedures.has(text) &&
-					!localDefs.functions.has(text)) {
+				var macroName = text.trim();
+				if (!isDefinitionKnown(macroName, "any") &&
+					!localDefs.macros.has(macroName) &&
+					!localDefs.procedures.has(macroName) &&
+					!localDefs.functions.has(macroName) &&
+					!localDefs.variables.has(macroName)) {
 					diagnostics.push({
 						from: from,
 						to: to,
 						severity: "info",
-						message: "Possibly undefined macro: " + text,
+						message: "Possibly undefined macro: " + macroName,
 						source: "tiddlywiki"
 					});
 				}

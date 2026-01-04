@@ -159,8 +159,24 @@ function getTiddlerTitles(): string[] {
   try {
     const wiki = _currentEngine?.widget?.wiki || $tw.wiki
     if (!wiki) return []
-    // Get non-system tiddlers for link completion
-    return wiki.filterTiddlers("[!is[system]sort[title]]") || []
+    // Get all tiddlers including shadows, with system tiddlers ($:/) sorted last
+    return wiki.filterTiddlers("[all[tiddlers+shadows]!prefix[$:/]sort[title]] [all[tiddlers+shadows]prefix[$:/]sort[title]]") || []
+  } catch (e) {
+    return []
+  }
+}
+
+/**
+ * Get image tiddler titles for [img[ autocompletion
+ * Filters for tiddlers with type starting with "image/"
+ */
+function getImageTiddlerTitles(): string[] {
+  if (typeof $tw === "undefined") return []
+  try {
+    const wiki = _currentEngine?.widget?.wiki || $tw.wiki
+    if (!wiki) return []
+    // Get tiddlers with image type using is[image] operator
+    return wiki.filterTiddlers("[all[tiddlers+shadows]is[image]]") || []
   } catch (e) {
     return []
   }
@@ -300,6 +316,7 @@ function buildLanguageSupport(context: CM6PluginContext): Extension {
     completeFilterOperators: options.completeFilterOperators !== false,
     completeFilterRunPrefixes: options.completeFilterRunPrefixes !== false,
     getTiddlerTitles,
+    getImageTiddlerTitles,
     getMacroNames,
     getMacroParams,
     getWidgetNames,
@@ -506,10 +523,20 @@ export const plugin = {
       /**
        * Handle TiddlyWiki-specific text operations
        * Called when engine._triggerEvent("textOperation", operation) is invoked
+       *
+       * NOTE: If operation.replacement was set, the engine's _applyTextOperation
+       * already handled it with multi-cursor support. We only call our commands
+       * when replacement is NOT set (direct command invocation).
        */
       textOperation(operation: any) {
         if (!operation || engine._destroyed) return
-        
+
+        // Skip if engine already processed this via _applyTextOperation
+        // (it sets replacement for wrap-style operations)
+        if (operation.replacement !== null && operation.replacement !== undefined) {
+          return
+        }
+
         switch (operation.type) {
           case "toggle-bold":
             (engine as any).toggleBold?.()

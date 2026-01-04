@@ -123,6 +123,7 @@ const defaultStyleTags = styleTags({
   // Block quotes
   BlockQuote: t.quote,
   QuoteMark: t.processingInstruction,
+  BlockQuoteClass: t.className,
 
   // Tables
   "Table TableRow": t.content,

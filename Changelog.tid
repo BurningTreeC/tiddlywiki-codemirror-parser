@@ -3,6 +3,96 @@ tags:
 
 ! Changelog
 
+!! Version 0.0.14
+
+!!! New Features
+
+* '''Language Switcher''' - Temporarily switch editor language mode without changing tiddler type
+** Toolbar dropdown button with all installed languages
+** Keyboard shortcut `Ctrl+Alt+L` opens picker panel within editor
+** Supports TiddlyWiki, Markdown, HTML, CSS, JavaScript, TypeScript, JSON, YAML, XML, Python, Plain Text
+** Configurable persistence: session-only or save to `codemirror-type` field
+** Config tiddler: `$:/config/codemirror-6/languageSwitcherPersist`
+
+* '''CodeMirror Keyboard Shortcuts''' - Support for editor-specific keyboard shortcuts
+** New tag `$:/tags/KeyboardShortcut/CodeMirror` for registering shortcuts
+** Shortcuts can use `((shortcut-name))` reference syntax
+** `handleKeydownEvent` method checks and executes registered shortcuts
+
+---
+
+!! Version 0.0.13
+
+!!! Improvements
+
+* '''Consistent Selection Highlighting''' - Selected text now has uniform appearance
+** Selection background and text color applied consistently regardless of formatting
+** Bold, italic, and other styled text no longer bleeds through selection
+** Works for both primary and secondary (multi-cursor) selections
+
+* '''Cursor Styling''' - Improved cursor visibility
+** Cursor now extends slightly above and below the text line
+** Default blink rate changed to 530ms (matches Windows/VS Code standard)
+
+* '''Lucide Icons''' - Updated toolbar icons to use Lucide icon set
+** Undo: `undo-2`
+** Redo: `redo-2`
+** Show Trailing Whitespace: `pilcrow`
+** Remove Trailing Whitespace: `eraser`
+** Spellcheck: `spell-check-2`
+
+* '''License Files''' - Added MIT license to all plugins
+** Main editor plugin includes Lucide Icons ISC license attribution
+
+---
+
+!! Version 0.0.12
+
+!!! New Plugins
+
+* '''Image Preview Plugin''' - Inline preview of images in the editor
+** Shows image previews after `[img[source]]` syntax
+** Supports both tiddler images and external URLs
+** Shows "[Image not found]" for missing tiddlers
+** Config tiddler: `$:/config/codemirror-6/imagePreview`
+
+* '''Color Picker Plugin''' - Inline color swatches with click-to-edit
+** Displays color swatches next to hex colors (`#fff`, `#ff0000`)
+** Supports `rgb()`, `rgba()`, `hsl()`, and `hsla()` colors
+** Click swatch to open native color picker and update the color
+** Config tiddler: `$:/config/codemirror-6/colorPicker`
+
+* '''Word Count Plugin''' - Live word, character, and line count display
+** Shows counts in a panel below the editor
+** Updates on document changes and selection changes
+** When text is selected, shows "selected / total" counts
+** Config tiddler: `$:/config/codemirror-6/wordCount`
+
+!!! New Features
+
+* '''Complete Any Word''' - Configurable fallback word completion from document
+** Suggests words that appear elsewhere in the document when no other completions match
+** Toggle on/off in ControlPanel (disabled by default)
+** Config tiddler: `$:/config/codemirror-6/completeAnyWord`
+
+!!! Improvements
+
+* '''Multi-Cursor Toolbar Operations''' - Toolbar buttons now work with multiple selections
+** Bold, italic, and other wrap-style operations apply to all cursors independently
+** Proper toggle behavior: each selection checks for existing markers and adds/removes accordingly
+** Fixes `tm-edit-text-operation` messages to pass prefix/suffix for multi-cursor support
+
+* '''Extended Close Brackets''' - Additional quote pairs for auto-closing
+** Curly/typographic quotes: `""` and `''`
+** German-style quotes: `„"` and `‚'`
+** All pairs work with the close brackets feature when enabled
+
+* '''Auto Close Tags Filter Context''' - No longer triggers inside filter expressions
+** Uses syntax tree to detect `FilterExpression`, `FilterRun`, `FilteredTransclusion` contexts
+** Prevents `<variable>` in filters like `[<myvar>]` from getting a closing tag
+
+---
+
 !! Version 0.0.11
 
 !!! New Features

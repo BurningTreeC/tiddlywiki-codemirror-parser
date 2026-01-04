@@ -3,9 +3,9 @@
     "name": "Link Preview",
     "description": "Show tiddler preview on hover over links",
     "author": "BurningTreeC",
-    "version": "0.0.11",
+    "version": "0.0.14",
     "core-version": ">=5.3.0",
     "plugin-type": "plugin",
     "dependents": "$:/plugins/BurningTreeC/tiddlywiki-codemirror",
-    "list": "readme"
+    "list": "readme license"
 }

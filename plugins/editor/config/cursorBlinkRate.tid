@@ -4,5 +4,5 @@ caption: Cursor blink rate
 description: The cursor blink rate in milliseconds. Set to 0 to disable blinking.
 config-type: number
 config-category: Editing
-default: 1200
-text: 1200
+default: 530
+text: 530

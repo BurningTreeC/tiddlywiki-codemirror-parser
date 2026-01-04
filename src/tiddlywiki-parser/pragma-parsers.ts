@@ -20,37 +20,43 @@ import type { BlockContext } from "./block-context"
  * Match pattern for \define pragma
  * Single line: \define name(params) body
  * Multiline: \define name(params)\n body \n\end
+ * Pragmas can be indented with leading whitespace
  */
-const defineRe = /^\\define\s+([^(\s]+)\s*\(\s*([^)]*)\s*\)(.*)$/
-const defineMultilineRe = /^\\define\s+([^(\s]+)\s*\(\s*([^)]*)\s*\)\s*$/
+const defineRe = /^\s*\\define\s+([^(\s]+)\s*\(\s*([^)]*)\s*\)(.*)$/
+const defineMultilineRe = /^\s*\\define\s+([^(\s]+)\s*\(\s*([^)]*)\s*\)\s*$/
 
 /**
  * Match pattern for \procedure/\function/\widget pragma
  * Single line: \function name(params) body
  * Multiline: \function name(params)\n body \n\end
+ * Pragmas can be indented with leading whitespace
  */
-const fnprocRe = /^\\(function|procedure|widget)\s+([^(\s]+)\s*\(\s*([^)]*)\s*\)(.*)$/
-const fnprocMultilineRe = /^\\(function|procedure|widget)\s+([^(\s]+)\s*\(\s*([^)]*)\s*\)$/
+const fnprocRe = /^\s*\\(function|procedure|widget)\s+([^(\s]+)\s*\(\s*([^)]*)\s*\)(.*)$/
+const fnprocMultilineRe = /^\s*\\(function|procedure|widget)\s+([^(\s]+)\s*\(\s*([^)]*)\s*\)$/
 
 /**
  * Match pattern for \rules pragma
+ * Pragmas can be indented with leading whitespace
  */
-const rulesRe = /^\\rules\s+(only|except)\s+(.*)$/
+const rulesRe = /^\s*\\rules\s+(only|except)\s+(.*)$/
 
 /**
  * Match pattern for \import pragma
+ * Pragmas can be indented with leading whitespace
  */
-const importRe = /^\\import\s+(.*)$/
+const importRe = /^\s*\\import\s+(.*)$/
 
 /**
  * Match pattern for \parameters pragma
+ * Pragmas can be indented with leading whitespace
  */
-const parametersRe = /^\\parameters\s*\(\s*([^)]*)\s*\)$/
+const parametersRe = /^\s*\\parameters\s*\(\s*([^)]*)\s*\)$/
 
 /**
  * Match pattern for \whitespace pragma
+ * Pragmas can be indented with leading whitespace
  */
-const whitespaceRe = /^\\whitespace\s+(trim|notrim)$/
+const whitespaceRe = /^\s*\\whitespace\s+(trim|notrim)$/
 
 /**
  * Find the \end marker for a multi-line pragma, properly handling nested definitions.
@@ -65,7 +71,8 @@ const whitespaceRe = /^\\whitespace\s+(trim|notrim)$/
  */
 function findEnd(cx: BlockContext, name: string): { bodyStart: number, bodyEnd: number, endStart: number, endEnd: number } | null {
   // Match any multi-line definition start (nothing after closing paren)
-  const openRe = /^\\(define|procedure|function|widget)\s+([^(\s]+)\s*\([^)]*\)\s*$/
+  // Allow leading whitespace for indented nested definitions
+  const openRe = /^\s*\\(define|procedure|function|widget)\s+([^(\s]+)\s*\([^)]*\)\s*$/
   // Match any \end (bare or named)
   const endRe = /^\s*\\end(?:\s+(\S+))?\s*$/
 
@@ -259,6 +266,8 @@ export const MacroDefPragma: PragmaParser = {
       const pragmaStart = cx.lineStart
       const name = multiMatch[1]
       const paramStr = multiMatch[2]
+      // Find the actual backslash position (accounting for leading whitespace)
+      const backslashOffset = text.indexOf("\\")
 
       // Save position in case we need to fall back to single-line
       const savedPos = cx.savePosition()
@@ -268,8 +277,8 @@ export const MacroDefPragma: PragmaParser = {
       if (endInfo) {
         // Create elements for pragma mark, keyword, name, params
         const children: Element[] = [
-          elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
-          elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 7), // "define"
+          elt(Type.PragmaMark, pragmaStart + backslashOffset, pragmaStart + backslashOffset + 1),
+          elt(Type.PragmaKeyword, pragmaStart + backslashOffset + 1, pragmaStart + backslashOffset + 7), // "define"
           elt(Type.PragmaName, pragmaStart + text.indexOf(name), pragmaStart + text.indexOf(name) + name.length),
         ]
 
@@ -301,6 +310,8 @@ export const MacroDefPragma: PragmaParser = {
       const name = singleMatch[1]
       const paramStr = singleMatch[2]
       const body = singleMatch[3]
+      // Find the actual backslash position (accounting for leading whitespace)
+      const backslashOffset = text.indexOf("\\")
 
       // If there's any body content, check for \end and treat as multi-line if found
       if (body) {
@@ -309,8 +320,8 @@ export const MacroDefPragma: PragmaParser = {
         if (endInfo) {
           // Found \end - treat as multi-line
           const children: Element[] = [
-            elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
-            elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 7),
+            elt(Type.PragmaMark, pragmaStart + backslashOffset, pragmaStart + backslashOffset + 1),
+            elt(Type.PragmaKeyword, pragmaStart + backslashOffset + 1, pragmaStart + backslashOffset + 7),
             elt(Type.PragmaName, pragmaStart + text.indexOf(name), pragmaStart + text.indexOf(name) + name.length),
           ]
 
@@ -335,8 +346,8 @@ export const MacroDefPragma: PragmaParser = {
       }
 
       const children: Element[] = [
-        elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
-        elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 7),
+        elt(Type.PragmaMark, pragmaStart + backslashOffset, pragmaStart + backslashOffset + 1),
+        elt(Type.PragmaKeyword, pragmaStart + backslashOffset + 1, pragmaStart + backslashOffset + 7),
         elt(Type.PragmaName, pragmaStart + text.indexOf(name), pragmaStart + text.indexOf(name) + name.length),
       ]
 
@@ -377,6 +388,8 @@ export const FnProcDefPragma: PragmaParser = {
       const keyword = multiMatch[1]
       const name = multiMatch[2]
       const paramStr = multiMatch[3]
+      // Find the actual backslash position (accounting for leading whitespace)
+      const backslashOffset = text.indexOf("\\")
 
       let nodeType: Type
       switch (keyword) {
@@ -392,8 +405,8 @@ export const FnProcDefPragma: PragmaParser = {
       const endInfo = findEnd(cx, name)
       if (endInfo) {
         const children: Element[] = [
-          elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
-          elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 1 + keyword.length),
+          elt(Type.PragmaMark, pragmaStart + backslashOffset, pragmaStart + backslashOffset + 1),
+          elt(Type.PragmaKeyword, pragmaStart + backslashOffset + 1, pragmaStart + backslashOffset + 1 + keyword.length),
           elt(Type.PragmaName, pragmaStart + text.indexOf(name), pragmaStart + text.indexOf(name) + name.length),
         ]
 
@@ -433,6 +446,8 @@ export const FnProcDefPragma: PragmaParser = {
       const name = singleMatch[2]
       const paramStr = singleMatch[3]
       const body = singleMatch[4]
+      // Find the actual backslash position (accounting for leading whitespace)
+      const backslashOffset = text.indexOf("\\")
 
       let nodeType: Type
       switch (keyword) {
@@ -449,8 +464,8 @@ export const FnProcDefPragma: PragmaParser = {
         if (endInfo) {
           // Found \end - treat as multi-line
           const children: Element[] = [
-            elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
-            elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 1 + keyword.length),
+            elt(Type.PragmaMark, pragmaStart + backslashOffset, pragmaStart + backslashOffset + 1),
+            elt(Type.PragmaKeyword, pragmaStart + backslashOffset + 1, pragmaStart + backslashOffset + 1 + keyword.length),
             elt(Type.PragmaName, pragmaStart + text.indexOf(name), pragmaStart + text.indexOf(name) + name.length),
           ]
 
@@ -483,8 +498,8 @@ export const FnProcDefPragma: PragmaParser = {
       }
 
       const children: Element[] = [
-        elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
-        elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 1 + keyword.length),
+        elt(Type.PragmaMark, pragmaStart + backslashOffset, pragmaStart + backslashOffset + 1),
+        elt(Type.PragmaKeyword, pragmaStart + backslashOffset + 1, pragmaStart + backslashOffset + 1 + keyword.length),
         elt(Type.PragmaName, pragmaStart + text.indexOf(name), pragmaStart + text.indexOf(name) + name.length),
       ]
 
@@ -530,10 +545,12 @@ export const RulesPragma: PragmaParser = {
     const pragmaStart = cx.lineStart
     const action = match[1]
     const rules = match[2]
+    // Find the actual backslash position (accounting for leading whitespace)
+    const backslashOffset = line.text.indexOf("\\")
 
     const children: Element[] = [
-      elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
-      elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 6), // "rules"
+      elt(Type.PragmaMark, pragmaStart + backslashOffset, pragmaStart + backslashOffset + 1),
+      elt(Type.PragmaKeyword, pragmaStart + backslashOffset + 1, pragmaStart + backslashOffset + 6), // "rules"
     ]
 
     cx.nextLine()
@@ -553,13 +570,15 @@ export const ImportPragma: PragmaParser = {
 
     const pragmaStart = cx.lineStart
     const filter = match[1]
-    const filterStart = pragmaStart + 8  // After "\import "
+    // Find the actual backslash position (accounting for leading whitespace)
+    const backslashOffset = line.text.indexOf("\\")
+    const filterStart = pragmaStart + line.text.indexOf(filter)
 
     // Parse filter with detailed structure
     const filterElements = parseFilterBody(filter, filterStart)
     const children: Element[] = [
-      elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
-      elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 7), // "import"
+      elt(Type.PragmaMark, pragmaStart + backslashOffset, pragmaStart + backslashOffset + 1),
+      elt(Type.PragmaKeyword, pragmaStart + backslashOffset + 1, pragmaStart + backslashOffset + 7), // "import"
       elt(Type.FilterExpression, filterStart, filterStart + filter.length, filterElements),
     ]
 
@@ -580,10 +599,12 @@ export const ParametersPragma: PragmaParser = {
 
     const pragmaStart = cx.lineStart
     const paramStr = match[1]
+    // Find the actual backslash position (accounting for leading whitespace)
+    const backslashOffset = line.text.indexOf("\\")
 
     const children: Element[] = [
-      elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
-      elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 11), // "parameters"
+      elt(Type.PragmaMark, pragmaStart + backslashOffset, pragmaStart + backslashOffset + 1),
+      elt(Type.PragmaKeyword, pragmaStart + backslashOffset + 1, pragmaStart + backslashOffset + 11), // "parameters"
     ]
 
     if (paramStr) {
@@ -607,10 +628,12 @@ export const WhitespacePragma: PragmaParser = {
     if (!match) return null
 
     const pragmaStart = cx.lineStart
+    // Find the actual backslash position (accounting for leading whitespace)
+    const backslashOffset = line.text.indexOf("\\")
 
     const children: Element[] = [
-      elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
-      elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 11), // "whitespace"
+      elt(Type.PragmaMark, pragmaStart + backslashOffset, pragmaStart + backslashOffset + 1),
+      elt(Type.PragmaKeyword, pragmaStart + backslashOffset + 1, pragmaStart + backslashOffset + 11), // "whitespace"
     ]
 
     cx.nextLine()
@@ -621,39 +644,39 @@ export const WhitespacePragma: PragmaParser = {
 /**
  * Partial/incomplete pragma patterns for highlighting while typing
  * These match pragmas that are being typed but aren't complete yet
+ * All patterns allow leading whitespace for indented pragmas
  */
 
 // Partial \define - matches incomplete define statements (including partial keyword)
-// Note: \s* at end handles trailing whitespace like "\define "
-const definePartialRe = /^\\define(?:\s+([^(\s]+))?(?:\s*\(([^)]*)\)?)?\s*$/
+const definePartialRe = /^\s*\\define(?:\s+([^(\s]+))?(?:\s*\(([^)]*)\)?)?\s*$/
 // Partial define keyword - with optional name and params
-const defineKeywordPartialRe = /^\\(d|de|def|defi|defin)(?:\s+([^(\s]+))?(?:\s*\(([^)]*)\)?)?\s*$/
+const defineKeywordPartialRe = /^\s*\\(d|de|def|defi|defin)(?:\s+([^(\s]+))?(?:\s*\(([^)]*)\)?)?\s*$/
 
 // Partial \function/\procedure/\widget (including partial keywords)
-const fnprocPartialRe = /^\\(function|procedure|widget)(?:\s+([^(\s]+))?(?:\s*\(([^)]*)\)?)?\s*$/
+const fnprocPartialRe = /^\s*\\(function|procedure|widget)(?:\s+([^(\s]+))?(?:\s*\(([^)]*)\)?)?\s*$/
 // Partial keywords - with optional name and params
-const functionKeywordPartialRe = /^\\(f|fu|fun|func|funct|functi|functio)(?:\s+([^(\s]+))?(?:\s*\(([^)]*)\)?)?\s*$/
-const procedureKeywordPartialRe = /^\\(p|pr|pro|proc|proce|proced|procedu|procedur)(?:\s+([^(\s]+))?(?:\s*\(([^)]*)\)?)?\s*$/
-const widgetKeywordPartialRe = /^\\(w|wi|wid|widg|widge)(?:\s+([^(\s]+))?(?:\s*\(([^)]*)\)?)?\s*$/
+const functionKeywordPartialRe = /^\s*\\(f|fu|fun|func|funct|functi|functio)(?:\s+([^(\s]+))?(?:\s*\(([^)]*)\)?)?\s*$/
+const procedureKeywordPartialRe = /^\s*\\(p|pr|pro|proc|proce|proced|procedu|procedur)(?:\s+([^(\s]+))?(?:\s*\(([^)]*)\)?)?\s*$/
+const widgetKeywordPartialRe = /^\s*\\(w|wi|wid|widg|widge)(?:\s+([^(\s]+))?(?:\s*\(([^)]*)\)?)?\s*$/
 
 // Partial \rules - just the keyword or with only/except (including partial keyword)
-const rulesPartialRe = /^\\rules(?:\s+(only|except)?)?(?:\s+(.*))?$/
-const rulesKeywordPartialRe = /^\\(r|ru|rul|rule)\s*$/
+const rulesPartialRe = /^\s*\\rules(?:\s+(only|except)?)?(?:\s+(.*))?$/
+const rulesKeywordPartialRe = /^\s*\\(r|ru|rul|rule)\s*$/
 
 // Partial \import - just the keyword (including partial keyword)
-const importPartialRe = /^\\import\s*(.*)$/
-const importKeywordPartialRe = /^\\(i|im|imp|impo|impor)\s*$/
+const importPartialRe = /^\s*\\import\s*(.*)$/
+const importKeywordPartialRe = /^\s*\\(i|im|imp|impo|impor)\s*$/
 
 // Partial \parameters - incomplete (including partial keyword)
-const parametersPartialRe = /^\\parameters(?:\s*\(([^)]*)?)?\s*$/
-const parametersKeywordPartialRe = /^\\(pa|par|para|param|parame|paramet|paramete|parameter)\s*$/
+const parametersPartialRe = /^\s*\\parameters(?:\s*\(([^)]*)?)?\s*$/
+const parametersKeywordPartialRe = /^\s*\\(pa|par|para|param|parame|paramet|paramete|parameter)\s*$/
 
 // Partial \whitespace - just the keyword (including partial keyword)
-const whitespacePartialRe = /^\\whitespace(?:\s+(.*))?$/
-const whitespaceKeywordPartialRe = /^\\(wh|whi|whit|white|whites|whitesp|whitespa|whitespac)\s*$/
+const whitespacePartialRe = /^\s*\\whitespace(?:\s+(.*))?$/
+const whitespaceKeywordPartialRe = /^\s*\\(wh|whi|whit|white|whites|whitesp|whitespa|whitespac)\s*$/
 
 // Partial \end
-const endKeywordPartialRe = /^\\(e|en|end)(?:\s+.*)?\s*$/
+const endKeywordPartialRe = /^\s*\\(e|en|end)(?:\s+.*)?\s*$/
 
 /**
  * Partial pragma parser - catches incomplete pragmas while typing
@@ -665,13 +688,15 @@ export const PartialPragma: PragmaParser = {
   parse(cx: BlockContext, line: Line): Element[] | null {
     const text = line.text
     const pragmaStart = cx.lineStart
+    // Find the actual backslash position (accounting for leading whitespace)
+    const backslashOffset = text.indexOf("\\")
 
     // Try partial \define
     let match = definePartialRe.exec(text)
     if (match) {
       const children: Element[] = [
-        elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
-        elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 7), // "define"
+        elt(Type.PragmaMark, pragmaStart + backslashOffset, pragmaStart + backslashOffset + 1),
+        elt(Type.PragmaKeyword, pragmaStart + backslashOffset + 1, pragmaStart + backslashOffset + 7), // "define"
       ]
 
       const name = match[1]
@@ -705,8 +730,8 @@ export const PartialPragma: PragmaParser = {
       }
 
       const children: Element[] = [
-        elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
-        elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 1 + keyword.length),
+        elt(Type.PragmaMark, pragmaStart + backslashOffset, pragmaStart + backslashOffset + 1),
+        elt(Type.PragmaKeyword, pragmaStart + backslashOffset + 1, pragmaStart + backslashOffset + 1 + keyword.length),
       ]
 
       const name = match[2]
@@ -731,8 +756,8 @@ export const PartialPragma: PragmaParser = {
     match = rulesPartialRe.exec(text)
     if (match) {
       const children: Element[] = [
-        elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
-        elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 6), // "rules"
+        elt(Type.PragmaMark, pragmaStart + backslashOffset, pragmaStart + backslashOffset + 1),
+        elt(Type.PragmaKeyword, pragmaStart + backslashOffset + 1, pragmaStart + backslashOffset + 6), // "rules"
       ]
 
       cx.nextLine()
@@ -743,13 +768,14 @@ export const PartialPragma: PragmaParser = {
     match = importPartialRe.exec(text)
     if (match) {
       const children: Element[] = [
-        elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
-        elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 7), // "import"
+        elt(Type.PragmaMark, pragmaStart + backslashOffset, pragmaStart + backslashOffset + 1),
+        elt(Type.PragmaKeyword, pragmaStart + backslashOffset + 1, pragmaStart + backslashOffset + 7), // "import"
       ]
 
       const filter = match[1]
       if (filter && filter.trim()) {
-        children.push(elt(Type.FilterExpression, pragmaStart + 8, pragmaStart + 8 + filter.length))
+        const filterStart = pragmaStart + text.indexOf(filter)
+        children.push(elt(Type.FilterExpression, filterStart, filterStart + filter.length))
       }
 
       cx.nextLine()
@@ -760,8 +786,8 @@ export const PartialPragma: PragmaParser = {
     match = parametersPartialRe.exec(text)
     if (match) {
       const children: Element[] = [
-        elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
-        elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 11), // "parameters"
+        elt(Type.PragmaMark, pragmaStart + backslashOffset, pragmaStart + backslashOffset + 1),
+        elt(Type.PragmaKeyword, pragmaStart + backslashOffset + 1, pragmaStart + backslashOffset + 11), // "parameters"
       ]
 
       const paramStr = match[1]
@@ -780,8 +806,8 @@ export const PartialPragma: PragmaParser = {
     match = whitespacePartialRe.exec(text)
     if (match) {
       const children: Element[] = [
-        elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
-        elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 11), // "whitespace"
+        elt(Type.PragmaMark, pragmaStart + backslashOffset, pragmaStart + backslashOffset + 1),
+        elt(Type.PragmaKeyword, pragmaStart + backslashOffset + 1, pragmaStart + backslashOffset + 11), // "whitespace"
       ]
 
       cx.nextLine()
@@ -796,8 +822,8 @@ export const PartialPragma: PragmaParser = {
       const name = match[2]
       const paramStr = match[3]
       const children: Element[] = [
-        elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
-        elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 1 + keyword.length),
+        elt(Type.PragmaMark, pragmaStart + backslashOffset, pragmaStart + backslashOffset + 1),
+        elt(Type.PragmaKeyword, pragmaStart + backslashOffset + 1, pragmaStart + backslashOffset + 1 + keyword.length),
       ]
       if (name) {
         const nameStart = pragmaStart + text.indexOf(name)
@@ -820,8 +846,8 @@ export const PartialPragma: PragmaParser = {
       const name = match[2]
       const paramStr = match[3]
       const children: Element[] = [
-        elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
-        elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 1 + keyword.length),
+        elt(Type.PragmaMark, pragmaStart + backslashOffset, pragmaStart + backslashOffset + 1),
+        elt(Type.PragmaKeyword, pragmaStart + backslashOffset + 1, pragmaStart + backslashOffset + 1 + keyword.length),
       ]
       if (name) {
         const nameStart = pragmaStart + text.indexOf(name)
@@ -844,8 +870,8 @@ export const PartialPragma: PragmaParser = {
       const name = match[2]
       const paramStr = match[3]
       const children: Element[] = [
-        elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
-        elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 1 + keyword.length),
+        elt(Type.PragmaMark, pragmaStart + backslashOffset, pragmaStart + backslashOffset + 1),
+        elt(Type.PragmaKeyword, pragmaStart + backslashOffset + 1, pragmaStart + backslashOffset + 1 + keyword.length),
       ]
       if (name) {
         const nameStart = pragmaStart + text.indexOf(name)
@@ -868,8 +894,8 @@ export const PartialPragma: PragmaParser = {
       const name = match[2]
       const paramStr = match[3]
       const children: Element[] = [
-        elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
-        elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 1 + keyword.length),
+        elt(Type.PragmaMark, pragmaStart + backslashOffset, pragmaStart + backslashOffset + 1),
+        elt(Type.PragmaKeyword, pragmaStart + backslashOffset + 1, pragmaStart + backslashOffset + 1 + keyword.length),
       ]
       if (name) {
         const nameStart = pragmaStart + text.indexOf(name)
@@ -890,8 +916,8 @@ export const PartialPragma: PragmaParser = {
     if (match) {
       const keyword = match[1]
       const children: Element[] = [
-        elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
-        elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 1 + keyword.length),
+        elt(Type.PragmaMark, pragmaStart + backslashOffset, pragmaStart + backslashOffset + 1),
+        elt(Type.PragmaKeyword, pragmaStart + backslashOffset + 1, pragmaStart + backslashOffset + 1 + keyword.length),
       ]
       cx.nextLine()
       return [elt(Type.RulesPragma, pragmaStart, cx.prevLineEnd(), children)]
@@ -902,8 +928,8 @@ export const PartialPragma: PragmaParser = {
     if (match) {
       const keyword = match[1]
       const children: Element[] = [
-        elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
-        elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 1 + keyword.length),
+        elt(Type.PragmaMark, pragmaStart + backslashOffset, pragmaStart + backslashOffset + 1),
+        elt(Type.PragmaKeyword, pragmaStart + backslashOffset + 1, pragmaStart + backslashOffset + 1 + keyword.length),
       ]
       cx.nextLine()
       return [elt(Type.ImportPragma, pragmaStart, cx.prevLineEnd(), children)]
@@ -914,8 +940,8 @@ export const PartialPragma: PragmaParser = {
     if (match) {
       const keyword = match[1]
       const children: Element[] = [
-        elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
-        elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 1 + keyword.length),
+        elt(Type.PragmaMark, pragmaStart + backslashOffset, pragmaStart + backslashOffset + 1),
+        elt(Type.PragmaKeyword, pragmaStart + backslashOffset + 1, pragmaStart + backslashOffset + 1 + keyword.length),
       ]
       cx.nextLine()
       return [elt(Type.ParametersPragma, pragmaStart, cx.prevLineEnd(), children)]
@@ -926,8 +952,8 @@ export const PartialPragma: PragmaParser = {
     if (match) {
       const keyword = match[1]
       const children: Element[] = [
-        elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
-        elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 1 + keyword.length),
+        elt(Type.PragmaMark, pragmaStart + backslashOffset, pragmaStart + backslashOffset + 1),
+        elt(Type.PragmaKeyword, pragmaStart + backslashOffset + 1, pragmaStart + backslashOffset + 1 + keyword.length),
       ]
       cx.nextLine()
       return [elt(Type.WhitespacePragma, pragmaStart, cx.prevLineEnd(), children)]
@@ -938,8 +964,8 @@ export const PartialPragma: PragmaParser = {
     if (match) {
       const keyword = match[1]
       const children: Element[] = [
-        elt(Type.PragmaMark, pragmaStart, pragmaStart + 1),
-        elt(Type.PragmaKeyword, pragmaStart + 1, pragmaStart + 1 + keyword.length),
+        elt(Type.PragmaMark, pragmaStart + backslashOffset, pragmaStart + backslashOffset + 1),
+        elt(Type.PragmaKeyword, pragmaStart + backslashOffset + 1, pragmaStart + backslashOffset + 1 + keyword.length),
       ]
       cx.nextLine()
       return [elt(Type.PragmaEnd, pragmaStart, cx.prevLineEnd(), children)]

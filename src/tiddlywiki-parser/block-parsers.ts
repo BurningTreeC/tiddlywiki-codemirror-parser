@@ -322,8 +322,13 @@ export const MultiLineBlockQuote: BlockParser = {
       elt(Type.QuoteMark, start, openingMarkEnd)
     ]
 
-    // If there's class/style info after opening <<<, we could parse it
-    // For now, just note the position
+    // Parse class/style info after opening <<<
+    if (classText) {
+      const rawClassText = openMatch[1]
+      const leadingSpaces = rawClassText.length - rawClassText.trimStart().length
+      const classStart = openingMarkEnd + leadingSpaces
+      children.push(elt(Type.BlockQuoteClass, classStart, classStart + classText.length))
+    }
 
     // Find the closing <<<
     const contentStart = start + line.text.length + 1 // After opening line + newline
@@ -331,6 +336,7 @@ export const MultiLineBlockQuote: BlockParser = {
     let closingStart = -1
     let closingEnd = -1
     let citation = ""
+    let closingLineText = ""
 
     while (cx.nextLine()) {
       const lineText = cx.line.text
@@ -340,6 +346,7 @@ export const MultiLineBlockQuote: BlockParser = {
         closingStart = cx.lineStart
         closingEnd = cx.lineStart + lineText.length
         contentEnd = closingStart - 1 // Before closing line (exclude newline)
+        closingLineText = lineText
         citation = lineText.slice(3).trim()
         break
       }
@@ -357,7 +364,9 @@ export const MultiLineBlockQuote: BlockParser = {
 
       // If there's a citation, parse it as inline content
       if (citation) {
-        const citationStart = closingStart + 3
+        const rawCitation = closingLineText.slice(3)
+        const leadingSpaces = rawCitation.length - rawCitation.trimStart().length
+        const citationStart = closingStart + 3 + leadingSpaces
         const citationElements = cx.parser.parseInline(citation, citationStart)
         children.push(...(citationElements as Element[]))
       }
@@ -424,12 +433,14 @@ function parseTableRow(text: string, offset: number, cx: BlockContext, marker?: 
     if (ch === Ch.Pipe) {
       if (cellStart >= 0) {
         // End of cell content
-        const cellText = text.slice(cellStart, pos).trim()
+        const rawCellText = text.slice(cellStart, pos)
+        const leadingSpaces = rawCellText.length - rawCellText.trimStart().length
+        const cellText = rawCellText.trim()
         const isHeader = cellText.startsWith("!")
         const cellType = isHeader ? Type.TableHeaderCell : Type.TableCell
 
-        // Parse inline content
-        const contentStart = isHeader ? cellStart + 1 : cellStart
+        // Parse inline content - account for leading whitespace from trim
+        const contentStart = cellStart + leadingSpaces + (isHeader ? 1 : 0)
         const contentText = isHeader ? cellText.slice(1) : cellText
         const inlineElements = cx.parser.parseInline(contentText, offset + contentStart)
 
@@ -713,9 +724,9 @@ export const MacroCallBlock: BlockParser = {
 
     const start = cx.lineStart
 
-    // Parse macro name
+    // Parse macro name (stop at whitespace or >)
     let nameEnd = 2
-    while (nameEnd < line.text.length && !/\s/.test(line.text[nameEnd])) nameEnd++
+    while (nameEnd < line.text.length && !/[\s>]/.test(line.text[nameEnd])) nameEnd++
     const name = line.text.slice(2, nameEnd)
     if (!name) return false
 

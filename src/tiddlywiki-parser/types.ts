@@ -46,6 +46,7 @@ export enum Type {
   // Block quote (multi-line with <<<)
   BlockQuote,
   QuoteMark,
+  BlockQuoteClass,      // Class after opening <<<
 
   // Tables
   Table,

@@ -85,6 +85,135 @@ exports.prototype.handleRemoveTrailingWhitespace = function(event) {
 };
 
 // ============================================================================
+// Language Switcher handlers
+// ============================================================================
+
+exports.prototype.handleSetLanguage = function(event) {
+	if (!this.engine) return false;
+
+	var newType = event.paramObject ? event.paramObject.type : null;
+	if (newType === undefined || newType === null) return false;
+
+	// Check persistence mode from config
+	var persistMode = this.wiki.getTiddlerText("$:/config/codemirror-6/languageSwitcherPersist", "session");
+
+	if (persistMode === "field" && this.editTitle) {
+		// Save to tiddler field for persistence
+		if (newType === "") {
+			// Empty means "use default" - remove the override field
+			this.wiki.setText(this.editTitle, "codemirror-type", null, undefined);
+		} else {
+			this.wiki.setText(this.editTitle, "codemirror-type", null, newType);
+		}
+	}
+
+	// Switch the language in the editor
+	this.engine.setType(newType);
+
+	// Close the picker if open
+	this.hideLanguagePicker();
+	this.engine.focus();
+
+	return false; // Don't propagate
+};
+
+exports.prototype.handleShowLanguagePicker = function(event) {
+	if (!this.engine || !this.engine.domNode) return false;
+
+	this.showLanguagePicker();
+	return false;
+};
+
+exports.prototype.showLanguagePicker = function() {
+	var self = this;
+	var domNode = this.engine.domNode;
+
+	// Remove existing picker if any
+	this.hideLanguagePicker();
+
+	// Create picker container
+	var picker = document.createElement("div");
+	picker.className = "cm6-language-picker";
+	this._languagePicker = picker;
+
+	// Language options
+	var languages = [
+		{ type: "", label: "Default (from type)" },
+		{ type: "text/vnd.tiddlywiki", label: "TiddlyWiki" },
+		{ type: "text/x-markdown", label: "Markdown" },
+		{ type: "text/html", label: "HTML" },
+		{ type: "text/css", label: "CSS" },
+		{ type: "application/javascript", label: "JavaScript" },
+		{ type: "application/typescript", label: "TypeScript" },
+		{ type: "application/json", label: "JSON" },
+		{ type: "application/x-yaml", label: "YAML" },
+		{ type: "application/xml", label: "XML" },
+		{ type: "text/x-python", label: "Python" },
+		{ type: "text/plain", label: "Plain Text" }
+	];
+
+	languages.forEach(function(lang) {
+		var btn = document.createElement("button");
+		btn.className = "cm6-language-picker-option";
+		btn.textContent = lang.label;
+		btn.addEventListener("click", function(e) {
+			e.preventDefault();
+			e.stopPropagation();
+			self.engine.setType(lang.type);
+
+			// Check persistence mode
+			var persistMode = self.wiki.getTiddlerText("$:/config/codemirror-6/languageSwitcherPersist", "session");
+			if (persistMode === "field" && self.editTitle) {
+				if (lang.type === "") {
+					self.wiki.setText(self.editTitle, "codemirror-type", null, undefined);
+				} else {
+					self.wiki.setText(self.editTitle, "codemirror-type", null, lang.type);
+				}
+			}
+
+			self.hideLanguagePicker();
+			self.engine.focus();
+		});
+		picker.appendChild(btn);
+	});
+
+	// Close on Escape
+	picker.addEventListener("keydown", function(e) {
+		if (e.key === "Escape") {
+			self.hideLanguagePicker();
+			self.engine.focus();
+		}
+	});
+
+	// Close on click outside
+	setTimeout(function() {
+		self.document.addEventListener("click", self._pickerClickOutside = function(e) {
+			if (!picker.contains(e.target)) {
+				self.hideLanguagePicker();
+			}
+		});
+	}, 0);
+
+	// Insert at top of editor
+	domNode.insertBefore(picker, domNode.firstChild);
+
+	// Focus first option
+	var firstBtn = picker.querySelector("button");
+	if (firstBtn) firstBtn.focus();
+};
+
+exports.prototype.hideLanguagePicker = function() {
+	if (this._languagePicker) {
+		this._languagePicker.remove();
+		this._languagePicker = null;
+	}
+	if (this._pickerClickOutside) {
+		this.document.removeEventListener("click", this._pickerClickOutside);
+		this._pickerClickOutside = null;
+	}
+};
+
+// ============================================================================
 // Plugin Registry - allows external plugins to hook into the widget
 // ============================================================================
 
@@ -362,6 +491,8 @@ exports.prototype.render = function (parent, nextSibling) {
 	this.addEventListener("tm-cm6-undo", "handleUndo");
 	this.addEventListener("tm-cm6-redo", "handleRedo");
 	this.addEventListener("tm-cm6-remove-trailing-whitespace", "handleRemoveTrailingWhitespace");
+	this.addEventListener("tm-cm6-set-language", "handleSetLanguage");
+	this.addEventListener("tm-cm6-show-language-picker", "handleShowLanguagePicker");
 
 	// Init shortcut caches
 	this.shortcutKeysList = [];
@@ -453,6 +584,33 @@ exports.prototype.updateShortcutLists = function (tiddlerList) {
 };
 
 // ============================================================================
+// Keyboard shortcut handling for CodeMirror-specific shortcuts
+// ============================================================================
+
+/**
+ * Handle keydown events - check against registered CodeMirror shortcuts
+ * Called by the engine's keydown handler
+ */
+exports.prototype.handleKeydownEvent = function(event) {
+	// Check each registered shortcut
+	for (var i = 0; i < this.shortcutParsedList.length; i++) {
+		var parsed = this.shortcutParsedList[i];
+		if (parsed && $tw.keyboardManager.checkKeyDescriptors(event, parsed)) {
+			// Found a match - execute the action
+			var action = this.shortcutActionList[i];
+			if (action) {
+				event.preventDefault();
+				event.stopPropagation();
+				// Parse and invoke the action widgets
+				this.invokeActionString(action, this, event);
+				return true;
+			}
+		}
+	}
+	return false;
+};
+
+// ============================================================================
 // Message handling with plugin support
 // ============================================================================
 
@@ -509,6 +667,16 @@ exports.prototype.handleEditTextOperationMessage = function (event) {
 
 	// Prepare information about the operation
 	var operation = this.engine.createTextOperation();
+
+	// Capture prefix/suffix from event params for multi-cursor support
+	if (event.paramObject) {
+		if (event.paramObject.prefix !== undefined) {
+			operation.prefix = event.paramObject.prefix;
+		}
+		if (event.paramObject.suffix !== undefined) {
+			operation.suffix = event.paramObject.suffix;
+		}
+	}
 
 	// Invoke the handler for the selected operation (e.g., wrap-selection, prefix-lines)
 	var handler = this.editorOperations[event.param];

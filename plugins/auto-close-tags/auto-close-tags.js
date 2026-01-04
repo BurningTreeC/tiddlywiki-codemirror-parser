@@ -96,13 +96,21 @@ exports.plugin = {
       var tree = syntaxTree(state);
       if (tree) {
         var node = tree.resolveInner(pos, -1);
-        // If we're inside attributes or not in a tag context, be careful
-        if (node) {
+        // Walk up the tree to check context
+        while (node) {
           var nodeName = node.name;
           // If we're in an attribute value, don't auto-close
           if (nodeName === "AttributeValue" || nodeName === "AttributeString") {
             return false;
           }
+          // If we're inside a filter expression, don't auto-close
+          // In filters, <variable> is a variable reference, not a tag
+          if (nodeName === "FilterExpression" || nodeName === "FilterRun" ||
+              nodeName === "FilteredTransclusion" || nodeName === "FilteredTransclusionBlock" ||
+              nodeName === "AttributeFiltered") {
+            return false;
+          }
+          node = node.parent;
         }
       }
 

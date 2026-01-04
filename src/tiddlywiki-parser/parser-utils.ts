@@ -152,8 +152,10 @@ export function detectDelimiterRun(
     runEnd,
     runLength,
     matchStart,
-    canOpen: !sAfter,
-    canClose: !sBefore,
+    // TiddlyWiki uses simpler delimiter matching than CommonMark
+    // Don't require strict flanking - allow delimiters regardless of surrounding whitespace
+    canOpen: true,
+    canClose: true,
   }
 }
 

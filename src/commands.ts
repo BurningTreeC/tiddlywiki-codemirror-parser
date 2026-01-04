@@ -466,28 +466,38 @@ export const deleteBracketPair: StateCommand = ({state, dispatch}) => {
 // ============================================================================
 
 function toggleInlineFormat(state: EditorState, dispatch: (tr: any) => void, marker: string): boolean {
-  let changes: ChangeSpec[] = []
-  
-  for (let range of state.selection.ranges) {
+  let changes = state.changeByRange(range => {
     if (range.empty) {
       // Bei leerer Selektion: Marker einfügen und Cursor dazwischen
-      changes.push({from: range.from, insert: marker + marker})
+      return {
+        range: EditorSelection.cursor(range.from + marker.length),
+        changes: {from: range.from, insert: marker + marker}
+      }
     } else {
       let text = state.doc.sliceString(range.from, range.to)
-      
+
       // Prüfen ob bereits formatiert
       if (text.startsWith(marker) && text.endsWith(marker) && text.length >= marker.length * 2) {
         // Format entfernen
-        changes.push({from: range.from, to: range.to, insert: text.slice(marker.length, -marker.length)})
+        let newText = text.slice(marker.length, -marker.length)
+        return {
+          range: EditorSelection.range(range.from, range.from + newText.length),
+          changes: {from: range.from, to: range.to, insert: newText}
+        }
       } else {
         // Format hinzufügen
-        changes.push({from: range.from, insert: marker})
-        changes.push({from: range.to, insert: marker})
+        return {
+          range: EditorSelection.range(range.from, range.to + marker.length * 2),
+          changes: [
+            {from: range.from, insert: marker},
+            {from: range.to, insert: marker}
+          ]
+        }
       }
     }
-  }
-  
-  dispatch(state.update({changes, scrollIntoView: true, userEvent: "input"}))
+  })
+
+  dispatch(state.update(changes, {scrollIntoView: true, userEvent: "input"}))
   return true
 }
 
@@ -532,53 +542,64 @@ export const toggleInlineCode: StateCommand = ({state, dispatch}) => {
 
 /// Fügt einen WikiLink ein
 export const insertWikiLink: StateCommand = ({state, dispatch}) => {
-  let changes: ChangeSpec[] = []
-  let selection = state.selection
-  
-  for (let range of selection.ranges) {
+  let changes = state.changeByRange(range => {
     if (range.empty) {
-      changes.push({from: range.from, insert: "[[]]"})
+      return {
+        range: EditorSelection.cursor(range.from + 2),
+        changes: {from: range.from, insert: "[[]]"}
+      }
     } else {
       let text = state.doc.sliceString(range.from, range.to)
-      changes.push({from: range.from, to: range.to, insert: `[[${text}]]`})
+      return {
+        range: EditorSelection.range(range.from + 2, range.from + 2 + text.length),
+        changes: {from: range.from, to: range.to, insert: `[[${text}]]`}
+      }
     }
-  }
-  
-  dispatch(state.update({changes, scrollIntoView: true, userEvent: "input"}))
+  })
+
+  dispatch(state.update(changes, {scrollIntoView: true, userEvent: "input"}))
   return true
 }
 
 /// Fügt eine Transclusion ein
 export const insertTransclusion: StateCommand = ({state, dispatch}) => {
-  let changes: ChangeSpec[] = []
-  
-  for (let range of state.selection.ranges) {
+  let changes = state.changeByRange(range => {
     if (range.empty) {
-      changes.push({from: range.from, insert: "{{}}"})
+      return {
+        range: EditorSelection.cursor(range.from + 2),
+        changes: {from: range.from, insert: "{{}}"}
+      }
     } else {
       let text = state.doc.sliceString(range.from, range.to)
-      changes.push({from: range.from, to: range.to, insert: `{{${text}}}`})
+      return {
+        range: EditorSelection.range(range.from + 2, range.from + 2 + text.length),
+        changes: {from: range.from, to: range.to, insert: `{{${text}}}`}
+      }
     }
-  }
-  
-  dispatch(state.update({changes, scrollIntoView: true, userEvent: "input"}))
+  })
+
+  dispatch(state.update(changes, {scrollIntoView: true, userEvent: "input"}))
   return true
 }
 
 /// Fügt einen Macro-Aufruf ein
 export const insertMacroCall: StateCommand = ({state, dispatch}) => {
-  let changes: ChangeSpec[] = []
-  
-  for (let range of state.selection.ranges) {
+  let changes = state.changeByRange(range => {
     if (range.empty) {
-      changes.push({from: range.from, insert: "<<>>"})
+      return {
+        range: EditorSelection.cursor(range.from + 2),
+        changes: {from: range.from, insert: "<<>>"}
+      }
     } else {
       let text = state.doc.sliceString(range.from, range.to)
-      changes.push({from: range.from, to: range.to, insert: `<<${text}>>`})
+      return {
+        range: EditorSelection.range(range.from + 2, range.from + 2 + text.length),
+        changes: {from: range.from, to: range.to, insert: `<<${text}>>`}
+      }
     }
-  }
-  
-  dispatch(state.update({changes, scrollIntoView: true, userEvent: "input"}))
+  })
+
+  dispatch(state.update(changes, {scrollIntoView: true, userEvent: "input"}))
   return true
 }
 
@@ -587,24 +608,39 @@ export const insertMacroCall: StateCommand = ({state, dispatch}) => {
 // ============================================================================
 
 function setHeadingLevel(state: EditorState, dispatch: (tr: any) => void, level: number): boolean {
-  let changes: ChangeSpec[] = []
   let {doc} = state
-  
-  for (let range of state.selection.ranges) {
+  let processedLines = new Set<number>()
+
+  let changes = state.changeByRange(range => {
     let line = doc.lineAt(range.from)
+
+    // Skip if we already processed this line (for multiple cursors on same line)
+    if (processedLines.has(line.number)) {
+      return {range}
+    }
+    processedLines.add(line.number)
+
     let text = line.text
-    
+
     // Entferne existierende Heading-Marker
     let match = /^(!+)\s*/.exec(text)
     let contentStart = match ? match[0].length : 0
-    let content = text.slice(contentStart)
-    
+
     // Neuen Heading-Level setzen (0 = kein Heading)
     let newPrefix = level > 0 ? "!".repeat(level) + " " : ""
-    changes.push({from: line.from, to: line.from + contentStart, insert: newPrefix})
-  }
-  
-  dispatch(state.update({changes, scrollIntoView: true, userEvent: "input"}))
+    let delta = newPrefix.length - contentStart
+
+    // Adjust cursor position based on prefix change
+    let newAnchor = Math.max(line.from + newPrefix.length, range.anchor + delta)
+    let newHead = range.empty ? newAnchor : Math.max(line.from + newPrefix.length, range.head + delta)
+
+    return {
+      range: EditorSelection.range(newAnchor, newHead),
+      changes: {from: line.from, to: line.from + contentStart, insert: newPrefix}
+    }
+  })
+
+  dispatch(state.update(changes, {scrollIntoView: true, userEvent: "input"}))
   return true
 }
 
@@ -634,32 +670,58 @@ export const removeHeading: StateCommand = ({state, dispatch}) => setHeadingLeve
 // ============================================================================
 
 function toggleListMarker(state: EditorState, dispatch: (tr: any) => void, marker: string): boolean {
-  let changes: ChangeSpec[] = []
   let {doc} = state
-  
-  for (let range of state.selection.ranges) {
+  let processedLines = new Set<number>()
+
+  let changes = state.changeByRange(range => {
     let line = doc.lineAt(range.from)
+
+    // Skip if we already processed this line (for multiple cursors on same line)
+    if (processedLines.has(line.number)) {
+      return {range}
+    }
+    processedLines.add(line.number)
+
     let text = line.text
-    
+
     // Prüfe ob Zeile bereits mit diesem Marker beginnt
     let markerMatch = new RegExp(`^(${marker.replace(/[*#]/g, "\\$&")}+)\\s*`).exec(text)
-    
+
     if (markerMatch) {
       // Marker entfernen
-      changes.push({from: line.from, to: line.from + markerMatch[0].length, insert: ""})
+      let delta = -markerMatch[0].length
+      let newAnchor = Math.max(line.from, range.anchor + delta)
+      let newHead = range.empty ? newAnchor : Math.max(line.from, range.head + delta)
+      return {
+        range: EditorSelection.range(newAnchor, newHead),
+        changes: {from: line.from, to: line.from + markerMatch[0].length, insert: ""}
+      }
     } else {
       // Anderen Marker entfernen falls vorhanden
       let otherMatch = /^([*#;:]+)\s*/.exec(text)
+      let newPrefix = marker + " "
+      let oldLength = otherMatch ? otherMatch[0].length : 0
+      let delta = newPrefix.length - oldLength
+
+      let newAnchor = Math.max(line.from + newPrefix.length, range.anchor + delta)
+      let newHead = range.empty ? newAnchor : Math.max(line.from + newPrefix.length, range.head + delta)
+
       if (otherMatch) {
-        changes.push({from: line.from, to: line.from + otherMatch[0].length, insert: marker + " "})
+        return {
+          range: EditorSelection.range(newAnchor, newHead),
+          changes: {from: line.from, to: line.from + otherMatch[0].length, insert: newPrefix}
+        }
       } else {
         // Marker hinzufügen
-        changes.push({from: line.from, insert: marker + " "})
+        return {
+          range: EditorSelection.range(newAnchor, newHead),
+          changes: {from: line.from, insert: newPrefix}
+        }
       }
     }
-  }
-  
-  dispatch(state.update({changes, scrollIntoView: true, userEvent: "input"}))
+  })
+
+  dispatch(state.update(changes, {scrollIntoView: true, userEvent: "input"}))
   return true
 }
 
@@ -679,21 +741,29 @@ export const toggleNumberedList: StateCommand = ({state, dispatch}) => {
 
 /// Fügt einen Code-Block ein oder wickelt Selektion in Code-Block
 export const insertCodeBlock: StateCommand = ({state, dispatch}) => {
-  let changes: ChangeSpec[] = []
-  
-  for (let range of state.selection.ranges) {
+  let changes = state.changeByRange(range => {
     if (range.empty) {
       let line = state.doc.lineAt(range.from)
       // Füge Code-Block mit leerer Zeile ein
-      let insert = "```\n\n```"
-      changes.push({from: line.from, insert: insert + "\n"})
+      let insert = "```\n\n```\n"
+      // Cursor on the empty line inside the code block
+      let cursorPos = line.from + 4 // after "```\n"
+      return {
+        range: EditorSelection.cursor(cursorPos),
+        changes: {from: line.from, insert}
+      }
     } else {
       let text = state.doc.sliceString(range.from, range.to)
-      changes.push({from: range.from, to: range.to, insert: "```\n" + text + "\n```"})
+      let insert = "```\n" + text + "\n```"
+      // Select the text inside the code block
+      return {
+        range: EditorSelection.range(range.from + 4, range.from + 4 + text.length),
+        changes: {from: range.from, to: range.to, insert}
+      }
     }
-  }
-  
-  dispatch(state.update({changes, scrollIntoView: true, userEvent: "input"}))
+  })
+
+  dispatch(state.update(changes, {scrollIntoView: true, userEvent: "input"}))
   return true
 }
 

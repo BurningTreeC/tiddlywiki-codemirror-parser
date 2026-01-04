@@ -1,11 +1,8 @@
 title: $:/plugins/BurningTreeC/tiddlywiki-codemirror/icons/spellcheck
 tags: $:/tags/Image
 
-<svg viewBox="0 0 22 22" width="22" height="22">
-  <!-- ABC text -->
-  <text x="3" y="14" font-size="10" font-weight="bold" fill="currentColor">Aa</text>
-  <!-- Checkmark -->
-  <path d="M14 10L16 12L20 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-  <!-- Underline squiggle -->
-  <path d="M3 17Q5 15 7 17T11 17" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="m6 16 6-12 6 12" />
+  <path d="M8 12h8" />
+  <path d="M4 21c1.1 0 1.1-1 2.3-1s1.1 1 2.3 1c1.1 0 1.1-1 2.3-1 1.1 0 1.1 1 2.3 1 1.1 0 1.1-1 2.3-1 1.1 0 1.1 1 2.3 1 1.1 0 1.1-1 2.3-1" />
 </svg>

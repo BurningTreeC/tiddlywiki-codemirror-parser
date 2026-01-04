@@ -1,11 +1,8 @@
 title: $:/plugins/BurningTreeC/tiddlywiki-codemirror/icons/trailing-whitespace
 tags: $:/tags/Image
 
-<svg viewBox="0 0 22 22" width="22" height="22">
-  <!-- Vertical bar (cursor/line end) -->
-  <rect x="5" y="5" width="2" height="12" rx="0.5" fill="currentColor"/>
-  <!-- Trailing whitespace dots -->
-  <circle cx="11" cy="11" r="1.5" fill="currentColor" opacity="0.5"/>
-  <circle cx="15" cy="11" r="1.5" fill="currentColor" opacity="0.5"/>
-  <circle cx="19" cy="11" r="1.5" fill="currentColor" opacity="0.5"/>
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M13 4v16" />
+  <path d="M17 4v16" />
+  <path d="M19 4H9.5a4.5 4.5 0 0 0 0 9H13" />
 </svg>

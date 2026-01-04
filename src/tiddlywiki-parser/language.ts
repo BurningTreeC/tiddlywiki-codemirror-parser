@@ -99,6 +99,20 @@ function containerIndent(context: TreeIndentContext): number | null {
   // If node spans only a single line, check if it's an opening container that should indent
   // ConditionalBlock, Widget, HTMLBlock should still indent even when incomplete
   if (openLine.number === closeLine.number) {
+    // Single-line pragma definitions (with body on same line) don't indent
+    // But multi-line pragma openers (no body, just declaration) should indent
+    if (isPragmaDefinition(node.name)) {
+      const lineText = openLine.text.trim()
+      // Check if it's a multi-line opener (ends with closing paren, no body content)
+      if (/^\\(?:define|procedure|function|widget)\s+\S+\s*\([^)]*\)\s*$/.test(lineText)) {
+        // Multi-line pragma opener - indent body
+        if (DEBUG_INDENT) console.log(`  -> ${baseIndent + context.unit} (multi-line pragma opener)`)
+        return baseIndent + context.unit
+      }
+      // Single-line pragma with body - no indent change
+      if (DEBUG_INDENT) console.log(`  -> ${baseIndent} (single line pragma, no indent)`)
+      return baseIndent
+    }
     // Allow indentation for opening tags that expect content
     const openingContainers = /^(ConditionalBlock|Widget|HTMLBlock)$/
     if (!openingContainers.test(node.name)) {
@@ -118,6 +132,11 @@ function containerIndent(context: TreeIndentContext): number | null {
     const atLineEnd = context.pos >= cursorLine.from + lineText.trimEnd().length
 
     if (atLineEnd) {
+      // Check for multi-line pragma opener (ends with closing paren, no body)
+      if (/^\s*\\(?:define|procedure|function|widget)\s+\S+\s*\([^)]*\)\s*$/.test(lineText)) {
+        if (DEBUG_INDENT) console.log(`  -> ${baseIndent + context.unit} (cursor after pragma opener)`)
+        return baseIndent + context.unit
+      }
       // Check for <%if%>, <%elseif%>, <%else%> openers - indent content
       if (/<%\s*(if|elseif)\s+.+%>\s*$/.test(lineText) || /<%\s*else\s*%>\s*$/.test(lineText)) {
         if (DEBUG_INDENT) console.log(`  -> ${baseIndent + context.unit} (cursor after conditional opener)`)
@@ -177,7 +196,14 @@ function containerIndent(context: TreeIndentContext): number | null {
     return baseIndent // The line itself is at base indent
   }
 
-  // Content inside: indent one level
+  // Multi-line pragma definitions indent their body content by one level
+  // \end will outdent back to baseIndent (handled above in closing line check)
+  if (isPragmaDefinition(node.name)) {
+    if (DEBUG_INDENT) console.log(`  -> ${baseIndent + context.unit} (pragma body - indent)`)
+    return baseIndent + context.unit
+  }
+
+  // Content inside other containers: indent one level
   if (DEBUG_INDENT) console.log(`  -> ${baseIndent + context.unit} (content inside)`)
   return baseIndent + context.unit
 }
@@ -350,51 +376,42 @@ const configured = baseParser.configure({
     // Indentation for container nodes
     indentNodeProp.add({
       Document: (context: TreeIndentContext) => {
-        // Handle edge case: cursor at document end (position equals doc length)
-        // This happens when all nodes end at doc length and cursor is at boundary
-        const docLength = context.state.doc.length
-        if (context.pos === docLength && docLength > 0) {
-          // Get the line at cursor position (or just before if at end)
-          const cursorLine = context.state.doc.lineAt(Math.max(0, context.pos - 1))
-          const lineText = cursorLine.text.trim()
+        // Get the current line and check the previous line for openers
+        const cursorLine = context.state.doc.lineAt(context.pos)
+
+        // If we're not on the first line, check if previous line is an opener
+        if (cursorLine.number > 1) {
+          const prevLine = context.state.doc.line(cursorLine.number - 1)
+          const prevLineText = prevLine.text
 
           if (DEBUG_INDENT) {
-            console.log(`Document indent at doc end: lineText = "${lineText}"`)
+            console.log(`Document indent: prevLine = "${prevLineText}"`)
           }
 
-          // Check current line for conditional opener that needs indentation
-          // Check for <%if%>, <%elseif%>, <%else%>
-          if (/<%\s*(if|elseif)\s+.+%>\s*$/.test(lineText) || /<%\s*else\s*%>\s*$/.test(lineText)) {
-            const baseIndent = getLineIndent(context, cursorLine.from)
-            if (DEBUG_INDENT) console.log(`  -> ${baseIndent + context.unit} (line is conditional opener)`)
+          // Check for multi-line pragma opener: \define foo(), \procedure bar(), etc.
+          // These end with just ) and no body on the same line
+          if (/^\s*\\(?:define|procedure|function|widget)\s+\S+\s*\([^)]*\)\s*$/.test(prevLineText)) {
+            const baseIndent = getLineIndent(context, prevLine.from)
+            if (DEBUG_INDENT) console.log(`  -> ${baseIndent + context.unit} (prev line is pragma opener)`)
             return baseIndent + context.unit
           }
+
+          // Check for conditional opener: <%if%>, <%elseif%>, <%else%>
+          if (/<%\s*(if|elseif)\s+.+%>\s*$/.test(prevLineText) || /<%\s*else\s*%>\s*$/.test(prevLineText)) {
+            const baseIndent = getLineIndent(context, prevLine.from)
+            if (DEBUG_INDENT) console.log(`  -> ${baseIndent + context.unit} (prev line is conditional opener)`)
+            return baseIndent + context.unit
+          }
+
           // Check for widget/HTML opening tags: <$widget> or <div>
           // But NOT self-closing tags (ending with />)
-          if (/<[$a-zA-Z][^>]*>\s*$/.test(lineText) && !/<\//.test(lineText) && !/\/>\s*$/.test(lineText)) {
-            const baseIndent = getLineIndent(context, cursorLine.from)
-            if (DEBUG_INDENT) console.log(`  -> ${baseIndent + context.unit} (line is opening tag)`)
+          if (/<[$a-zA-Z][^>]*>\s*$/.test(prevLineText) && !/<\//.test(prevLineText) && !/\/>\s*$/.test(prevLineText)) {
+            const baseIndent = getLineIndent(context, prevLine.from)
+            if (DEBUG_INDENT) console.log(`  -> ${baseIndent + context.unit} (prev line is opening tag)`)
             return baseIndent + context.unit
           }
-          // Check for self-closing tags - stay at same indent
-          if (/\/>\s*$/.test(lineText)) {
-            const baseIndent = getLineIndent(context, cursorLine.from)
-            if (DEBUG_INDENT) console.log(`  -> ${baseIndent} (line is self-closing tag)`)
-            return baseIndent
-          }
-          // Check for <%endif%> - return same level (base indent of the line)
-          if (/<%\s*endif\s*%>\s*$/.test(lineText)) {
-            const baseIndent = getLineIndent(context, cursorLine.from)
-            if (DEBUG_INDENT) console.log(`  -> ${baseIndent} (line is endif)`)
-            return baseIndent
-          }
-          // Check for closing widget/HTML tags: </$widget> or </div>
-          if (/<\/[$a-zA-Z][^>]*>\s*$/.test(lineText)) {
-            const baseIndent = getLineIndent(context, cursorLine.from)
-            if (DEBUG_INDENT) console.log(`  -> ${baseIndent} (line is closing tag)`)
-            return baseIndent
-          }
         }
+
         return null
       },
       Widget: containerIndent,

@@ -51,14 +51,39 @@ tags: $:/tags/Stylesheet
 }
 
 /* Selection */
-.tc-editor-codemirror6 .cm-selectionBackground {
+.tc-editor-codemirror6 .cm-selectionBackground,
+.tc-editor-codemirror6 .cm-selectionBackground * {
     background: HighLight;
     background: <<colour selection-background>> !important;
+    color: HighlightText !important;
 }
 
-.tc-editor-codemirror6 .cm-focused .cm-selectionBackground {
+.tc-editor-codemirror6 .cm-focused .cm-selectionBackground,
+.tc-editor-codemirror6 .cm-focused .cm-selectionBackground * {
     background: HighLight;
     background: <<colour selection-background>> !important;
+    color: HighlightText !important;
+}
+
+/* Ensure selected text has consistent color regardless of formatting */
+.tc-editor-codemirror6 .cm-line ::selection {
+    background: <<colour selection-background>> !important;
+    color: HighlightText !important;
+}
+
+.tc-editor-codemirror6 .cm-line *::selection {
+    background: <<colour selection-background>> !important;
+    color: HighlightText !important;
+}
+
+.tc-editor-codemirror6 .cm-line::-moz-selection {
+    background: <<colour selection-background>> !important;
+    color: HighlightText !important;
+}
+
+.tc-editor-codemirror6 .cm-line *::-moz-selection {
+    background: <<colour selection-background>> !important;
+    color: HighlightText !important;
 }
 
 /* ============================================================================
@@ -364,6 +389,8 @@ tags: $:/tags/Stylesheet
     position: absolute;
     border-left: 2px solid <<colour foreground>>;
     margin-left: -1px;
+    margin-top: -3px;
+    padding-bottom: 2px;
     pointer-events: none;
 }
 
@@ -372,10 +399,11 @@ tags: $:/tags/Stylesheet
 }
 
 /* Secondary selection background (for multi-cursor selections) */
-.tc-editor-codemirror6 .cm-selectionBackground-secondary {
+.tc-editor-codemirror6 .cm-selectionBackground-secondary,
+.tc-editor-codemirror6 .cm-selectionBackground-secondary * {
     background: HighLight;
     background: <<colour selection-background>>;
-    color: <<colour tiddler-background>>;
+    color: HighlightText !important;
 }
 
 @keyframes cm-blink {

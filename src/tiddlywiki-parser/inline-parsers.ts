@@ -1315,6 +1315,39 @@ export const HTMLTag: InlineParser = {
 }
 
 // ============================================================================
+// Inline Comment Parser (<!-- ... -->)
+// ============================================================================
+
+export const InlineComment: InlineParser = {
+  name: "InlineComment",
+  parse(cx: InlineContext, next: number, pos: number): number {
+    // Must start with <!--
+    if (next !== Ch.LessThan) return -1
+    if (cx.char(pos + 1) !== 33) return -1  // '!'
+    if (cx.char(pos + 2) !== Ch.Dash) return -1
+    if (cx.char(pos + 3) !== Ch.Dash) return -1
+
+    // Find closing -->
+    let searchPos = pos + 4
+    while (searchPos < cx.end - 2) {
+      if (cx.char(searchPos) === Ch.Dash &&
+          cx.char(searchPos + 1) === Ch.Dash &&
+          cx.char(searchPos + 2) === 62) {  // '>'
+        const end = searchPos + 3
+        return cx.addElement(cx.elt(Type.CommentBlock, pos, end, [
+          cx.elt(Type.CommentMarker, pos, pos + 4),      // <!--
+          cx.elt(Type.CommentMarker, end - 3, end)       // -->
+        ]))
+      }
+      searchPos++
+    }
+
+    // No closing --> found, don't match (let other parsers handle it)
+    return -1
+  }
+}
+
+// ============================================================================
 // Dash Parser (-- or ---)
 // ============================================================================
 
@@ -1567,6 +1600,7 @@ export const DefaultInlineParsers: InlineParser[] = [
   Transclusion,
   MacroCall,
   Widget,
+  InlineComment,  // Must come before HTMLTag to catch <!-- before < is matched
   HTMLTag,
   Dash,
   VariableSubstitution,  // $(var)$ - must come before SystemLink and PlaceholderParam

@@ -293,9 +293,14 @@ function buildPluginContext(options, engine, overrideType) {
 			if (tiddler) {
 				context.tiddlerFields = tiddler.fields;
 				context.tiddlerType = tiddler.fields.type || "";
+
+				// Check for codemirror-type field override (persistent language switch)
+				if (tiddler.fields["codemirror-type"]) {
+					context.tiddlerType = tiddler.fields["codemirror-type"];
+				}
 			}
 		}
-		
+
 		if (widget.editField === "text" && !context.tiddlerType) {
 			context.tiddlerType = "";
 		}
@@ -389,6 +394,9 @@ function CodeMirrorEngine(options) {
 
 	// Completion source registry - plugins register sources here
 	this._completionSources = [];
+
+	// completeAnyWord fallback - enabled/disabled via config
+	this._completeAnyWordEnabled = false;
 
 	// ========================================================================
 	// Load CM6 Core
@@ -561,10 +569,17 @@ function CodeMirrorEngine(options) {
 	}
 
 	// Core: Close brackets (with compartment for dynamic toggle)
+	// Include curly/typographic quotes and German-style quotes in addition to defaults
 	var closeBrackets = (core.autocomplete || {}).closeBrackets;
 	var closeBracketsKeymap = (core.autocomplete || {}).closeBracketsKeymap;
+	var closeBracketsConfig = {
+		// Standard: () [] {} '' ""
+		// Curly quotes: "" ''
+		// German quotes: „" ‚'
+		brackets: ["(", "[", "{", "'", '"', "\u201c\u201d", "\u2018\u2019", "\u201e\u201d", "\u201a\u2019"]
+	};
 	if (closeBrackets && this._compartments.closeBrackets) {
-		extensions.push(this._compartments.closeBrackets.of(closeBrackets())); // Default on
+		extensions.push(this._compartments.closeBrackets.of(closeBrackets(closeBracketsConfig)));
 		if (closeBracketsKeymap && cmKeymap) {
 			extensions.push(cmKeymap.of(closeBracketsKeymap));
 		}
@@ -694,6 +709,14 @@ function CodeMirrorEngine(options) {
 	// while also preserving language-based completions
 	var autocompletion = (core.autocomplete || {}).autocompletion;
 	var completionKeymap = (core.autocomplete || {}).completionKeymap;
+	var completeAnyWord = (core.autocomplete || {}).completeAnyWord;
+
+	// Store completeAnyWord reference and read initial config
+	this._completeAnyWord = completeAnyWord;
+	if (options.autocompletion && options.autocompletion.completeAnyWord) {
+		this._completeAnyWordEnabled = true;
+	}
+
 	if (autocompletion) {
 		var self = this;
 		extensions.push(autocompletion({
@@ -709,6 +732,10 @@ function CodeMirrorEngine(options) {
 				for (var j = 0; j < langCompletions.length; j++) {
 					var langResult = langCompletions[j](context);
 					if (langResult) return langResult;
+				}
+				// Last resort: completeAnyWord if enabled
+				if (self._completeAnyWordEnabled && self._completeAnyWord) {
+					return self._completeAnyWord(context);
 				}
 				return null;
 			}]
@@ -1096,10 +1123,13 @@ CodeMirrorEngine.prototype._handleSettingsChanged = function(settings) {
 		effects.push(this._compartments.bracketMatching.reconfigure(bmContent));
 	}
 
-	// Close brackets
+	// Close brackets (with curly/typographic quotes and German quotes)
 	var closeBrackets = (core.autocomplete || {}).closeBrackets;
 	if (closeBrackets && this._compartments.closeBrackets) {
-		var cbContent = settings.closeBrackets ? closeBrackets() : [];
+		var cbConfig = {
+			brackets: ["(", "[", "{", "'", '"', "\u201c\u201d", "\u2018\u2019", "\u201e\u201d", "\u201a\u2019"]
+		};
+		var cbContent = settings.closeBrackets ? closeBrackets(cbConfig) : [];
 		effects.push(this._compartments.closeBrackets.reconfigure(cbContent));
 	}
 
@@ -1260,6 +1290,11 @@ CodeMirrorEngine.prototype._handleSettingsChanged = function(settings) {
 		effects.push(this._compartments.spellcheck.reconfigure(
 			EditorView.contentAttributes.of({ spellcheck: spellcheckValue })
 		));
+	}
+
+	// completeAnyWord toggle (no compartment needed, just update the flag)
+	if (settings.autocompletion && settings.autocompletion.completeAnyWord !== undefined) {
+		this._completeAnyWordEnabled = !!settings.autocompletion.completeAnyWord;
 	}
 
 	// Apply all effects
@@ -1655,11 +1690,12 @@ CodeMirrorEngine.prototype.executeTextOperation = function(operation) {
 
 /**
  * Apply text operation with multi-cursor support
- * Extracts the transformation pattern from the main selection and applies to all cursors
+ * Uses prefix/suffix from operation to wrap/unwrap all selections (toggle behavior)
  */
 CodeMirrorEngine.prototype._applyTextOperation = function(operation) {
 	var state = this.view.state;
 	var EditorSelection = this.cm.state.EditorSelection;
+	var doc = state.doc;
 
 	// Get the operation parameters from main selection
 	var mainCutStart = isNumber(operation.cutStart) ? operation.cutStart :
@@ -1668,79 +1704,85 @@ CodeMirrorEngine.prototype._applyTextOperation = function(operation) {
 	var mainCutEnd = isNumber(operation.cutEnd) ? operation.cutEnd :
 	                 isNumber(operation.selEnd) ? operation.selEnd :
 	                 mainCutStart;
-	var mainSelStart = isNumber(operation.selStart) ? operation.selStart : mainCutStart;
-	var mainSelEnd = isNumber(operation.selEnd) ? operation.selEnd : mainCutEnd;
 	var replacement = String(operation.replacement);
 	var mainNewSelStart = isNumber(operation.newSelStart) ? operation.newSelStart : mainCutStart + replacement.length;
 	var mainNewSelEnd = isNumber(operation.newSelEnd) ? operation.newSelEnd : mainNewSelStart;
 
-	// Check if this is a simple wrap-style operation (cut range equals selection range)
-	// In this case we can extract prefix/suffix and apply to all cursors
-	var isWrapStyle = (mainCutStart === mainSelStart && mainCutEnd === mainSelEnd);
-
-	// For single cursor or complex operations, use simple dispatch
-	if (state.selection.ranges.length === 1 || !isWrapStyle) {
-		var transaction = {
-			changes: { from: mainCutStart, to: mainCutEnd, insert: replacement }
-		};
-		transaction.selection = { anchor: mainNewSelStart, head: mainNewSelEnd };
-		this.view.dispatch(transaction);
+	// For single cursor, use simple dispatch
+	if (state.selection.ranges.length === 1) {
+		this.view.dispatch({
+			changes: { from: mainCutStart, to: mainCutEnd, insert: replacement },
+			selection: { anchor: mainNewSelStart, head: mainNewSelEnd }
+		});
 		return;
 	}
 
-	// Multi-cursor wrap-style operation:
-	// Extract prefix/suffix from the main selection's transformation
-	// replacement = prefix + transformedContent + suffix
-	var prefixLen = mainNewSelStart - mainCutStart;
-	var suffixLen = (mainCutStart + replacement.length) - mainNewSelEnd;
-	var prefix = replacement.substring(0, prefixLen);
-	var suffix = replacement.substring(replacement.length - suffixLen);
+	// Multi-cursor: Check if we have prefix/suffix for wrap-style operation
+	var prefix = isString(operation.prefix) ? operation.prefix : null;
+	var suffix = isString(operation.suffix) ? operation.suffix : null;
 
-	// The content between prefix and suffix in the replacement
-	var mainContent = replacement.substring(prefixLen, replacement.length - suffixLen);
-	var mainOriginalContent = operation.selection || "";
+	// If no prefix/suffix, fall back to single dispatch on main selection only
+	if (prefix === null || suffix === null) {
+		this.view.dispatch({
+			changes: { from: mainCutStart, to: mainCutEnd, insert: replacement },
+			selection: { anchor: mainNewSelStart, head: mainNewSelEnd }
+		});
+		return;
+	}
 
-	// Check if content was preserved (wrap) or transformed (e.g., toggled off)
-	var contentPreserved = (mainContent === mainOriginalContent);
-
-	// Use changeByRange to apply to all selections
-	var self = this;
+	// Use changeByRange to apply toggle logic to each selection independently
+	// Each selection is checked: if it has markers -> remove them, otherwise -> add them
 	this.view.dispatch(
 		state.changeByRange(function(range) {
-			var selText = state.doc.sliceString(range.from, range.to);
+			var selStart = range.from;
+			var selEnd = range.to;
+			var selText = doc.sliceString(selStart, selEnd);
+			var textBefore = selStart >= prefix.length ? doc.sliceString(selStart - prefix.length, selStart) : "";
+			var textAfter = selEnd + suffix.length <= doc.length ? doc.sliceString(selEnd, selEnd + suffix.length) : "";
+
 			var newContent;
+			var cutStart = selStart;
+			var cutEnd = selEnd;
+			var newSelStart, newSelEnd;
 
-			if (contentPreserved) {
-				// Simple wrap: prefix + original selection + suffix
-				newContent = prefix + selText + suffix;
-			} else {
-				// Content was transformed (e.g., toggle removed markup)
-				// Check if this selection has the same markup to remove
-				if (selText.length >= prefix.length + suffix.length &&
-				    selText.substring(0, prefix.length) === prefix &&
-				    selText.substring(selText.length - suffix.length) === suffix) {
-					// Has markup - remove it (toggle off)
-					newContent = selText.substring(prefix.length, selText.length - suffix.length);
+			if (selStart === selEnd) {
+				// Empty selection: toggle prefix+suffix at cursor
+				if (textBefore === prefix && doc.sliceString(selStart, selStart + suffix.length) === suffix) {
+					// Remove existing prefix+suffix
+					cutStart = selStart - prefix.length;
+					cutEnd = selStart + suffix.length;
+					newContent = "";
+					newSelStart = cutStart;
+					newSelEnd = cutStart;
 				} else {
-					// No markup - add it (toggle on)
-					newContent = prefix + selText + suffix;
+					// Insert prefix+suffix, cursor between them
+					newContent = prefix + suffix;
+					newSelStart = selStart + prefix.length;
+					newSelEnd = newSelStart;
 				}
-			}
-
-			var newFrom = range.from;
-			var newTo = range.from + newContent.length;
-			var newSelFrom = newFrom + prefix.length;
-			var newSelTo = newTo - suffix.length;
-
-			// Handle case where content was unwrapped (prefix/suffix removed)
-			if (!contentPreserved && newContent === selText.substring(prefix.length, selText.length - suffix.length)) {
-				newSelFrom = newFrom;
-				newSelTo = newTo;
+			} else if (selText.substring(0, prefix.length) === prefix &&
+			           selText.substring(selText.length - suffix.length) === suffix) {
+				// Markers inside selection: remove them
+				newContent = selText.substring(prefix.length, selText.length - suffix.length);
+				newSelStart = selStart;
+				newSelEnd = selStart + newContent.length;
+			} else if (textBefore === prefix && textAfter === suffix) {
+				// Markers outside selection: expand cut range and remove them
+				cutStart = selStart - prefix.length;
+				cutEnd = selEnd + suffix.length;
+				newContent = selText;
+				newSelStart = cutStart;
+				newSelEnd = cutStart + newContent.length;
+			} else {
+				// No markers: add them
+				newContent = prefix + selText + suffix;
+				newSelStart = selStart;
+				newSelEnd = selStart + newContent.length;
 			}
 
 			return {
-				changes: { from: range.from, to: range.to, insert: newContent },
-				range: EditorSelection.range(newSelFrom, newSelTo)
+				changes: { from: cutStart, to: cutEnd, insert: newContent },
+				range: EditorSelection.range(newSelStart, newSelEnd)
 			};
 		})
 	);

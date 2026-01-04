@@ -238,6 +238,11 @@ export interface TiddlyWikiLanguageConfig {
   getTiddlerTitles?: () => string[]
 
   /**
+   * Function to get image tiddler titles for [img[ completion
+   */
+  getImageTiddlerTitles?: () => string[]
+
+  /**
    * Function to get macro names for completion
    */
   getMacroNames?: () => string[]
@@ -443,6 +448,7 @@ export function tiddlywiki(config: TiddlyWikiLanguageConfig = {}): LanguageSuppo
     completeFilterOperators = true,
     completeFilterRunPrefixes = true,
     getTiddlerTitles,
+    getImageTiddlerTitles,
     getMacroNames,
     getMacroParams,
     getWidgetNames,
@@ -561,7 +567,7 @@ export function tiddlywiki(config: TiddlyWikiLanguageConfig = {}): LanguageSuppo
 
   if (completeTiddlers) {
     support.push(lang.data.of({
-      autocomplete: tiddlerCompletion(getTiddlerTitles)
+      autocomplete: tiddlerCompletion(getTiddlerTitles, getImageTiddlerTitles)
     }))
     // Field/index completion for transclusions: {{tiddler!!field}} or {{tiddler##index}}
     support.push(lang.data.of({
@@ -621,6 +627,16 @@ export function tiddlywiki(config: TiddlyWikiLanguageConfig = {}): LanguageSuppo
   // Always add conditional keyword completion (<%if, <%else, etc.)
   support.push(lang.data.of({
     autocomplete: conditionalCompletion
+  }))
+
+  // Always add pragma completion (\define, \procedure, etc.)
+  support.push(lang.data.of({
+    autocomplete: pragmaCompletion
+  }))
+
+  // Always add \end name completion (shows open pragma names after \end )
+  support.push(lang.data.of({
+    autocomplete: pragmaEndNameCompletion
   }))
 
   return new LanguageSupport(lang, support)
@@ -1630,7 +1646,7 @@ function macroParamCompletion(getMacroParams?: (name: string) => string[] | null
  * Tiddler title completion source ([[link, {{transclusion, [img[source, or filter operands)
  * Also handles filter operand contexts like [tag[, [has[, [{, [operator{, etc.
  */
-function tiddlerCompletion(getTiddlerTitles?: () => string[]) {
+function tiddlerCompletion(getTiddlerTitles?: () => string[], getImageTiddlerTitles?: () => string[]) {
   return (context: CompletionContext): CompletionResult | null => {
     const { state, pos } = context
     const textBefore = state.sliceDoc(pos - 100, pos)
@@ -1689,7 +1705,7 @@ function tiddlerCompletion(getTiddlerTitles?: () => string[]) {
       node = node.parent!
     }
 
-    const titles = getTiddlerTitles ? getTiddlerTitles() : []
+    let titles = getTiddlerTitles ? getTiddlerTitles() : []
     if (titles.length === 0) return null
 
     // Determine prefix and suffix based on match type
@@ -1816,6 +1832,10 @@ function tiddlerCompletion(getTiddlerTitles?: () => string[]) {
       suffix = "]]"
       validFor = /^\[img(?:\s+[^\[]*)?\[[^\]|]*$/
       detail = "image"
+      // Use image-specific tiddler titles if available
+      if (getImageTiddlerTitles) {
+        titles = getImageTiddlerTitles()
+      }
     } else {
       // Should not reach here, but return null for safety
       return null
@@ -2923,5 +2943,139 @@ function conditionalCompletion(context: CompletionContext): CompletionResult | n
     to: pos,
     options,
     validFor: /^\s*\w*$/
+  }
+}
+
+// ============================================================================
+// Pragma Completion (\define, \procedure, \function, etc.)
+// ============================================================================
+
+const pragmaKeywords: { label: string; detail: string; insert: string; cursorOffset?: number }[] = [
+  { label: "define", detail: "Define a macro", insert: "define name()\n\n\\end", cursorOffset: 8 },
+  { label: "procedure", detail: "Define a procedure", insert: "procedure name()\n\n\\end", cursorOffset: 11 },
+  { label: "function", detail: "Define a function", insert: "function name()\n\n\\end", cursorOffset: 10 },
+  { label: "widget", detail: "Define a widget", insert: "widget $name()\n\n\\end", cursorOffset: 8 },
+  { label: "import", detail: "Import tiddlers", insert: "import [filter]", cursorOffset: 8 },
+  { label: "rules", detail: "Set parser rules", insert: "rules only ", cursorOffset: 11 },
+  { label: "parameters", detail: "Declare parameters", insert: "parameters()", cursorOffset: 11 },
+  { label: "whitespace", detail: "Whitespace handling", insert: "whitespace trim", cursorOffset: 15 },
+  { label: "end", detail: "End a definition", insert: "end", cursorOffset: 3 },
+]
+
+/**
+ * Pragma completion source (after \ at start of line)
+ */
+function pragmaCompletion(context: CompletionContext): CompletionResult | null {
+  const pos = context.pos
+  const doc = context.state.doc
+
+  // Get text before cursor on current line
+  const line = doc.lineAt(pos)
+  const textBefore = doc.sliceString(line.from, pos)
+
+  // Match: start of line, optional whitespace, backslash, then partial keyword
+  // The backslash must be the first non-whitespace character
+  const match = /^(\s*)\\(\w*)$/.exec(textBefore)
+  if (!match) return null
+
+  const leadingWhitespace = match[1]
+  // match[2] is the partial keyword typed so far (used by validFor)
+  // Replace from after the backslash
+  const from = line.from + leadingWhitespace.length + 1  // +1 for the backslash
+
+  const options: Completion[] = pragmaKeywords.map(kw => ({
+    label: kw.label,
+    type: "keyword",
+    detail: kw.detail,
+    apply: (view, _completion, from, to) => {
+      const insert = kw.insert
+      const cursorPos = from + (kw.cursorOffset ?? insert.length)
+
+      view.dispatch({
+        changes: { from, to, insert },
+        selection: { anchor: cursorPos }
+      })
+    }
+  }))
+
+  return {
+    from,
+    to: pos,
+    options,
+    validFor: /^\w*$/
+  }
+}
+
+/**
+ * Completion for \end followed by space - shows names of open pragma definitions
+ */
+function pragmaEndNameCompletion(context: CompletionContext): CompletionResult | null {
+  const pos = context.pos
+  const doc = context.state.doc
+
+  // Get text before cursor on current line
+  const line = doc.lineAt(pos)
+  const textBefore = doc.sliceString(line.from, pos)
+
+  // Match: start of line, optional whitespace, \end, whitespace, then partial name
+  const match = /^(\s*)\\end\s+(\S*)$/.exec(textBefore)
+  if (!match) return null
+
+  // match[2] is the partial name typed so far (used by validFor for filtering)
+  // Find the position where the name starts (after \end and space)
+  const from = line.from + textBefore.length - match[2].length
+
+  // Get the syntax tree and find open pragma definitions
+  const tree = syntaxTree(context.state)
+  const openPragmas: { name: string; type: string }[] = []
+
+  // Walk up from current position to find enclosing pragma definitions
+  // We look for nodes that contain the cursor position
+  tree.iterate({
+    enter: (node) => {
+      const nodeType = node.name
+      if (nodeType === "MacroDefinition" ||
+          nodeType === "ProcedureDefinition" ||
+          nodeType === "FunctionDefinition" ||
+          nodeType === "WidgetDefinition") {
+        // Check if cursor is inside this definition
+        if (node.from <= pos && node.to >= pos) {
+          // Find the PragmaName child to get the actual name
+          let pragmaName: string | null = null
+          const cursor = node.node.cursor()
+          cursor.firstChild()
+          do {
+            if (cursor.name === "PragmaName") {
+              pragmaName = doc.sliceString(cursor.from, cursor.to)
+              break
+            }
+          } while (cursor.nextSibling())
+
+          if (pragmaName) {
+            openPragmas.push({
+              name: pragmaName,
+              type: nodeType.replace("Definition", "")
+            })
+          }
+        }
+      }
+    }
+  })
+
+  if (openPragmas.length === 0) return null
+
+  // Create completion options from open pragmas (innermost first for priority)
+  const options: Completion[] = openPragmas.reverse().map((pragma, index) => ({
+    label: pragma.name,
+    type: "variable",
+    detail: `Close ${pragma.type.toLowerCase()}`,
+    boost: openPragmas.length - index  // Innermost gets highest boost
+  }))
+
+  return {
+    from,
+    to: pos,
+    options,
+    validFor: /^\S*$/
   }
 }
