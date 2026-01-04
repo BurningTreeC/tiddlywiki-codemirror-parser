@@ -438,3 +438,12 @@ tags: $:/tags/Stylesheet
     font-weight: bold;
     white-space: nowrap;
 }
+
+/* ============================================================================
+   Trailing Whitespace
+   ============================================================================ */
+
+.tc-editor-codemirror6 .cm-trailingSpace {
+    background-color: rgba(255, 0, 0, 0.3);
+    border-radius: 2px;
+}

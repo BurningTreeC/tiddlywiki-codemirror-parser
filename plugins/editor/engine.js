@@ -418,7 +418,8 @@ function CodeMirrorEngine(options) {
 		bracketMatching: new Compartment(),
 		closeBrackets: new Compartment(),
 		keymap: new Compartment(),
-		multiCursor: new Compartment()
+		multiCursor: new Compartment(),
+		trailingWhitespace: new Compartment()
 	};
 
 	// Track registered keymap plugins for dynamic switching
@@ -658,6 +659,15 @@ function CodeMirrorEngine(options) {
 		console.log("CM6: Multi-cursor enabled with native selection + custom secondary cursors/selections");
 	}
 	extensions.push(this._compartments.multiCursor.of(multiCursorExtensions));
+
+	// Core: Trailing whitespace highlighting (with compartment for dynamic toggle)
+	var trailingWhitespaceEnabled = $tw.wiki.getTiddlerText("$:/config/codemirror-6/showTrailingWhitespace", "no") === "yes";
+	var trailingWhitespaceExtensions = [];
+	var highlightTrailingWhitespace = (core.view || {}).highlightTrailingWhitespace;
+	if (trailingWhitespaceEnabled && highlightTrailingWhitespace) {
+		trailingWhitespaceExtensions.push(highlightTrailingWhitespace());
+	}
+	extensions.push(this._compartments.trailingWhitespace.of(trailingWhitespaceExtensions));
 
 	// Core: Default syntax highlighting (fallback for languages without custom styles)
 	// Uses classHighlighter to add CSS classes (.tok-keyword, .tok-string, etc.)
@@ -1218,6 +1228,17 @@ CodeMirrorEngine.prototype._handleSettingsChanged = function(settings) {
 			console.log("CM6: Multi-cursor disabled");
 		}
 		effects.push(this._compartments.multiCursor.reconfigure(mcExtensions));
+	}
+
+	// Trailing whitespace highlighting toggle
+	if (settings.showTrailingWhitespace !== undefined && this._compartments.trailingWhitespace) {
+		var twEnabled = settings.showTrailingWhitespace;
+		var twExtensions = [];
+		var highlightTrailingWhitespace = (core.view || {}).highlightTrailingWhitespace;
+		if (twEnabled && highlightTrailingWhitespace) {
+			twExtensions.push(highlightTrailingWhitespace());
+		}
+		effects.push(this._compartments.trailingWhitespace.reconfigure(twExtensions));
 	}
 
 	// Apply all effects

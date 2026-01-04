@@ -256,7 +256,10 @@ exports.prototype._buildSettingsSnapshot = function () {
 		keymap: wiki.getTiddlerText("$:/config/codemirror-6/keymap", "default"),
 
 		// multi-cursor support
-		multiCursor: boolConfig(wiki, "$:/config/codemirror-6/multiCursor")
+		multiCursor: boolConfig(wiki, "$:/config/codemirror-6/multiCursor"),
+
+		// trailing whitespace highlighting
+		showTrailingWhitespace: boolConfig(wiki, "$:/config/codemirror-6/showTrailingWhitespace")
 	};
 };
 
