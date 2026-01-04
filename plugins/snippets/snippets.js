@@ -124,9 +124,56 @@ function getSnippets(contentType) {
 // ============================================================================
 
 /**
+ * Check if we're in a context where snippets should not appear
+ * (inside attribute values, code blocks, comments, etc.)
+ */
+function isInRestrictedContext(context) {
+	if (!_core || !_core.language || !_core.language.syntaxTree) {
+		return false; // Can't check, allow snippets
+	}
+
+	var state = context.state;
+	var pos = context.pos;
+	var tree = _core.language.syntaxTree(state);
+	var node = tree.resolveInner(pos, -1);
+
+	// Walk up the tree to check for restricted contexts
+	while (node && !node.type.isTop) {
+		var name = node.name;
+		// Don't show snippets inside these contexts
+		if (name === "AttributeValue" ||
+			name === "StringToken" ||
+			name === "FencedCode" ||
+			name === "CodeBlock" ||
+			name === "TypedBlock" ||
+			name === "CommentBlock" ||
+			name === "CodeText" ||
+			name === "InlineCode") {
+			return true;
+		}
+		node = node.parent;
+	}
+
+	// Also check if we're inside an attribute value by looking at text pattern
+	var textBefore = state.sliceDoc(Math.max(0, pos - 100), pos);
+	// Check for unclosed attribute value: attr="... or attr='...
+	var attrMatch = /[\w\-$]+\s*=\s*(["'])(?:[^"'\\]|\\.)*$/.exec(textBefore);
+	if (attrMatch) {
+		return true; // Inside an attribute value
+	}
+
+	return false;
+}
+
+/**
  * Snippet completion source for autocompletion
  */
 function snippetCompletions(context) {
+	// Don't show snippets in restricted contexts (attribute values, code blocks, etc.)
+	if (isInRestrictedContext(context)) {
+		return null;
+	}
+
 	// Match word-like characters plus special chars used in triggers
 	var word = context.matchBefore(/[\w\-\\$\[<`|]+/);
 	if (!word || word.from === word.to) return null;

@@ -8,7 +8,7 @@
 import { Prec, EditorState } from "@codemirror/state"
 import { KeyBinding, keymap } from "@codemirror/view"
 import { Language, LanguageSupport, LanguageDescription, syntaxTree, ParseContext, indentOnInput, getIndentation, getIndentUnit } from "@codemirror/language"
-import { Completion, CompletionContext, CompletionResult, autocompletion, completionKeymap } from "@codemirror/autocomplete"
+import { Completion, CompletionContext, CompletionResult, autocompletion, completionKeymap, CompletionSource } from "@codemirror/autocomplete"
 import { syntaxHighlighting, HighlightStyle } from "@codemirror/language"
 import { tags as t } from "@lezer/highlight"
 import { html, htmlCompletionSource } from "@codemirror/lang-html"
@@ -508,7 +508,7 @@ export function tiddlywiki(config: TiddlyWikiLanguageConfig = {}): LanguageSuppo
       autocomplete: widgetCompletion(getWidgetNames)
     }))
     support.push(lang.data.of({
-      autocomplete: widgetAttributeCompletion
+      autocomplete: widgetAttributeCompletion(getMacroParams)
     }))
     // Add attribute value completion (for $variable=", tiddler=", etc.)
     support.push(lang.data.of({
@@ -770,80 +770,117 @@ function widgetCompletion(getWidgetNames?: () => string[]) {
  * Widget attribute completion source
  * Triggers when cursor is inside a widget tag after the widget name
  */
-function widgetAttributeCompletion(context: CompletionContext): CompletionResult | null {
-  const { state, pos } = context
+function widgetAttributeCompletion(getMacroParams?: (name: string) => string[] | null) {
+  return (context: CompletionContext): CompletionResult | null => {
+    const { state, pos } = context
 
-  // Look back to find if we're inside a widget tag
-  const textBefore = state.sliceDoc(Math.max(0, pos - 200), pos)
+    // Look back to find if we're inside a widget tag
+    const textBefore = state.sliceDoc(Math.max(0, pos - 200), pos)
 
-  // Match: <$widgetname followed by attributes (supports dots for namespaced widgets)
-  const tagMatch = /<\$([a-zA-Z][a-zA-Z0-9\-\.]*)\s+[^>]*$/.exec(textBefore)
-  if (!tagMatch) return null
+    // Match: <$widgetname followed by attributes (supports dots for namespaced widgets)
+    const tagMatch = /<\$([a-zA-Z][a-zA-Z0-9\-\.]*)\s+[^>]*$/.exec(textBefore)
+    if (!tagMatch) return null
 
-  const widgetName = "$" + tagMatch[1]
+    const widgetName = "$" + tagMatch[1]
 
-  // Check we're not inside a quoted attribute value
-  const afterTag = textBefore.slice(textBefore.lastIndexOf('<'))
-  let inQuote = false
-  let quoteChar = ''
-  for (const ch of afterTag) {
-    if (!inQuote && (ch === '"' || ch === "'")) {
-      inQuote = true
-      quoteChar = ch
-    } else if (inQuote && ch === quoteChar) {
-      inQuote = false
+    // Check we're not inside a quoted attribute value
+    const afterTag = textBefore.slice(textBefore.lastIndexOf('<'))
+    let inQuote = false
+    let quoteChar = ''
+    for (const ch of afterTag) {
+      if (!inQuote && (ch === '"' || ch === "'")) {
+        inQuote = true
+        quoteChar = ch
+      } else if (inQuote && ch === quoteChar) {
+        inQuote = false
+      }
     }
-  }
-  if (inQuote) return null
+    if (inQuote) return null
 
-  // Find what we're completing (partial attribute name)
-  const attrMatch = /\s([$a-zA-Z\-]*)$/.exec(textBefore)
-  if (!attrMatch) return null
+    // Find what we're completing (partial attribute name)
+    const attrMatch = /\s([$a-zA-Z\-]*)$/.exec(textBefore)
+    if (!attrMatch) return null
 
-  const partial = attrMatch[1]
-  const from = pos - partial.length
+    const partial = attrMatch[1]
+    const from = pos - partial.length
 
-  // Check we're not in a code block or comment
-  const tree = syntaxTree(state).resolveInner(pos, -1)
-  let node = tree
-  while (node && !node.type.isTop) {
-    if (node.name === "FencedCode" || node.name === "CodeBlock" ||
-        node.name === "TypedBlock" || node.name === "CommentBlock") {
-      return null
+    // Check we're not in a code block or comment
+    const tree = syntaxTree(state).resolveInner(pos, -1)
+    let node = tree
+    while (node && !node.type.isTop) {
+      if (node.name === "FencedCode" || node.name === "CodeBlock" ||
+          node.name === "TypedBlock" || node.name === "CommentBlock") {
+        return null
+      }
+      node = node.parent!
     }
-    node = node.parent!
-  }
 
-  // Collect attributes for this widget
-  const widgetSpecific = widgetAttributes[widgetName] || []
-  const allAttrs = [...new Set([...widgetSpecific, ...commonWidgetAttributes])]
-  const patternLen = partial.length
+    // Collect attributes for this widget
+    const widgetSpecific = widgetAttributes[widgetName] || []
+    let allAttrs = [...new Set([...widgetSpecific, ...commonWidgetAttributes])]
 
-  const options: Completion[] = allAttrs.map(attr => ({
-    label: attr,
-    type: "property",
-    detail: "widget attr",
-    apply: (view, _completion, from, to) => {
-      // Check if there's already a " after cursor (from auto-close brackets)
-      const textAfter = view.state.sliceDoc(to, to + 1)
-      const hasClosingQuote = textAfter === '"'
-      const insert = hasClosingQuote ? attr + '="' : attr + '=""'
-      const endTo = hasClosingQuote ? to + 1 : to
-      // Position cursor between the quotes
-      const cursorPos = from + attr.length + 2
-      const changes = buildMultiSelectionChanges(view, from, endTo, insert, patternLen)
-      view.dispatch({
-        changes,
-        selection: { anchor: cursorPos }
-      })
+    // For $macrocall, also add parameters of the macro specified in $name
+    // For $transclude, also add parameters of the variable specified in $variable
+    if (widgetName === "$macrocall" || widgetName === "$transclude") {
+      // Extract $name (for $macrocall) or $variable (for $transclude) value from the tag
+      const attrToMatch = widgetName === "$macrocall" ? "\\$name" : "\\$variable"
+      const nameRegex = new RegExp(attrToMatch + "\\s*=\\s*(?:\"([^\"]+)\"|'([^']+)'|<<([^>]+)>>)")
+      const nameMatch = nameRegex.exec(afterTag)
+      if (nameMatch) {
+        const macroName = nameMatch[1] || nameMatch[2] || nameMatch[3]
+        if (macroName) {
+          // Get parameters from local definitions first
+          const docText = state.doc.toString()
+          const localDefs = extractLocalDefinitions(docText)
+          let params: string[] | null = null
+
+          if (localDefs.definitionParams[macroName]) {
+            params = localDefs.definitionParams[macroName]
+          } else if (getMacroParams) {
+            params = getMacroParams(macroName)
+          }
+
+          if (params && params.length > 0) {
+            // Add macro params to the list (avoiding duplicates)
+            const attrSet = new Set(allAttrs)
+            for (const param of params) {
+              if (!attrSet.has(param)) {
+                allAttrs.push(param)
+              }
+            }
+          }
+        }
+      }
     }
-  }))
 
-  return {
-    from,
-    to: pos,
-    options,
-    validFor: /^[$a-zA-Z\-]*$/
+    const patternLen = partial.length
+
+    const options: Completion[] = allAttrs.map(attr => ({
+      label: attr,
+      type: "property",
+      detail: attr.startsWith("$") ? "widget attr" : "parameter",
+      apply: (view, _completion, from, to) => {
+        // Check if there's already a " after cursor (from auto-close brackets)
+        const textAfter = view.state.sliceDoc(to, to + 1)
+        const hasClosingQuote = textAfter === '"'
+        const insert = hasClosingQuote ? attr + '="' : attr + '=""'
+        const endTo = hasClosingQuote ? to + 1 : to
+        // Position cursor between the quotes
+        const cursorPos = from + attr.length + 2
+        const changes = buildMultiSelectionChanges(view, from, endTo, insert, patternLen)
+        view.dispatch({
+          changes,
+          selection: { anchor: cursorPos }
+        })
+      }
+    }))
+
+    return {
+      from,
+      to: pos,
+      options,
+      validFor: /^[$a-zA-Z\-]*$/
+    }
   }
 }
 
@@ -966,10 +1003,17 @@ function attributeValueCompletion(
         }
       }
 
-      options = allNames.map(({ name, detail, type }) => ({
+      // Pre-filter to ensure hyphenated names match correctly
+      const lowerPartial = partial.toLowerCase()
+      const filtered = allNames.filter(({ name }) =>
+        name.toLowerCase().startsWith(lowerPartial)
+      )
+
+      options = filtered.map(({ name, detail, type }) => ({
         label: name,
         type,
         detail,
+        boost: 2,  // Boost to ensure visibility alongside snippets
         apply: (view, _completion, from, to) => {
           // Check if there's already a closing quote after cursor
           const textAfter = view.state.sliceDoc(to, to + 1)
@@ -1027,12 +1071,65 @@ function attributeValueCompletion(
     }
     // $name attribute (for $macrocall) - complete with macro names
     else if (attrName === "$name") {
-      const macros = getMacroNames ? getMacroNames() : commonMacros
-      detail = "macro"
-      options = macros.map(name => ({
+      const seen = new Set<string>()
+      const allNames: { name: string, detail: string }[] = []
+
+      // Get local definitions from current document
+      const docText = state.doc.toString()
+      const localDefs = extractLocalDefinitions(docText)
+
+      // Add local macros
+      for (const name of localDefs.macros) {
+        if (!seen.has(name)) {
+          seen.add(name)
+          allNames.push({ name, detail: "macro (local)" })
+        }
+      }
+
+      // Add local procedures
+      for (const name of localDefs.procedures) {
+        if (!seen.has(name)) {
+          seen.add(name)
+          allNames.push({ name, detail: "procedure (local)" })
+        }
+      }
+
+      // Add local functions
+      for (const name of localDefs.functions) {
+        if (!seen.has(name)) {
+          seen.add(name)
+          allNames.push({ name, detail: "function (local)" })
+        }
+      }
+
+      // Add local widgets (can also be called via $macrocall)
+      for (const name of localDefs.widgets) {
+        if (!seen.has(name)) {
+          seen.add(name)
+          allNames.push({ name, detail: "widget (local)" })
+        }
+      }
+
+      // Add external macros from callback
+      const externalMacros = getMacroNames ? getMacroNames() : commonMacros
+      for (const name of externalMacros) {
+        if (!seen.has(name)) {
+          seen.add(name)
+          allNames.push({ name, detail: "macro" })
+        }
+      }
+
+      // Pre-filter to ensure hyphenated names match correctly
+      const lowerPartial = partial.toLowerCase()
+      const filtered = allNames.filter(({ name }) =>
+        name.toLowerCase().startsWith(lowerPartial)
+      )
+
+      options = filtered.map(({ name, detail }) => ({
         label: name,
         type: "function",
         detail,
+        boost: 2,  // Boost to ensure visibility alongside snippets
         apply: (view, _completion, from, to) => {
           const textAfter = view.state.sliceDoc(to, to + 1)
           const suffix = textAfter === quoteChar ? "" : quoteChar
