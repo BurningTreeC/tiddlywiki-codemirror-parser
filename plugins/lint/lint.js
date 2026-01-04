@@ -571,6 +571,7 @@ function findUnclosedWidgets(tree, state) {
 	var issues = [];
 	var widgetStack = [];
 	var htmlStack = [];
+	var orphanClosingTags = [];  // Track closing tags without matching opening tags
 	var containerStack = [];  // Track containing structures (pragmas, widgets, conditionals)
 	var allTagPositions = []; // Collect all tag start positions for insertion logic
 
@@ -669,11 +670,22 @@ function findUnclosedWidgets(tree, state) {
 				var closeMatch = tagText.match(/^<\/([a-zA-Z][a-zA-Z0-9]*)>/);
 				if (closeMatch) {
 					var closeName = closeMatch[1].toLowerCase();
+					var foundMatch = false;
 					for (var i = htmlStack.length - 1; i >= 0; i--) {
 						if (htmlStack[i].name === closeName && !htmlStack[i].closed) {
 							htmlStack[i].closed = true;
+							foundMatch = true;
 							break;
 						}
+					}
+					// Track orphan closing tag (no matching opening tag)
+					if (!foundMatch) {
+						orphanClosingTags.push({
+							name: closeName,
+							from: node.from,
+							to: node.to,
+							isHTML: true
+						});
 					}
 				}
 			}
@@ -726,12 +738,23 @@ function findUnclosedWidgets(tree, state) {
 				var closeMatch = closeText.match(/<\/(\$[\w\-\.]+)>/);
 				if (closeMatch) {
 					var closeName = closeMatch[1];
+					var foundMatch = false;
 					// Find matching open tag (search from end)
 					for (var i = widgetStack.length - 1; i >= 0; i--) {
 						if (widgetStack[i].name === closeName && !widgetStack[i].closed) {
 							widgetStack[i].closed = true;
+							foundMatch = true;
 							break;
 						}
+					}
+					// Track orphan closing tag (no matching opening widget)
+					if (!foundMatch) {
+						orphanClosingTags.push({
+							name: closeName,
+							from: node.from,
+							to: node.to,
+							isWidget: true
+						});
 					}
 				}
 			}
@@ -778,6 +801,29 @@ function findUnclosedWidgets(tree, state) {
 				insertAt: insertInfo.pos,
 				insertType: insertInfo.type,
 				containerType: tag.containerType,
+				isHTML: true
+			});
+		}
+	});
+
+	// Report orphan closing tags (closing tags without matching opening tags)
+	orphanClosingTags.forEach(function(tag) {
+		if (tag.isWidget) {
+			issues.push({
+				from: tag.from,
+				to: tag.to,
+				message: "Unexpected closing tag: </" + tag.name + "> has no matching opening tag",
+				name: tag.name,
+				isOrphanClose: true,
+				isWidget: true
+			});
+		} else if (tag.isHTML) {
+			issues.push({
+				from: tag.from,
+				to: tag.to,
+				message: "Unexpected closing tag: </" + tag.name + "> has no matching opening tag",
+				name: tag.name,
+				isOrphanClose: true,
 				isHTML: true
 			});
 		}
@@ -1436,6 +1482,37 @@ function createTiddlyWikiLinter(view) {
 
 			// Create actions with captured values
 			var actions = [];
+
+			// Handle orphan closing tags (extra closing tags without matching opening)
+			if (issue.isOrphanClose) {
+				actions.push({
+					name: "Remove closing tag",
+					apply: function(view, from, to) {
+						// Remove the closing tag and any trailing whitespace/newline
+						var afterTo = to;
+						var docLength = view.state.doc.length;
+						// Check if there's a newline after the tag
+						if (afterTo < docLength) {
+							var nextChar = view.state.doc.sliceString(afterTo, afterTo + 1);
+							if (nextChar === "\n") {
+								afterTo++;
+							}
+						}
+						view.dispatch({ changes: { from: from, to: afterTo, insert: "" } });
+					}
+				});
+
+				diagnostics.push({
+					from: issue.from,
+					to: issue.to,
+					severity: "error",
+					message: issue.message,
+					source: "tiddlywiki",
+					actions: actions
+				});
+				return;  // Skip the normal unclosed tag handling
+			}
+
 			if (tagName) {
 				(function(name, tag, pos, type, html) {
 					// Describe where it will be inserted based on insertType
