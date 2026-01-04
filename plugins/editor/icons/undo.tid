@@ -1,0 +1,8 @@
+title: $:/plugins/BurningTreeC/tiddlywiki-codemirror/icons/undo
+tags: $:/tags/Image
+
+<svg viewBox="0 0 22 22" width="22" height="22">
+  <!-- Curved arrow pointing left/back -->
+  <path d="M8 6L4 10L8 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M4 10H14C16.2 10 18 11.8 18 14C18 16.2 16.2 18 14 18H12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+</svg>

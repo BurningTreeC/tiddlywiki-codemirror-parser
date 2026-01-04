@@ -27,6 +27,28 @@ exports.constructor = function (parseTreeNode, options) {
 exports.prototype = {};
 
 // ============================================================================
+// Editor Operations - handlers for toolbar text operations
+// ============================================================================
+
+// ============================================================================
+// Undo/Redo handlers
+// ============================================================================
+
+exports.prototype.handleUndo = function(event) {
+	if (this.engine && typeof this.engine.undo === "function") {
+		this.engine.undo();
+	}
+	return false; // Don't propagate
+};
+
+exports.prototype.handleRedo = function(event) {
+	if (this.engine && typeof this.engine.redo === "function") {
+		this.engine.redo();
+	}
+	return false; // Don't propagate
+};
+
+// ============================================================================
 // Plugin Registry - allows external plugins to hook into the widget
 // ============================================================================
 
@@ -265,7 +287,7 @@ exports.prototype._buildSettingsSnapshot = function () {
 
 /**
  * Apply all config/state-driven engine settings in one place.
- * In the new architecture this *emits* settingsChanged for plugins to interpret.
+ * Triggers both internal engine handlers and plugin event handlers.
  */
 exports.prototype.applyEngineSettings = function () {
 	var engine = this.engine;
@@ -273,15 +295,14 @@ exports.prototype.applyEngineSettings = function () {
 
 	var settings = this._buildSettingsSnapshot();
 
-	// Preferred public API
-	if (typeof engine.dispatchPluginEvent === "function") {
-		engine.dispatchPluginEvent("settingsChanged", settings);
-		return;
+	// Trigger internal engine handlers (for compartment reconfiguration)
+	if (typeof engine._triggerEvent === "function") {
+		engine._triggerEvent("settingsChanged", settings);
 	}
 
-	// Fallback (should not be needed if engine is updated)
-	if (typeof engine.on === "function" && typeof engine._triggerEvent === "function") {
-		engine._triggerEvent("settingsChanged", settings);
+	// Also dispatch to plugins
+	if (typeof engine.dispatchPluginEvent === "function") {
+		engine.dispatchPluginEvent("settingsChanged", settings);
 	}
 };
 
@@ -300,6 +321,10 @@ exports.prototype.updateStylesheetTagCache = function () {
 exports.prototype.render = function (parent, nextSibling) {
 	// Call base class render
 	Object.getPrototypeOf(Object.getPrototypeOf(this)).render.call(this, parent, nextSibling);
+
+	// Register undo/redo event listeners
+	this.addEventListener("tm-cm6-undo", "handleUndo");
+	this.addEventListener("tm-cm6-redo", "handleRedo");
 
 	// Init shortcut caches
 	this.shortcutKeysList = [];

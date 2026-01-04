@@ -1,0 +1,8 @@
+title: $:/plugins/BurningTreeC/tiddlywiki-codemirror/icons/redo
+tags: $:/tags/Image
+
+<svg viewBox="0 0 22 22" width="22" height="22">
+  <!-- Curved arrow pointing right/forward -->
+  <path d="M14 6L18 10L14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M18 10H8C5.8 10 4 11.8 4 14C4 16.2 5.8 18 8 18H10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+</svg>

@@ -97,7 +97,7 @@ export const FencedCode: BlockParser = {
 
     while (cx.nextLine()) {
       if (codeEndRe.test(cx.line.text)) {
-        children.push(elt(Type.CodeText, codeStart, cx.lineStart - 1))
+        children.push(elt(Type.CodeText, codeStart, cx.prevLineEnd()))
         children.push(elt(Type.CodeMark, cx.lineStart, cx.lineStart + 3))
         foundEnd = true
         break
@@ -107,7 +107,8 @@ export const FencedCode: BlockParser = {
     }
 
     if (!foundEnd && codeContent) {
-      children.push(elt(Type.CodeText, codeStart, cx.lineStart - 1))
+      // Use prevLineEnd() to correctly handle documents without trailing newline
+      children.push(elt(Type.CodeText, codeStart, cx.prevLineEnd()))
     }
 
     const end = foundEnd ? cx.lineStart + cx.line.text.length : cx.lineStart
@@ -148,7 +149,7 @@ export const TypedBlock: BlockParser = {
 
     while (cx.nextLine()) {
       if (typedEndRe.test(cx.line.text)) {
-        children.push(elt(contentType, contentStart, cx.lineStart - 1))
+        children.push(elt(contentType, contentStart, cx.prevLineEnd()))
         children.push(elt(Type.TypedBlockMark, cx.lineStart, cx.lineStart + 3))
         foundEnd = true
         break
@@ -156,7 +157,8 @@ export const TypedBlock: BlockParser = {
     }
 
     if (!foundEnd) {
-      children.push(elt(contentType, contentStart, cx.lineStart - 1))
+      // Use prevLineEnd() to correctly handle documents without trailing newline
+      children.push(elt(contentType, contentStart, cx.prevLineEnd()))
     }
 
     const end = foundEnd ? cx.lineStart + cx.line.text.length : cx.lineStart

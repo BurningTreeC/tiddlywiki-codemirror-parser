@@ -1,0 +1,9 @@
+title: $:/plugins/BurningTreeC/tiddlywiki-codemirror/ui/Buttons/undo
+tags: $:/tags/EditorToolbar
+caption: {{$:/plugins/BurningTreeC/tiddlywiki-codemirror/icons/undo}} Undo
+description: Undo the last change
+icon: $:/plugins/BurningTreeC/tiddlywiki-codemirror/icons/undo
+condition: [<targetTiddler>has[title]]
+shortcuts: ((undo))
+
+<$action-sendmessage $message="tm-cm6-undo"/>
