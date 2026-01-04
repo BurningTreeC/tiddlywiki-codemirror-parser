@@ -631,6 +631,15 @@ function findUnclosedWidgets(tree, state) {
 						// Skip void elements that don't need closing
 						var voidElements = ["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"];
 						if (voidElements.indexOf(tagName) === -1) {
+							// For HTMLBlock nodes, check if the block contains its own closing tag
+							// This happens when the parser successfully matched opening and closing tags
+							if (nodeType === "HTMLBlock") {
+								var closePattern = new RegExp("</" + tagName + ">\\s*$", "i");
+								if (closePattern.test(tagText)) {
+									// Self-contained block with matching closing tag - skip
+									return;
+								}
+							}
 							// Find containing structure for limit
 							var containerLimit = null;
 							var containerType = null;
