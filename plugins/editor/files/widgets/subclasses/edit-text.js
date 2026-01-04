@@ -37,6 +37,7 @@ exports.prototype = {};
 exports.prototype.handleUndo = function(event) {
 	if (this.engine && typeof this.engine.undo === "function") {
 		this.engine.undo();
+		this.engine.focus();
 	}
 	return false; // Don't propagate
 };
@@ -44,6 +45,7 @@ exports.prototype.handleUndo = function(event) {
 exports.prototype.handleRedo = function(event) {
 	if (this.engine && typeof this.engine.redo === "function") {
 		this.engine.redo();
+		this.engine.focus();
 	}
 	return false; // Don't propagate
 };
