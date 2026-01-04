@@ -36,6 +36,14 @@ exports.plugin = {
 		this._core = cm6Core;
 	},
 
+	registerCompartments: function() {
+		var core = this._core;
+		var Compartment = core.state.Compartment;
+		return {
+			imagePreview: new Compartment()
+		};
+	},
+
 	getExtensions: function(context) {
 		var core = this._core;
 		var ViewPlugin = core.view.ViewPlugin;
@@ -162,9 +170,37 @@ exports.plugin = {
 			decorations: function(v) { return v.decorations; }
 		});
 
-		extensions.push(imagePlugin);
+		// Store plugin reference for registerEvents
+		this._imagePlugin = imagePlugin;
+
+		// Wrap in compartment if available
+		var engine = context.engine;
+		var compartments = engine && engine._compartments;
+		if (compartments && compartments.imagePreview) {
+			extensions.push(compartments.imagePreview.of(imagePlugin));
+		} else {
+			extensions.push(imagePlugin);
+		}
 
 		return extensions;
+	},
+
+	registerEvents: function(engine, context) {
+		var self = this;
+
+		return {
+			settingsChanged: function(settings) {
+				if (engine._destroyed) return;
+
+				if (settings.imagePreview !== undefined) {
+					if (settings.imagePreview && self._imagePlugin) {
+						engine.reconfigure("imagePreview", self._imagePlugin);
+					} else {
+						engine.reconfigure("imagePreview", []);
+					}
+				}
+			}
+		};
 	}
 };
 

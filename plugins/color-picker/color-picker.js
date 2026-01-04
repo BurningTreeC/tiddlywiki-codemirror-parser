@@ -34,6 +34,14 @@ exports.plugin = {
 		this._core = cm6Core;
 	},
 
+	registerCompartments: function() {
+		var core = this._core;
+		var Compartment = core.state.Compartment;
+		return {
+			colorPicker: new Compartment()
+		};
+	},
+
 	getExtensions: function(context) {
 		var core = this._core;
 		var ViewPlugin = core.view.ViewPlugin;
@@ -166,6 +174,9 @@ exports.plugin = {
 				colors.push({ from: match.index, to: match.index + match[0].length, color: match[0] });
 			}
 
+			// Sort by position (required for Decoration.set)
+			colors.sort(function(a, b) { return a.from - b.from; });
+
 			return colors;
 		}
 
@@ -202,9 +213,37 @@ exports.plugin = {
 			decorations: function(v) { return v.decorations; }
 		});
 
-		extensions.push(colorPlugin);
+		// Store plugin reference for registerEvents
+		this._colorPlugin = colorPlugin;
+
+		// Wrap in compartment if available
+		var engine = context.engine;
+		var compartments = engine && engine._compartments;
+		if (compartments && compartments.colorPicker) {
+			extensions.push(compartments.colorPicker.of(colorPlugin));
+		} else {
+			extensions.push(colorPlugin);
+		}
 
 		return extensions;
+	},
+
+	registerEvents: function(engine, context) {
+		var self = this;
+
+		return {
+			settingsChanged: function(settings) {
+				if (engine._destroyed) return;
+
+				if (settings.colorPicker !== undefined) {
+					if (settings.colorPicker && self._colorPlugin) {
+						engine.reconfigure("colorPicker", self._colorPlugin);
+					} else {
+						engine.reconfigure("colorPicker", []);
+					}
+				}
+			}
+		};
 	}
 };
 

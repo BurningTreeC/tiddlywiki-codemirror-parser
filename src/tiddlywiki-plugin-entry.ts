@@ -96,7 +96,8 @@ let _currentEngine: CM6Engine | null = null
 const TW_TYPES = [
   "",  // Empty = default wikitext
   "text/vnd.tiddlywiki",
-  "text/x-tiddlywiki"
+  "text/x-tiddlywiki",
+  "application/x-tiddler-dictionary"
 ]
 
 /**
