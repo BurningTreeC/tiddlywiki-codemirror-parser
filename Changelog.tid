@@ -3,6 +3,41 @@ tags:
 
 ! Changelog
 
+!! Version 0.0.11
+
+!!! New Features
+
+* '''Undo/Redo Toolbar Buttons''' - Dedicated toolbar buttons for undo and redo
+** Custom `tm-cm6-undo` and `tm-cm6-redo` messages for direct CodeMirror integration
+** New icons for undo and redo actions
+
+* '''Trailing Whitespace Highlighting''' - Toggle to show trailing whitespace
+** New toolbar button to toggle visibility on/off
+** Config tiddler `$:/config/codemirror-6/showTrailingWhitespace`
+** Uses CodeMirror compartments for live toggling
+
+* '''Multi-line Macro Calls''' - Parser now supports macros spanning multiple lines
+** Macros like `<<tabs\n  param:"value"\n>>` are now properly parsed
+** Parameters on separate lines are correctly highlighted
+
+!!! Lint Plugin Improvements
+
+* '''Orphan Closing Tag Detection''' - Detects closing tags without matching opening tags
+** Reports `</div>` or `</$widget>` that have no corresponding opening tag
+** "Remove closing tag" quick-fix action
+** Works for both HTML tags and widgets
+
+* '''Fixed HTMLBlock False Positives''' - Self-contained HTML blocks no longer reported as unclosed
+** `<div>content</div>` on multiple lines correctly recognized as closed
+
+!!! Bug Fixes
+
+* '''Unclosed Code Block Parsing''' - Fixed last character being styled incorrectly
+** Documents without trailing newlines now handled correctly
+** Uses `prevLineEnd()` instead of `lineStart - 1` for proper end position
+
+---
+
 !! Version 0.0.10
 
 !!! New Features
