@@ -296,6 +296,18 @@ export interface TiddlyWikiLanguageConfig {
   getVariableNames?: () => string[]
 
   /**
+   * Function to get index/property names for a specific tiddler (for {{tiddler##index}} completion)
+   * The tiddler title is passed so indexes can be fetched from the tiddler's data
+   */
+  getTiddlerIndexes?: (tiddlerTitle: string) => string[]
+
+  /**
+   * Function to get field names for a specific tiddler (for {{tiddler!!field}} completion)
+   * Returns only the fields that exist on that particular tiddler
+   */
+  getTiddlerFields?: (tiddlerTitle: string) => string[]
+
+  /**
    * Language support for HTML tags (default: html without tag matching)
    */
   htmlTagLanguage?: LanguageSupport
@@ -440,6 +452,8 @@ export function tiddlywiki(config: TiddlyWikiLanguageConfig = {}): LanguageSuppo
     getTagNames,
     getFunctionNames,
     getVariableNames,
+    getTiddlerIndexes,
+    getTiddlerFields,
     htmlTagLanguage = htmlNoMatch,
     getSelfClosingWidgets,
   } = config
@@ -548,6 +562,10 @@ export function tiddlywiki(config: TiddlyWikiLanguageConfig = {}): LanguageSuppo
   if (completeTiddlers) {
     support.push(lang.data.of({
       autocomplete: tiddlerCompletion(getTiddlerTitles)
+    }))
+    // Field/index completion for transclusions: {{tiddler!!field}} or {{tiddler##index}}
+    support.push(lang.data.of({
+      autocomplete: transclusionFieldCompletion(getTiddlerFields, getTiddlerIndexes)
     }))
   }
 
@@ -1620,13 +1638,21 @@ function tiddlerCompletion(getTiddlerTitles?: () => string[]) {
     // Match [[ for links (also works inside filters for literal titles)
     const linkMatch = /\[\[[^\]|]*$/.exec(textBefore)
     // Match {{ for transclusions (but not {{{ which is filtered transclusion)
-    const transcludeMatch = /(?<!\{)\{\{[^{}|]*$/.exec(textBefore)
+    // Also exclude matches containing !! or ## (those are handled by transclusionFieldCompletion)
+    let transcludeMatch = /(?<!\{)\{\{[^{}|]*$/.exec(textBefore)
+    if (transcludeMatch && (transcludeMatch[0].includes('!!') || transcludeMatch[0].includes('##'))) {
+      transcludeMatch = null
+    }
     // Match [img[ or [img ...attrs[ for images (source is inside the last [)
     const imageMatch = /\[img(?:\s+[^\[]*)?\[[^\]|]*$/.exec(textBefore)
     // Match [operator[ or ]operator[ or }operator[ or >operator[ for filter operand (tiddler title)
     const filterOperandMatch = /[\[\]}>][\w\-:!]*\[[^\]]*$/.exec(textBefore)
     // Match [{ or [operator{ or ]operator{ or }operator{ or >operator{ for text references inside filters
-    const filterTextRefMatch = /[\[\]}>][\w\-:!]*\{[^}]*$/.exec(textBefore)
+    // Also exclude matches containing !! or ## (those are handled by transclusionFieldCompletion)
+    let filterTextRefMatch = /[\[\]}>][\w\-:!]*\{[^}]*$/.exec(textBefore)
+    if (filterTextRefMatch && (filterTextRefMatch[0].includes('!!') || filterTextRefMatch[0].includes('##'))) {
+      filterTextRefMatch = null
+    }
 
     // Check if we're inside a filter context (affects how [[ is treated)
     // Filter contexts: {{{ filter }}}, filter="...", <$list filter="..."/>, etc.
@@ -1825,6 +1851,143 @@ function tiddlerCompletion(getTiddlerTitles?: () => string[]) {
       to: pos,
       options,
       validFor
+    }
+  }
+}
+
+/**
+ * Transclusion and text reference field/index completion source
+ * Handles:
+ * - {{tiddler!!field}} and {{tiddler##index}} - transclusion syntax
+ * - {tiddler!!field} and {tiddler##index} - filter text reference syntax
+ */
+function transclusionFieldCompletion(
+  getTiddlerFields?: (tiddlerTitle: string) => string[],
+  getTiddlerIndexes?: (tiddlerTitle: string) => string[]
+) {
+  return (context: CompletionContext): CompletionResult | null => {
+    const { state, pos } = context
+    const textBefore = state.sliceDoc(Math.max(0, pos - 200), pos)
+
+    // Match {{tiddler!! for field completion in transclusions (but not {{{ which is filtered transclusion)
+    const transcludeFieldMatch = /(?<!\{)\{\{([^{}|]*?)!![^{}|!]*$/.exec(textBefore)
+    // Match {{tiddler## for index completion in transclusions
+    const transcludeIndexMatch = /(?<!\{)\{\{([^{}|]*?)##[^{}|#]*$/.exec(textBefore)
+    // Match {tiddler!! for field completion in filter text references (single brace, not double)
+    const textRefFieldMatch = /(?<!\{)\{(?!\{)([^{}]*?)!![^{}!]*$/.exec(textBefore)
+    // Match {tiddler## for index completion in filter text references
+    const textRefIndexMatch = /(?<!\{)\{(?!\{)([^{}]*?)##[^{}#]*$/.exec(textBefore)
+
+    // Determine which pattern matched
+    const isTransclusion = !!(transcludeFieldMatch || transcludeIndexMatch)
+    const isFieldCompletion = !!(transcludeFieldMatch || textRefFieldMatch)
+
+    const match = transcludeFieldMatch || transcludeIndexMatch || textRefFieldMatch || textRefIndexMatch
+    if (!match) return null
+
+    // Don't complete inside code blocks or comments
+    const tree = syntaxTree(state).resolveInner(pos, -1)
+    let node = tree
+    while (node && !node.type.isTop) {
+      if (node.name === "FencedCode" || node.name === "CodeBlock" ||
+          node.name === "TypedBlock" || node.name === "CommentBlock") {
+        return null
+      }
+      node = node.parent!
+    }
+
+    const separator = isFieldCompletion ? "!!" : "##"
+
+    // Extract the tiddler title (before !! or ##)
+    const tiddlerTitle = match[1] || ""
+
+    // Find the part after !! or ##
+    const sepIndex = match[0].lastIndexOf(separator)
+    const prefix = match[0].slice(0, sepIndex + 2)  // Include the !! or ##
+    const partialValue = match[0].slice(sepIndex + 2)
+
+    let values: string[]
+    let detail: string
+
+    if (isFieldCompletion) {
+      // Field completion - get fields for this specific tiddler
+      if (getTiddlerFields && tiddlerTitle) {
+        values = getTiddlerFields(tiddlerTitle)
+      } else {
+        // Fallback: no fields available
+        values = []
+      }
+      detail = "field"
+    } else {
+      // Index completion - get indexes for this specific tiddler
+      if (getTiddlerIndexes && tiddlerTitle) {
+        values = getTiddlerIndexes(tiddlerTitle)
+      } else {
+        // Fallback: no indexes available
+        values = []
+      }
+      detail = "index"
+    }
+
+    // Filter values based on what's already typed
+    const filtered = values.filter(v =>
+      v.toLowerCase().startsWith(partialValue.toLowerCase())
+    )
+
+    if (filtered.length === 0) return null
+
+    const patternLen = match[0].length
+    // Transclusions close with }}, text references close with }
+    const closingSuffix = isTransclusion ? "}}" : "}"
+
+    const options: Completion[] = filtered.map(value => ({
+      label: prefix + value,
+      type: "property",
+      detail,
+      apply: (view, _completion, from, to) => {
+        // Check for existing closing braces
+        const textAfter = view.state.sliceDoc(to, to + 2)
+        let suffix = closingSuffix
+        if (isTransclusion) {
+          if (textAfter === "}}") {
+            suffix = ""
+          } else if (textAfter.startsWith("}")) {
+            suffix = "}"
+          }
+        } else {
+          // Text reference - single brace
+          if (textAfter.startsWith("}")) {
+            suffix = ""
+          }
+        }
+
+        const insert = prefix + value + suffix
+        const cursorPos = from + insert.length
+        const changes = buildMultiSelectionChanges(view, from, to, insert, patternLen)
+        view.dispatch({
+          changes,
+          selection: { anchor: cursorPos }
+        })
+      }
+    }))
+
+    // Build validFor pattern based on what we matched
+    let validForPattern: RegExp
+    if (isTransclusion) {
+      validForPattern = isFieldCompletion
+        ? /^(?<!\{)\{\{[^{}|]*!![^{}|!]*$/
+        : /^(?<!\{)\{\{[^{}|]*##[^{}|#]*$/
+    } else {
+      validForPattern = isFieldCompletion
+        ? /^(?<!\{)\{(?!\{)[^{}]*!![^{}!]*$/
+        : /^(?<!\{)\{(?!\{)[^{}]*##[^{}#]*$/
+    }
+
+    return {
+      from: pos - match[0].length,
+      to: pos,
+      options,
+      validFor: validForPattern
     }
   }
 }

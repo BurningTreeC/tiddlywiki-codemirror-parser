@@ -7,6 +7,14 @@
 import { Type } from "./types"
 import { Element, elt, InlineParser, DelimiterType, Ch, space, Punctuation } from "./core"
 import type { InlineContext } from "./inline-context"
+import {
+  createDelimiterParser,
+  parseTransclusionTarget,
+  findTagEnd as findTagEndUtil,
+  parseMacroParams as parseMacroParamsUtil,
+  Patterns,
+  isWhitespaceOrEmpty,
+} from "./parser-utils"
 
 // ============================================================================
 // Escape Parser (~WikiWord prevents linking)
@@ -80,127 +88,45 @@ export const InlineCode: InlineParser = {
 }
 
 // ============================================================================
-// Bold Parser ('')
+// Delimiter-based Formatters (Bold, Italic, Underline, Strikethrough, etc.)
 // ============================================================================
+// These all use the createDelimiterParser factory from parser-utils.ts
 
 const BoldDelim: DelimiterType = { resolve: "Bold", mark: "BoldMark" }
+const ItalicDelim: DelimiterType = { resolve: "Italic", mark: "ItalicMark" }
+const UnderlineDelim: DelimiterType = { resolve: "Underline", mark: "UnderlineMark" }
+const StrikethroughDelim: DelimiterType = { resolve: "Strikethrough", mark: "StrikethroughMark" }
+const SuperscriptDelim: DelimiterType = { resolve: "Superscript", mark: "SuperscriptMark" }
+const SubscriptDelim: DelimiterType = { resolve: "Subscript", mark: "SubscriptMark" }
 
 export const Bold: InlineParser = {
   name: "Bold",
-  parse(cx: InlineContext, next: number, pos: number): number {
-    if (next !== Ch.Apostrophe || cx.char(pos + 1) !== Ch.Apostrophe) return -1
-
-    // Use simple flanking rules like TiddlyWiki (not Markdown's complex rules)
-    const before = cx.slice(pos - 1, pos)
-    const after = cx.slice(pos + 2, pos + 3)
-    const sBefore = /\s|^$/.test(before)
-    const sAfter = /\s|^$/.test(after)
-
-    return cx.addDelimiter(BoldDelim, pos, pos + 2, !sAfter, !sBefore)
-  }
+  parse: createDelimiterParser({ charCode: Ch.Apostrophe, delimType: BoldDelim })
 }
-
-// ============================================================================
-// Italic Parser (//)
-// ============================================================================
-
-const ItalicDelim: DelimiterType = { resolve: "Italic", mark: "ItalicMark" }
 
 export const Italic: InlineParser = {
   name: "Italic",
-  parse(cx: InlineContext, next: number, pos: number): number {
-    if (next !== Ch.Slash || cx.char(pos + 1) !== Ch.Slash) return -1
-
-    const before = cx.slice(pos - 1, pos)
-    const after = cx.slice(pos + 2, pos + 3)
-    const sBefore = /\s|^$/.test(before)
-    const sAfter = /\s|^$/.test(after)
-
-    return cx.addDelimiter(ItalicDelim, pos, pos + 2, !sAfter, !sBefore)
-  }
+  parse: createDelimiterParser({ charCode: Ch.Slash, delimType: ItalicDelim })
 }
-
-// ============================================================================
-// Underline Parser (__)
-// ============================================================================
-
-const UnderlineDelim: DelimiterType = { resolve: "Underline", mark: "UnderlineMark" }
 
 export const Underline: InlineParser = {
   name: "Underline",
-  parse(cx: InlineContext, next: number, pos: number): number {
-    if (next !== Ch.Underscore || cx.char(pos + 1) !== Ch.Underscore) return -1
-
-    const before = cx.slice(pos - 1, pos)
-    const after = cx.slice(pos + 2, pos + 3)
-    const sBefore = /\s|^$/.test(before)
-    const sAfter = /\s|^$/.test(after)
-
-    return cx.addDelimiter(UnderlineDelim, pos, pos + 2, !sAfter, !sBefore)
-  }
+  parse: createDelimiterParser({ charCode: Ch.Underscore, delimType: UnderlineDelim })
 }
-
-// ============================================================================
-// Strikethrough Parser (~~)
-// ============================================================================
-
-const StrikethroughDelim: DelimiterType = { resolve: "Strikethrough", mark: "StrikethroughMark" }
 
 export const Strikethrough: InlineParser = {
   name: "Strikethrough",
-  parse(cx: InlineContext, next: number, pos: number): number {
-    if (next !== Ch.Tilde || cx.char(pos + 1) !== Ch.Tilde) return -1
-    // Make sure it's not ~~~ (odd number of tildes, which is a code fence marker)
-    // But allow ~~~~ (even number, which is empty strikethrough)
-    if (cx.char(pos + 2) === Ch.Tilde && cx.char(pos + 3) !== Ch.Tilde) return -1
-
-    const before = cx.slice(pos - 1, pos)
-    const after = cx.slice(pos + 2, pos + 3)
-    const sBefore = /\s|^$/.test(before)
-    const sAfter = /\s|^$/.test(after)
-
-    return cx.addDelimiter(StrikethroughDelim, pos, pos + 2, !sAfter, !sBefore)
-  }
+  parse: createDelimiterParser({ charCode: Ch.Tilde, delimType: StrikethroughDelim, rejectOddRuns: true })
 }
-
-// ============================================================================
-// Superscript Parser (^^)
-// ============================================================================
-
-const SuperscriptDelim: DelimiterType = { resolve: "Superscript", mark: "SuperscriptMark" }
 
 export const Superscript: InlineParser = {
   name: "Superscript",
-  parse(cx: InlineContext, next: number, pos: number): number {
-    if (next !== Ch.Caret || cx.char(pos + 1) !== Ch.Caret) return -1
-
-    const before = cx.slice(pos - 1, pos)
-    const after = cx.slice(pos + 2, pos + 3)
-    const sBefore = /\s|^$/.test(before)
-    const sAfter = /\s|^$/.test(after)
-
-    return cx.addDelimiter(SuperscriptDelim, pos, pos + 2, !sAfter, !sBefore)
-  }
+  parse: createDelimiterParser({ charCode: Ch.Caret, delimType: SuperscriptDelim })
 }
-
-// ============================================================================
-// Subscript Parser (,,)
-// ============================================================================
-
-const SubscriptDelim: DelimiterType = { resolve: "Subscript", mark: "SubscriptMark" }
 
 export const Subscript: InlineParser = {
   name: "Subscript",
-  parse(cx: InlineContext, next: number, pos: number): number {
-    if (next !== Ch.Comma || cx.char(pos + 1) !== Ch.Comma) return -1
-
-    const before = cx.slice(pos - 1, pos)
-    const after = cx.slice(pos + 2, pos + 3)
-    const sBefore = /\s|^$/.test(before)
-    const sAfter = /\s|^$/.test(after)
-
-    return cx.addDelimiter(SubscriptDelim, pos, pos + 2, !sAfter, !sBefore)
-  }
+  parse: createDelimiterParser({ charCode: Ch.Comma, delimType: SubscriptDelim })
 }
 
 // ============================================================================
@@ -514,42 +440,7 @@ export const ImageLink: InlineParser = {
 
 const transclusionRe = /^\{\{([^{}|]*?)(?:\|\|([^{}|]+?))?(?:\|([^{}]+?))?\}\}/
 
-/**
- * Parse transclusion target details: tiddler!!field or tiddler##index
- */
-function parseTransclusionTarget(cx: InlineContext, target: string, offset: number): Element[] {
-  const children: Element[] = []
-
-  // Check for !!field
-  const fieldIdx = target.indexOf("!!")
-  // Check for ##index
-  const indexIdx = target.indexOf("##")
-
-  if (fieldIdx !== -1 && (indexIdx === -1 || fieldIdx < indexIdx)) {
-    // Has field reference
-    const tiddlerPart = target.slice(0, fieldIdx)
-    const fieldPart = target.slice(fieldIdx + 2)
-
-    if (tiddlerPart) {
-      children.push(cx.elt(Type.TransclusionTarget, offset, offset + tiddlerPart.length))
-    }
-    children.push(cx.elt(Type.TransclusionField, offset + fieldIdx, offset + target.length))
-  } else if (indexIdx !== -1) {
-    // Has index reference
-    const tiddlerPart = target.slice(0, indexIdx)
-    const indexPart = target.slice(indexIdx + 2)
-
-    if (tiddlerPart) {
-      children.push(cx.elt(Type.TransclusionTarget, offset, offset + tiddlerPart.length))
-    }
-    children.push(cx.elt(Type.TransclusionIndex, offset + indexIdx, offset + target.length))
-  } else {
-    // Just a tiddler reference
-    children.push(cx.elt(Type.TransclusionTarget, offset, offset + target.length))
-  }
-
-  return children
-}
+// parseTransclusionTarget is now imported from parser-utils.ts
 
 export const Transclusion: InlineParser = {
   name: "Transclusion",
@@ -574,7 +465,7 @@ export const Transclusion: InlineParser = {
 
         if (target) {
           // Parse target details (tiddler!!field or tiddler##index)
-          const targetChildren = parseTransclusionTarget(cx, target, pos + 2)
+          const targetChildren = parseTransclusionTarget(target, pos + 2)
           children.push(...targetChildren)
         }
 
@@ -592,7 +483,7 @@ export const Transclusion: InlineParser = {
     ]
 
     // Parse target details (tiddler!!field or tiddler##index)
-    const targetChildren = parseTransclusionTarget(cx, target, pos + 2)
+    const targetChildren = parseTransclusionTarget(target, pos + 2)
     children.push(...targetChildren)
 
     if (template) {
@@ -802,104 +693,7 @@ export const FilteredTransclusion: InlineParser = {
 // Macro Call Parser (<<macro params>>)
 // ============================================================================
 
-/**
- * Parse macro parameters into individual MacroParam elements
- * Handles: name:"value", name:value, "value", value
- */
-function parseMacroParams(cx: InlineContext, paramsStr: string, offset: number): Element[] {
-  const elements: Element[] = []
-  let pos = 0
-  const len = Math.min(paramsStr.length, 5000)  // Safety limit
-  let iterations = 0
-  const maxIterations = 200  // Safety limit on number of parameters
-
-  while (pos < len && iterations < maxIterations) {
-    iterations++
-    // Skip whitespace
-    while (pos < len && /\s/.test(paramsStr[pos])) pos++
-    if (pos >= len) break
-
-    const paramStart = pos
-
-    // Check if it's a named parameter (name:value)
-    let nameEnd = pos
-    while (nameEnd < len && /[a-zA-Z0-9\-_]/.test(paramsStr[nameEnd])) nameEnd++
-
-    if (nameEnd > pos && paramsStr[nameEnd] === ':') {
-      // Named parameter
-      const nameStart = pos
-      pos = nameEnd + 1 // skip the :
-
-      // Parse value
-      const valueStart = pos
-      let valueEnd = pos
-
-      if (paramsStr[pos] === '"' || paramsStr[pos] === "'") {
-        // Quoted value
-        const quote = paramsStr[pos]
-        pos++
-        while (pos < len && paramsStr[pos] !== quote) {
-          if (paramsStr[pos] === '\\') pos++
-          pos++
-        }
-        if (pos < len) pos++
-        valueEnd = pos
-      } else if (paramsStr.slice(pos, pos + 3) === '[[[') {
-        // Triple bracket: [[[value]]]
-        pos += 3
-        while (pos < len && paramsStr.slice(pos, pos + 3) !== ']]]') pos++
-        if (pos < len) pos += 3  // Only skip if we found the closing
-        valueEnd = pos
-      } else if (paramsStr.slice(pos, pos + 2) === '[[') {
-        // Double bracket: [[value]]
-        pos += 2
-        while (pos < len && paramsStr.slice(pos, pos + 2) !== ']]') pos++
-        if (pos < len) pos += 2  // Only skip if we found the closing
-        valueEnd = pos
-      } else {
-        // Unquoted value
-        while (pos < len && !/[\s>]/.test(paramsStr[pos])) pos++
-        valueEnd = pos
-      }
-
-      const paramChildren: Element[] = [
-        cx.elt(Type.MacroParamName, offset + nameStart, offset + nameEnd),
-        cx.elt(Type.MacroParamValue, offset + valueStart, offset + valueEnd)
-      ]
-      elements.push(cx.elt(Type.MacroParam, offset + paramStart, offset + valueEnd, paramChildren))
-    } else {
-      // Positional parameter (just a value)
-      const valueStart = pos
-
-      if (paramsStr[pos] === '"' || paramsStr[pos] === "'") {
-        const quote = paramsStr[pos]
-        pos++
-        while (pos < len && paramsStr[pos] !== quote) {
-          if (paramsStr[pos] === '\\') pos++
-          pos++
-        }
-        if (pos < len) pos++
-      } else if (paramsStr.slice(pos, pos + 3) === '[[[') {
-        pos += 3
-        while (pos < len && paramsStr.slice(pos, pos + 3) !== ']]]') pos++
-        if (pos < len) pos += 3
-      } else if (paramsStr.slice(pos, pos + 2) === '[[') {
-        pos += 2
-        while (pos < len && paramsStr.slice(pos, pos + 2) !== ']]') pos++
-        if (pos < len) pos += 2
-      } else {
-        while (pos < len && !/[\s>]/.test(paramsStr[pos])) pos++
-      }
-
-      const paramChildren: Element[] = [
-        cx.elt(Type.MacroParamValue, offset + valueStart, offset + pos)
-      ]
-      elements.push(cx.elt(Type.MacroParam, offset + paramStart, offset + pos, paramChildren))
-    }
-  }
-
-  return elements
-}
+// parseMacroParams is imported from parser-utils.ts as parseMacroParamsUtil
 
 export const MacroCall: InlineParser = {
   name: "MacroCall",
@@ -966,7 +760,7 @@ export const MacroCall: InlineParser = {
     if (nameEnd < closePos) {
       const paramsStr = text.slice(nameEnd, closePos)
       if (paramsStr.trim()) {
-        const paramElements = parseMacroParams(cx, paramsStr, pos + nameEnd)
+        const paramElements = parseMacroParamsUtil(paramsStr, pos + nameEnd)
         children.push(...paramElements)
       }
     }
@@ -1104,7 +898,25 @@ function parseInlineAttributes(cx: InlineContext, attrString: string, offset: nu
     let valueType = Type.AttributeValue
     const ch = attrString[pos]
 
-    if (ch === '"' || ch === "'") {
+    if (ch === '"' && attrString.slice(pos, pos + 3) === '"""') {
+      // Triple-quoted string: """value"""
+      pos += 3 // skip opening """
+      const stringStart = pos
+      while (pos < len && attrString.slice(pos, pos + 3) !== '"""') {
+        pos++
+      }
+      const stringEnd = pos
+      if (attrString.slice(pos, pos + 3) === '"""') pos += 3 // skip closing """
+      valueEnd = pos
+      valueType = Type.AttributeString
+
+      const attrChildren: Element[] = [
+        cx.elt(Type.AttributeName, offset + nameStart, offset + nameEnd),
+        cx.elt(valueType, offset + valueStart, offset + valueEnd)
+      ]
+      elements.push(cx.elt(Type.Attribute, offset + nameStart, offset + valueEnd, attrChildren))
+      continue
+    } else if (ch === '"' || ch === "'") {
       const quote = ch
       const stringStart = pos + 1
       pos++
@@ -1172,7 +984,7 @@ function parseInlineAttributes(cx: InlineContext, attrString: string, offset: nu
         valueType = Type.AttributeIndirect
         // Parse transclusion target details (tiddler!!field or tiddler##index)
         const targetContent = attrString.slice(targetStart, targetEnd)
-        const targetChildren = parseTransclusionTarget(cx, targetContent, offset + targetStart)
+        const targetChildren = parseTransclusionTarget(targetContent, offset + targetStart)
         // Create child elements for transclusion
         const valueChildren: Element[] = [
           cx.elt(Type.TransclusionMark, offset + openMarkStart, offset + openMarkStart + 2),

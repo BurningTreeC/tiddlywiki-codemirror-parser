@@ -475,10 +475,18 @@ export class BlockContext implements PartialParse {
     const start = this.lineStart
     const content: string[] = [this._line.text]
 
-    // Consume lines until we hit a blank line or block element
+    // Consume lines until we hit a block element
+    // Blank lines are included to allow inline formatting (like ~~strikethrough~~)
+    // to span across visual paragraph breaks, matching TiddlyWiki's behavior
     while (this.nextLine()) {
       const text = this._line.text
-      if (text.trim() === "") break
+
+      // Include blank lines - they don't end paragraphs in TiddlyWiki
+      // (inline formatting can span across them)
+      if (text.trim() === "") {
+        content.push(text)
+        continue
+      }
 
       // Check if this line starts a new block
       let startsBlock = false
@@ -516,7 +524,32 @@ export class BlockContext implements PartialParse {
     if (firstChar === Ch.Backtick && text.startsWith("```")) return true  // Code
     if (firstChar === Ch.Dollar && text.startsWith("$$$")) return true  // Typed block
     if (firstChar === Ch.Dash && /^-{3,}$/.test(text.trim())) return true  // HR
-    if (firstChar === Ch.LessThan) return true  // HTML/Widget
+    if (firstChar === Ch.LessThan) {
+      // HTML/Widget: only treat as block if tag doesn't close on same line
+      // This allows inline HTML within formatting like ~~<div>text</div>~~
+
+      // HTML comment
+      if (text.startsWith('<!--')) {
+        return !text.includes('-->')  // Block if comment doesn't close on same line
+      }
+
+      // Match opening tag (HTML or widget)
+      const tagMatch = text.match(/^<(\$?[a-zA-Z][a-zA-Z0-9\-\.]*)/)
+      if (!tagMatch) return false  // Not a recognizable tag pattern
+
+      const tagName = tagMatch[1]
+
+      // Self-closing tag: <tag ... />
+      if (/\/>\s*$/.test(text)) return false
+
+      // Check if closing tag exists on same line
+      const escapedName = tagName.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')
+      const closeTagRegex = new RegExp(`</${escapedName}>`)
+      if (closeTagRegex.test(text)) return false
+
+      // Opening tag without close on same line - treat as block
+      return true
+    }
     if (firstChar === Ch.LeftBrace && text.startsWith("{{")) return true  // Transclusion
     if (firstChar === Ch.Backslash) return true  // Pragma
     return false

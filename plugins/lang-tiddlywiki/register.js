@@ -319,6 +319,57 @@ function getFieldNames() {
 }
 
 /**
+ * Get field names for a specific tiddler
+ * Used for {{tiddler!!field}} completion
+ * @param {string} tiddlerTitle - The title of the tiddler to get fields from
+ * @returns {string[]} Array of field names that exist on this tiddler
+ */
+function getTiddlerFields(tiddlerTitle) {
+	if (!$tw || !$tw.wiki || !tiddlerTitle) {
+		return [];
+	}
+
+	var tiddler = $tw.wiki.getTiddler(tiddlerTitle);
+	if (!tiddler || !tiddler.fields) {
+		return [];
+	}
+
+	return Object.keys(tiddler.fields).sort();
+}
+
+/**
+ * Get index/property names for a specific data tiddler
+ * Used for {{tiddler##index}} completion
+ * Supports application/json, application/x-tiddler-dictionary, and other data formats
+ * @param {string} tiddlerTitle - The title of the tiddler to get indexes from
+ * @returns {string[]} Array of index names (keys from the tiddler's data)
+ */
+function getTiddlerIndexes(tiddlerTitle) {
+	if (!$tw || !$tw.wiki || !tiddlerTitle) {
+		return [];
+	}
+
+	// Use TiddlyWiki's built-in function to get data from the tiddler
+	// This handles application/json, application/x-tiddler-dictionary, etc.
+	var data = $tw.wiki.getTiddlerDataCached(tiddlerTitle, undefined);
+
+	if (!data) {
+		return [];
+	}
+
+	// Return keys for objects, numeric indexes for arrays
+	if (Array.isArray(data)) {
+		return data.map(function(_, i) { return String(i); });
+	}
+
+	if (typeof data === "object") {
+		return Object.keys(data).sort();
+	}
+
+	return [];
+}
+
+/**
  * Get all tag names (cached)
  * Returns simple string array
  */
@@ -566,6 +617,8 @@ exports.startup = function() {
 			getTagNames: getTagNames,
 			getFunctionNames: getFunctionNames,
 			getVariableNames: getVariableNames,
+			getTiddlerIndexes: getTiddlerIndexes,
+			getTiddlerFields: getTiddlerFields,
 
 			// Enable all completions
 			completeTiddlers: true,

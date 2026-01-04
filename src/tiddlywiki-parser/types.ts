@@ -72,6 +72,10 @@ export enum Type {
   TypedBlockMark,       // The $$$ markers
   TypedBlockType,       // Type identifier
 
+  // Hard line breaks block (""" ... """)
+  HardLineBreaks,
+  HardLineBreaksMark,   // The """ markers
+
   // Other blocks
   HorizontalRule,
   CommentBlock,
@@ -246,6 +250,7 @@ export const BlockTypes = new Set([
   Type.TableRow,
   Type.FencedCode,
   Type.TypedBlock,
+  Type.HardLineBreaks,
   Type.HorizontalRule,
   Type.CommentBlock,
   Type.HTMLBlock,

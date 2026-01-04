@@ -3,6 +3,34 @@ tags:
 
 ! Changelog
 
+!! Version 0.0.8
+
+!!! New Features
+
+* '''Transclusion Field/Index Completion''' - Autocomplete for fields and indexes in transclusions
+** `{{tiddler!!}}` now shows field completions for the specified tiddler
+** `{{tiddler##}}` now shows index completions for data tiddlers (JSON, dictionary)
+** Field completions show only fields present on the target tiddler
+** Index completions use TiddlyWiki's built-in `getTiddlerDataCached()` for proper data tiddler support
+
+* '''Filter Text Reference Completion''' - Field/index completion inside filters
+** `{tiddler!!}` in filters now shows field completions
+** `{tiddler##}` in filters now shows index completions
+** Works in filter contexts like `{{{ [{Snippets##index}] }}}`
+
+* '''Hard Line Breaks Block''' - Support for TiddlyWiki's hard line breaks syntax
+** `"""` on its own line starts a hard line breaks block
+** Content inside preserves line breaks literally
+** Proper syntax highlighting for the `"""` markers
+
+!!! Improvements
+
+* '''Triple-Quoted Attribute Parsing''' - Fixed parsing of `attribute="""value"""` syntax
+** Triple-quoted strings now correctly parsed in both block and inline contexts
+** Allows multi-line attribute values with proper highlighting
+
+---
+
 !! Version 0.0.7
 
 !!! New Features

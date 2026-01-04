@@ -7,6 +7,7 @@
 import { Type } from "./types"
 import { Element, elt, Line, BlockParser, BlockResult, Ch, space } from "./core"
 import type { BlockContext } from "./block-context"
+import { parseTransclusionTarget, parseMacroParams } from "./parser-utils"
 
 // ============================================================================
 // Heading Parser (! to !!!!!!)
@@ -160,6 +161,55 @@ export const TypedBlock: BlockParser = {
 
     const end = foundEnd ? cx.lineStart + cx.line.text.length : cx.lineStart
     cx.addElement(elt(Type.TypedBlock, start, end, children))
+    return true
+  }
+}
+
+// ============================================================================
+// Hard Line Breaks Block (""" ... """)
+// ============================================================================
+
+const hardLineBreaksRe = /^"""\s*$/
+
+export const HardLineBreaks: BlockParser = {
+  name: "HardLineBreaks",
+  parse(cx: BlockContext, line: Line): BlockResult {
+    if (!hardLineBreaksRe.test(line.text)) return false
+
+    const start = cx.lineStart
+    const children: Element[] = [
+      elt(Type.HardLineBreaksMark, start, start + 3)
+    ]
+
+    // Find closing """
+    let contentStart = cx.lineStart + line.text.length + 1
+    let foundEnd = false
+
+    while (cx.nextLine()) {
+      if (hardLineBreaksRe.test(cx.line.text)) {
+        // Parse content between opening and closing """ as inline content
+        if (cx.lineStart - 1 > contentStart) {
+          const contentText = cx.input.read(contentStart, cx.lineStart - 1)
+          const inlineElements = cx.parser.parseInline(contentText, contentStart)
+          children.push(...(inlineElements as Element[]))
+        }
+        children.push(elt(Type.HardLineBreaksMark, cx.lineStart, cx.lineStart + 3))
+        foundEnd = true
+        break
+      }
+    }
+
+    if (!foundEnd) {
+      // Parse content even if unclosed
+      if (cx.lineStart > contentStart) {
+        const contentText = cx.input.read(contentStart, cx.lineStart)
+        const inlineElements = cx.parser.parseInline(contentText, contentStart)
+        children.push(...(inlineElements as Element[]))
+      }
+    }
+
+    const end = foundEnd ? cx.lineStart + cx.line.text.length : cx.lineStart
+    cx.addElement(elt(Type.HardLineBreaks, start, end, children))
     return true
   }
 }
@@ -469,33 +519,7 @@ export const CommentBlock: BlockParser = {
 
 const transclusionBlockRe = /^\{\{([^{}|]*)(?:\|\|([^{}|]+))?(?:\|([^{}]+))?\}\}\s*$/
 
-/**
- * Parse transclusion target details: tiddler!!field or tiddler##index
- */
-function parseTransclusionTargetBlock(target: string, offset: number): Element[] {
-  const children: Element[] = []
-
-  const fieldIdx = target.indexOf("!!")
-  const indexIdx = target.indexOf("##")
-
-  if (fieldIdx !== -1 && (indexIdx === -1 || fieldIdx < indexIdx)) {
-    const tiddlerPart = target.slice(0, fieldIdx)
-    if (tiddlerPart) {
-      children.push(elt(Type.TransclusionTarget, offset, offset + tiddlerPart.length))
-    }
-    children.push(elt(Type.TransclusionField, offset + fieldIdx, offset + target.length))
-  } else if (indexIdx !== -1) {
-    const tiddlerPart = target.slice(0, indexIdx)
-    if (tiddlerPart) {
-      children.push(elt(Type.TransclusionTarget, offset, offset + tiddlerPart.length))
-    }
-    children.push(elt(Type.TransclusionIndex, offset + indexIdx, offset + target.length))
-  } else {
-    children.push(elt(Type.TransclusionTarget, offset, offset + target.length))
-  }
-
-  return children
-}
+// parseTransclusionTarget is now imported from parser-utils.ts
 
 export const TransclusionBlock: BlockParser = {
   name: "TransclusionBlock",
@@ -513,7 +537,7 @@ export const TransclusionBlock: BlockParser = {
     ]
 
     // Parse target details (tiddler!!field or tiddler##index)
-    const targetChildren = parseTransclusionTargetBlock(target, start + 2)
+    const targetChildren = parseTransclusionTarget(target, start + 2)
     children.push(...targetChildren)
 
     let pos = start + 2 + target.length
@@ -678,86 +702,7 @@ export const FilteredTransclusionBlock: BlockParser = {
 // Macro Call Block (<<...>>)
 // ============================================================================
 
-/**
- * Parse macro parameters into individual MacroParam elements
- */
-function parseMacroParamsBlock(paramsStr: string, offset: number): Element[] {
-  const elements: Element[] = []
-  let pos = 0
-  const len = paramsStr.length
-
-  while (pos < len) {
-    while (pos < len && /\s/.test(paramsStr[pos])) pos++
-    if (pos >= len) break
-
-    const paramStart = pos
-
-    // Check if it's a named parameter (name:value)
-    let nameEnd = pos
-    while (nameEnd < len && /[a-zA-Z0-9\-_]/.test(paramsStr[nameEnd])) nameEnd++
-
-    if (nameEnd > pos && paramsStr[nameEnd] === ':') {
-      const nameStart = pos
-      pos = nameEnd + 1
-
-      const valueStart = pos
-      if (paramsStr[pos] === '"' || paramsStr[pos] === "'") {
-        const quote = paramsStr[pos]
-        pos++
-        while (pos < len && paramsStr[pos] !== quote) {
-          if (paramsStr[pos] === '\\') pos++
-          pos++
-        }
-        if (pos < len) pos++
-      } else if (paramsStr.slice(pos, pos + 3) === '[[[') {
-        pos += 3
-        while (pos < len && paramsStr.slice(pos, pos + 3) !== ']]]') pos++
-        pos += 3
-      } else if (paramsStr.slice(pos, pos + 2) === '[[') {
-        pos += 2
-        while (pos < len && paramsStr.slice(pos, pos + 2) !== ']]') pos++
-        pos += 2
-      } else {
-        while (pos < len && !/[\s>]/.test(paramsStr[pos])) pos++
-      }
-
-      const paramChildren: Element[] = [
-        elt(Type.MacroParamName, offset + nameStart, offset + nameEnd),
-        elt(Type.MacroParamValue, offset + valueStart, offset + pos)
-      ]
-      elements.push(elt(Type.MacroParam, offset + paramStart, offset + pos, paramChildren))
-    } else {
-      const valueStart = pos
-
-      if (paramsStr[pos] === '"' || paramsStr[pos] === "'") {
-        const quote = paramsStr[pos]
-        pos++
-        while (pos < len && paramsStr[pos] !== quote) {
-          if (paramsStr[pos] === '\\') pos++
-          pos++
-        }
-        if (pos < len) pos++
-      } else if (paramsStr.slice(pos, pos + 3) === '[[[') {
-        pos += 3
-        while (pos < len && paramsStr.slice(pos, pos + 3) !== ']]]') pos++
-        pos += 3
-      } else if (paramsStr.slice(pos, pos + 2) === '[[') {
-        pos += 2
-        while (pos < len && paramsStr.slice(pos, pos + 2) !== ']]') pos++
-        pos += 2
-      } else {
-        while (pos < len && !/[\s>]/.test(paramsStr[pos])) pos++
-      }
-
-      const paramChildren: Element[] = [
-        elt(Type.MacroParamValue, offset + valueStart, offset + pos)
-      ]
-      elements.push(elt(Type.MacroParam, offset + paramStart, offset + pos, paramChildren))
-    }
-  }
-
-  return elements
-}
+// parseMacroParams is imported from parser-utils.ts
 
 export const MacroCallBlock: BlockParser = {
   name: "MacroCallBlock",
@@ -787,7 +732,7 @@ export const MacroCallBlock: BlockParser = {
     // Parse parameters
     const paramsStr = line.text.slice(nameEnd, closeIdx)
     if (paramsStr.trim()) {
-      const paramElements = parseMacroParamsBlock(paramsStr, start + nameEnd)
+      const paramElements = parseMacroParams(paramsStr, start + nameEnd)
       children.push(...paramElements)
     }
 
@@ -864,7 +809,25 @@ function parseAttributes(attrString: string, offset: number, isWidget: boolean):
     let valueType = Type.AttributeValue
     const ch = attrString[pos]
 
-    if (ch === '"' || ch === "'") {
+    if (ch === '"' && attrString.slice(pos, pos + 3) === '"""') {
+      // Triple-quoted string: """value"""
+      pos += 3 // skip opening """
+      const stringStart = pos
+      while (pos < len && attrString.slice(pos, pos + 3) !== '"""') {
+        pos++
+      }
+      const stringEnd = pos
+      if (attrString.slice(pos, pos + 3) === '"""') pos += 3 // skip closing """
+      valueEnd = pos
+      valueType = Type.AttributeString
+
+      const attrChildren: Element[] = [
+        elt(Type.AttributeName, offset + nameStart, offset + nameEnd),
+        elt(valueType, offset + valueStart, offset + valueEnd)
+      ]
+      elements.push(elt(Type.Attribute, offset + nameStart, offset + valueEnd, attrChildren))
+      continue
+    } else if (ch === '"' || ch === "'") {
       // Quoted string: "value" or 'value'
       const quote = ch
       pos++ // skip opening quote
@@ -934,7 +897,7 @@ function parseAttributes(attrString: string, offset: number, isWidget: boolean):
         valueType = Type.AttributeIndirect
         // Parse transclusion target details (tiddler!!field or tiddler##index)
         const targetContent = attrString.slice(targetStart, targetEnd)
-        const targetChildren = parseTransclusionTargetBlock(targetContent, offset + targetStart)
+        const targetChildren = parseTransclusionTarget(targetContent, offset + targetStart)
         // Create child elements for transclusion
         const valueChildren: Element[] = [
           elt(Type.TransclusionMark, offset + openMarkStart, offset + openMarkStart + 2),
@@ -1735,6 +1698,7 @@ export const DefaultBlockParsers: BlockParser[] = [
   HorizontalRule,
   FencedCode,
   TypedBlock,
+  HardLineBreaks,  // """ ... """
   MultiLineBlockQuote,
   List,
   Table,
