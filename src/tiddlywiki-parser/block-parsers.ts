@@ -711,36 +711,58 @@ export const MacroCallBlock: BlockParser = {
   parse(cx: BlockContext, line: Line): BlockResult {
     if (!line.text.startsWith("<<")) return false
 
-    // Find closing >>
-    const closeIdx = line.text.indexOf(">>", 2)
-    if (closeIdx === -1) return false
-
-    // Check rest of line is empty
-    if (line.text.slice(closeIdx + 2).trim()) return false
-
     const start = cx.lineStart
 
     // Parse macro name
     let nameEnd = 2
-    while (nameEnd < closeIdx && !/\s/.test(line.text[nameEnd])) nameEnd++
+    while (nameEnd < line.text.length && !/\s/.test(line.text[nameEnd])) nameEnd++
     const name = line.text.slice(2, nameEnd)
     if (!name) return false
+
+    // Find closing >> - could be on same line or subsequent lines
+    let closeIdx = line.text.indexOf(">>", 2)
+    let allContent = line.text
+    let endPos = cx.lineStart + line.text.length
+
+    if (closeIdx === -1) {
+      // Multi-line macro: accumulate lines until we find >>
+      while (cx.nextLine()) {
+        const currentLine = cx.line.text
+        allContent += "\n" + currentLine
+        endPos = cx.lineStart + currentLine.length
+
+        // Check if this line ends with >> (possibly with trailing whitespace)
+        const trimmedLine = currentLine.trimEnd()
+        if (trimmedLine.endsWith(">>")) {
+          closeIdx = allContent.length - (currentLine.length - trimmedLine.lastIndexOf(">>"))
+          break
+        }
+      }
+
+      // If still no closing >>, this is an incomplete macro - don't parse as block
+      if (closeIdx === -1) return false
+    } else {
+      // Single-line macro: check rest of line is empty
+      if (line.text.slice(closeIdx + 2).trim()) return false
+    }
 
     const children: Element[] = [
       elt(Type.MacroCallMark, start, start + 2),
       elt(Type.MacroName, start + 2, start + 2 + name.length),
     ]
 
-    // Parse parameters
-    const paramsStr = line.text.slice(nameEnd, closeIdx)
+    // Parse parameters - everything between name and >>
+    const paramsStr = allContent.slice(nameEnd, closeIdx)
     if (paramsStr.trim()) {
       const paramElements = parseMacroParams(paramsStr, start + nameEnd)
       children.push(...paramElements)
     }
 
-    children.push(elt(Type.MacroCallMark, start + closeIdx, start + closeIdx + 2))
+    // Calculate position of closing >>
+    const closeMarkPos = start + closeIdx
+    children.push(elt(Type.MacroCallMark, closeMarkPos, closeMarkPos + 2))
 
-    cx.addElement(elt(Type.MacroCallBlock, start, start + line.text.length, children))
+    cx.addElement(elt(Type.MacroCallBlock, start, endPos, children))
     return true
   }
 }
