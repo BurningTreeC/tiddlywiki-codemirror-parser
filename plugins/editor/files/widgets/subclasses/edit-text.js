@@ -51,6 +51,40 @@ exports.prototype.handleRedo = function(event) {
 };
 
 // ============================================================================
+// Remove Trailing Whitespace handler
+// ============================================================================
+
+exports.prototype.handleRemoveTrailingWhitespace = function(event) {
+	if (!this.engine || !this.engine.view) return false;
+
+	var view = this.engine.view;
+	var doc = view.state.doc;
+	var changes = [];
+
+	// Iterate through all lines and find trailing whitespace
+	for (var i = 1; i <= doc.lines; i++) {
+		var line = doc.line(i);
+		var text = line.text;
+		var trimmed = text.replace(/\s+$/, "");
+
+		if (trimmed.length < text.length) {
+			// There's trailing whitespace to remove
+			changes.push({
+				from: line.from + trimmed.length,
+				to: line.to
+			});
+		}
+	}
+
+	if (changes.length > 0) {
+		view.dispatch({ changes: changes });
+	}
+
+	this.engine.focus();
+	return false; // Don't propagate
+};
+
+// ============================================================================
 // Plugin Registry - allows external plugins to hook into the widget
 // ============================================================================
 
@@ -327,6 +361,7 @@ exports.prototype.render = function (parent, nextSibling) {
 	// Register undo/redo event listeners
 	this.addEventListener("tm-cm6-undo", "handleUndo");
 	this.addEventListener("tm-cm6-redo", "handleRedo");
+	this.addEventListener("tm-cm6-remove-trailing-whitespace", "handleRemoveTrailingWhitespace");
 
 	// Init shortcut caches
 	this.shortcutKeysList = [];

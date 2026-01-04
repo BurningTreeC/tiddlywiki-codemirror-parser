@@ -1,0 +1,12 @@
+title: $:/plugins/BurningTreeC/tiddlywiki-codemirror/icons/remove-trailing-whitespace
+tags: $:/tags/Image
+
+<svg viewBox="0 0 22 22" width="22" height="22">
+  <!-- Vertical bar representing end of line -->
+  <path d="M6 4V18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+  <!-- Dots representing trailing whitespace with X through them -->
+  <circle cx="10" cy="11" r="1.5" fill="currentColor" opacity="0.4"/>
+  <circle cx="14" cy="11" r="1.5" fill="currentColor" opacity="0.4"/>
+  <!-- X mark to indicate removal -->
+  <path d="M16 7L20 11M20 7L16 11" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+</svg>
