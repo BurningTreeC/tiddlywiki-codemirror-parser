@@ -2,7 +2,7 @@
     "title": "$:/plugins/BurningTreeC/tiddlywiki-codemirror",
     "name": "CodeMirror 6 Editor",
     "description": "CodeMirror 6 text editor for TiddlyWiki5",
-    "version": "0.0.8",
+    "version": "0.0.9",
     "plugin-type": "plugin",
     "dependents": "",
     "list": "readme license",

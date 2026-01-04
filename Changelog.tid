@@ -3,6 +3,34 @@ tags:
 
 ! Changelog
 
+!! Version 0.0.9
+
+!!! New Features
+
+* '''Click Navigate Plugin''' - Ctrl+Click (Cmd+Click on Mac) to navigate to tiddlers
+** Works with WikiLinks, transclusions, CamelCase links, system links
+** Shift+Ctrl+Click opens in new window
+** Visual feedback when Ctrl is held
+** Respects `$:/config/WikiParserRules/Inline/wikilink` setting
+
+* '''Link Preview Plugin''' - Show tiddler preview on hover over links
+** Displays title, tags, content preview, and modified date
+** Works with WikiLinks, transclusions, CamelCase links, system links
+** Supports shadow tiddlers (e.g., `$:/core/ui/ViewTemplate`)
+** Image tiddlers show the image in preview
+
+!!! Improvements
+
+* '''Filter Operand Navigation''' - Click navigate and preview work with filter operands
+** Only for operators that take tiddler titles: `title`, `tag`, `list`
+** Properly extracts tiddler title from text references
+
+* '''System Link Parsing''' - Fixed trailing punctuation in system links
+** `$:/core/ui/ViewTemplate,` now correctly excludes the comma
+** Same fix applied to URL auto-links
+
+---
+
 !! Version 0.0.8
 
 !!! New Features
