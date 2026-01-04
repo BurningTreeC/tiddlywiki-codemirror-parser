@@ -146,29 +146,21 @@ exports.plugin = {
 			return Decoration.set(widgets);
 		}
 
-		// View plugin
-		var imagePlugin = ViewPlugin.fromClass(
-			function ImagePreviewView(view) {
-				this.decorations = buildDecorations(view);
-			},
-			{
-				decorations: function(v) { return v.decorations; },
-				update: function(update) {
-					if (update.docChanged) {
-						this.decorations = buildDecorations(update.view);
-					}
-				}
-			}
-		);
-
-		imagePlugin.spec.class = function ImagePreviewView(view) {
+		// Define the class properly with prototype methods
+		function ImagePreviewView(view) {
 			this.decorations = buildDecorations(view);
-		};
-		imagePlugin.spec.class.prototype.update = function(update) {
+		}
+
+		ImagePreviewView.prototype.update = function(update) {
 			if (update.docChanged) {
 				this.decorations = buildDecorations(update.view);
 			}
 		};
+
+		// Create ViewPlugin with the class
+		var imagePlugin = ViewPlugin.fromClass(ImagePreviewView, {
+			decorations: function(v) { return v.decorations; }
+		});
 
 		extensions.push(imagePlugin);
 

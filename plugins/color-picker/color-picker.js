@@ -186,30 +186,21 @@ exports.plugin = {
 			return Decoration.set(widgets);
 		}
 
-		// View plugin
-		var colorPlugin = ViewPlugin.fromClass(
-			function ColorPickerView(view) {
-				this.decorations = buildDecorations(view);
-			},
-			{
-				decorations: function(v) { return v.decorations; },
-				update: function(update) {
-					if (update.docChanged || update.viewportChanged) {
-						this.decorations = buildDecorations(update.view);
-					}
-				}
-			}
-		);
-
-		// Add the class method
-		colorPlugin.spec.class = function ColorPickerView(view) {
+		// Define the class properly with prototype methods
+		function ColorPickerView(view) {
 			this.decorations = buildDecorations(view);
-		};
-		colorPlugin.spec.class.prototype.update = function(update) {
+		}
+
+		ColorPickerView.prototype.update = function(update) {
 			if (update.docChanged || update.viewportChanged) {
 				this.decorations = buildDecorations(update.view);
 			}
 		};
+
+		// Create ViewPlugin with the class
+		var colorPlugin = ViewPlugin.fromClass(ColorPickerView, {
+			decorations: function(v) { return v.decorations; }
+		});
 
 		extensions.push(colorPlugin);
 
