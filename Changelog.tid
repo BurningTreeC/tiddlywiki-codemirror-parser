@@ -3,6 +3,17 @@ tags:
 
 ! Changelog
 
+!! Version 0.0.15
+
+!!! New Features
+
+* '''CSS Support in `<style>` Tags''' - CSS syntax highlighting and autocompletion inside `<style></style>` tags
+** Works like fenced code blocks (` ```css `) - switches to CSS parser for content
+** Requires lang-css plugin to be installed
+** lang-tiddlywiki now loads after other language plugins to enable nested language support
+
+---
+
 !! Version 0.0.14
 
 !!! New Features

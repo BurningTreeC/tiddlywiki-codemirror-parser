@@ -2,7 +2,7 @@
     "title": "$:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/theme-catppuccin",
     "name": "CodeMirror 6 Catppuccin Theme",
     "description": "Catppuccin pastel theme for CodeMirror 6 (Latte, Frappé, Macchiato, Mocha)",
-    "version": "0.0.14",
+    "version": "0.0.15",
     "plugin-type": "plugin",
     "dependents": "$:/plugins/BurningTreeC/tiddlywiki-codemirror",
     "list": "readme styles license",

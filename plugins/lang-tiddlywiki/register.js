@@ -12,7 +12,8 @@ Provides TiddlyWiki-specific completion callbacks for tiddlers, macros, widgets,
 "use strict";
 
 exports.name = "cm6-lang-tiddlywiki";
-exports.after = ["startup"];
+// Run after other language modules so core.getLanguages() includes them (e.g., CSS for <style> tags)
+exports.after = ["startup", "cm6-lang-css", "cm6-lang-javascript", "cm6-lang-json", "cm6-lang-html", "cm6-lang-markdown", "cm6-lang-python", "cm6-lang-xml", "cm6-lang-yaml", "cm6-lang-sql"];
 exports.before = ["render"];
 exports.synchronous = true;
 
@@ -600,12 +601,18 @@ exports.startup = function() {
 		return result;
 	}
 
+	// Get available code languages (includes CSS, JS, etc. if their plugins are loaded)
+	var codeLanguages = core.getLanguages ? core.getLanguages() : [];
+
 	// Register TiddlyWiki wikitext with completion callbacks
 	core.registerLanguage(LanguageDescription.of({
 		name: "TiddlyWiki",
 		alias: ["tiddlywiki", "wikitext", "tw", "tw5"],
 		extensions: ["tid"],
 		support: langTw.tiddlywiki({
+			// Code languages for nested parsing (CSS in <style> tags, etc.)
+			codeLanguages: codeLanguages,
+
 			// Completion callbacks - provide TiddlyWiki data to the parser
 			getTiddlerTitles: getTiddlerTitles,
 			getMacroNames: getMacroNames,

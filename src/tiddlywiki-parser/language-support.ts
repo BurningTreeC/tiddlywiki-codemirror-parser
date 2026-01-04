@@ -405,6 +405,45 @@ function createMixedLanguageWrapper(
       }
     }
 
+    // CSS IN <style> TAGS: Parse content as CSS (like ```css code blocks)
+    if (node.name === "HTMLBlock") {
+      // Check if this is a <style> tag
+      const tagNameNode = node.node.getChild("TagName")
+      if (tagNameNode) {
+        const tagName = input.read(tagNameNode.from, tagNameNode.to).toLowerCase()
+        if (tagName === "style") {
+          const cssParser = getParser("css")
+          if (cssParser) {
+            // Find the content range: after opening tag's > and before closing </style>
+            let contentStart = -1
+            let contentEnd = -1
+
+            const cursor = node.node.cursor()
+            cursor.firstChild()
+            do {
+              if (cursor.name === "TagMark" && contentStart === -1) {
+                const markText = input.read(cursor.from, cursor.to)
+                if (markText === ">") {
+                  contentStart = cursor.to
+                }
+              }
+              if (cursor.name === "HTMLEndTag") {
+                contentEnd = cursor.from
+                break
+              }
+            } while (cursor.nextSibling())
+
+            if (contentStart > 0 && contentEnd > contentStart) {
+              return {
+                parser: cssParser,
+                overlay: [{ from: contentStart, to: contentEnd }]
+              }
+            }
+          }
+        }
+      }
+    }
+
     // NOTE: We intentionally do NOT apply HTML overlay parsing to HTMLBlock/HTMLTag.
     // The TiddlyWiki parser already creates proper nodes (TagName, TagMark, AttributeName, etc.)
     // with correct styling via styleTags. HTML overlay parsing was broken because:
