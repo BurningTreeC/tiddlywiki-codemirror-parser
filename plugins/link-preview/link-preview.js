@@ -1,5 +1,5 @@
 /*\
-title: $:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/tw-link-preview.js
+title: $:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/link-preview.js
 type: application/javascript
 module-type: codemirror6-plugin
 
@@ -13,6 +13,46 @@ TiddlyWiki Link Preview Plugin - shows tiddler preview on hover over links.
 
 var HOVER_DELAY = 300; // ms before showing preview
 var MAX_PREVIEW_LENGTH = 500;
+
+var _syntaxTree = null;
+
+// Node types that contain tiddler titles
+var TIDDLER_TITLE_NODES = {
+	"LinkTarget": true,
+	"LinkText": true,
+	"TransclusionTarget": true,
+	"FilterTextRef": true,
+	"FilterTextRefTarget": true,
+	"CamelCaseLink": true,
+	"ImageSource": true
+};
+
+// Filter operators whose operand is a tiddler title or text reference
+// Based on TiddlyWiki5/core/modules/filters/
+var TIDDLER_TITLE_OPERATORS = {
+	"title": true,  // operand is tiddler title
+	"tag": true,    // operand is tag name (= tiddler title)
+	"list": true    // operand is text reference (tiddler!!field or tiddler##index)
+};
+
+/**
+ * Get the operator name for a FilterOperand node by finding the FilterOperatorName sibling
+ */
+function getFilterOperatorName(state, operandNode) {
+	var parent = operandNode.parent;
+	if (!parent || parent.name !== "FilterOperator") return null;
+
+	// Find the FilterOperatorName sibling
+	for (var child = parent.firstChild; child; child = child.nextSibling) {
+		if (child.name === "FilterOperatorName") {
+			var opName = state.doc.sliceString(child.from, child.to);
+			// Remove negation prefix and any suffix (e.g., "!tag:strict" -> "tag")
+			opName = opName.replace(/^!/, "").split(":")[0];
+			return opName;
+		}
+	}
+	return null;
+}
 
 // ============================================================================
 // Preview Tooltip
@@ -110,63 +150,97 @@ function scheduleHide() {
 }
 
 // ============================================================================
-// Link Detection
+// Link Detection using Syntax Tree
 // ============================================================================
 
 /**
- * Extract link target from position in document
+ * Extract link target from position in document using syntax tree
  */
 function getLinkAtPos(state, pos) {
-	var doc = state.doc;
-	var line = doc.lineAt(pos);
-	var lineText = line.text;
-	var col = pos - line.from;
-	
-	// Check for wiki link: [[target]] or [[text|target]]
-	var wikiLinkRegex = /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g;
-	var match;
-	while ((match = wikiLinkRegex.exec(lineText)) !== null) {
-		var start = match.index;
-		var end = start + match[0].length;
-		if (col >= start && col <= end) {
-			// Return target (second group if exists, otherwise first)
-			return match[2] || match[1];
-		}
-	}
-	
-	// Check for transclusion: {{target}} or {{target!!field}}
-	var transclusionRegex = /\{\{([^}!|]+)(?:!![^}]*)?\}\}/g;
-	while ((match = transclusionRegex.exec(lineText)) !== null) {
-		var start = match.index;
-		var end = start + match[0].length;
-		if (col >= start && col <= end) {
-			return match[1];
-		}
-	}
-	
-	// Check for image: [img[source]] or [img[tooltip|source]]
-	var imgRegex = /\[img\[([^\]|]+)(?:\|([^\]]+))?\]\]/g;
-	while ((match = imgRegex.exec(lineText)) !== null) {
-		var start = match.index;
-		var end = start + match[0].length;
-		if (col >= start && col <= end) {
-			return match[2] || match[1];
-		}
-	}
-	
-	// Check for CamelCase links (if enabled)
-	var camelRegex = /[A-Z][a-z]+[A-Z][A-Za-z]*/g;
-	while ((match = camelRegex.exec(lineText)) !== null) {
-		var start = match.index;
-		var end = start + match[0].length;
-		if (col >= start && col <= end) {
-			// Only return if tiddler exists
-			if ($tw.wiki.tiddlerExists(match[0])) {
-				return match[0];
+	if (!_syntaxTree) return null;
+
+	var tree = _syntaxTree(state);
+	if (!tree) return null;
+
+	var node = tree.resolveInner(pos, 0);
+	if (!node) return null;
+
+	// Walk up the tree to find a tiddler title node
+	var current = node;
+	while (current) {
+		if (TIDDLER_TITLE_NODES[current.name]) {
+			var target = state.doc.sliceString(current.from, current.to);
+
+			// For LinkText, check if parent is WikiLink and has no LinkTarget sibling
+			if (current.name === "LinkText") {
+				var parent = current.parent;
+				if (parent && parent.name === "WikiLink") {
+					// Check if there's a LinkTarget sibling
+					var hasTarget = false;
+					for (var child = parent.firstChild; child; child = child.nextSibling) {
+						if (child.name === "LinkTarget") {
+							hasTarget = true;
+							break;
+						}
+					}
+					if (hasTarget) {
+						// LinkText is display text, not the target - skip
+						current = current.parent;
+						continue;
+					}
+				}
 			}
+
+			// For FilterTextRef, extract just the tiddler title (before !! or ##)
+			if (current.name === "FilterTextRef" || current.name === "FilterTextRefTarget") {
+				// Get content without braces
+				var content = target;
+				if (content.startsWith("{") && content.endsWith("}")) {
+					content = content.slice(1, -1);
+				}
+				// Extract tiddler title (before !! or ##)
+				var sepIdx = content.indexOf("!!");
+				if (sepIdx === -1) sepIdx = content.indexOf("##");
+				if (sepIdx > 0) {
+					target = content.substring(0, sepIdx);
+				} else {
+					target = content;
+				}
+			}
+
+
+			return target;
 		}
+
+		// Check for filter operand - only if operator takes tiddler titles
+		if (current.name === "FilterOperand") {
+			var opName = getFilterOperatorName(state, current);
+			if (opName && TIDDLER_TITLE_OPERATORS[opName]) {
+				var target = state.doc.sliceString(current.from, current.to);
+				// Remove quotes if present
+				if ((target.startsWith("\"") && target.endsWith("\"")) ||
+					(target.startsWith("'") && target.endsWith("'")) ||
+					(target.startsWith("[") && target.endsWith("]")) ||
+					(target.startsWith("{") && target.endsWith("}"))) {
+					target = target.slice(1, -1);
+				}
+				// For list operator, extract tiddler title from text reference
+				if (opName === "list") {
+					var sepIdx = target.indexOf("!!");
+					if (sepIdx === -1) sepIdx = target.indexOf("##");
+					if (sepIdx > 0) {
+						target = target.substring(0, sepIdx);
+					}
+				}
+				return target;
+			}
+			current = current.parent;
+			continue;
+		}
+
+		current = current.parent;
 	}
-	
+
 	return null;
 }
 
@@ -297,10 +371,10 @@ function handleMouseLeave(event, view) {
 // ============================================================================
 
 exports.plugin = {
-	name: "tw-link-preview",
+	name: "link-preview",
 	description: "Show tiddler preview on hover over links and transclusions",
 	priority: 400,
-	
+
 	// Only load for TiddlyWiki content
 	condition: function(context) {
 		var type = context.tiddlerType;
@@ -308,9 +382,13 @@ exports.plugin = {
 		if (context.options.linkPreview === false) return false;
 		return !type || type === "" || type === "text/vnd.tiddlywiki" || type === "text/x-tiddlywiki";
 	},
-	
+
 	init: function(cm6Core) {
 		this._core = cm6Core;
+		// Store syntaxTree function for link detection
+		if (cm6Core.language && cm6Core.language.syntaxTree) {
+			_syntaxTree = cm6Core.language.syntaxTree;
+		}
 	},
 	
 	getExtensions: function(context) {

@@ -1,0 +1,5 @@
+title: $:/config/codemirror-6/linkPreview
+caption: Link Preview
+description: Show tiddler preview on hover over links
+
+yes

@@ -1,0 +1,5 @@
+title: $:/config/codemirror-6/clickNavigate
+caption: Click Navigate
+description: Enable Ctrl+Click navigation to tiddlers
+
+yes
