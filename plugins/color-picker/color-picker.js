@@ -1,0 +1,220 @@
+/*\
+title: $:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/color-picker.js
+type: application/javascript
+module-type: codemirror6-plugin
+
+Color picker plugin - shows inline color swatches with click-to-edit functionality.
+
+\*/
+(function(){
+
+/*jslint node: true, browser: true */
+/*global $tw: false */
+"use strict";
+
+if (!$tw.browser) return;
+
+var CONFIG_TIDDLER = "$:/config/codemirror-6/colorPicker";
+
+// Color regex patterns
+var HEX_COLOR = /#(?:[0-9a-fA-F]{3}){1,2}(?:[0-9a-fA-F]{2})?\b/g;
+var RGB_COLOR = /rgba?\s*\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*(?:,\s*[\d.]+\s*)?\)/gi;
+var HSL_COLOR = /hsla?\s*\(\s*\d{1,3}\s*,\s*[\d.]+%\s*,\s*[\d.]+%\s*(?:,\s*[\d.]+\s*)?\)/gi;
+
+exports.plugin = {
+	name: "color-picker",
+	description: "Inline color swatches with click-to-edit color picker",
+	priority: 40,
+
+	condition: function(context) {
+		return $tw.wiki.getTiddlerText(CONFIG_TIDDLER) === "yes";
+	},
+
+	init: function(cm6Core) {
+		this._core = cm6Core;
+	},
+
+	getExtensions: function(context) {
+		var core = this._core;
+		var ViewPlugin = core.view.ViewPlugin;
+		var Decoration = core.view.Decoration;
+		var WidgetType = core.view.WidgetType;
+		var extensions = [];
+
+		if (!ViewPlugin || !Decoration || !WidgetType) return extensions;
+
+		var self = this;
+
+		// Color swatch widget
+		function ColorSwatchWidget(color, from, to) {
+			this.color = color;
+			this.from = from;
+			this.to = to;
+		}
+		ColorSwatchWidget.prototype = Object.create(WidgetType.prototype);
+		ColorSwatchWidget.prototype.constructor = ColorSwatchWidget;
+
+		ColorSwatchWidget.prototype.toDOM = function(view) {
+			var wrapper = document.createElement("span");
+			wrapper.className = "cm-color-swatch-wrapper";
+
+			var swatch = document.createElement("span");
+			swatch.className = "cm-color-swatch";
+			swatch.style.backgroundColor = this.color;
+			swatch.title = "Click to edit color: " + this.color;
+
+			var from = this.from;
+			var to = this.to;
+			var currentColor = this.color;
+
+			swatch.addEventListener("click", function(e) {
+				e.preventDefault();
+				e.stopPropagation();
+
+				// Create color input
+				var picker = document.createElement("input");
+				picker.type = "color";
+				picker.value = self._toHex(currentColor);
+				picker.style.position = "absolute";
+				picker.style.opacity = "0";
+				picker.style.pointerEvents = "none";
+				document.body.appendChild(picker);
+
+				picker.addEventListener("input", function() {
+					var newColor = picker.value;
+					view.dispatch({
+						changes: { from: from, to: to, insert: newColor }
+					});
+				});
+
+				picker.addEventListener("change", function() {
+					document.body.removeChild(picker);
+				});
+
+				picker.addEventListener("blur", function() {
+					if (document.body.contains(picker)) {
+						document.body.removeChild(picker);
+					}
+				});
+
+				picker.click();
+			});
+
+			wrapper.appendChild(swatch);
+			return wrapper;
+		};
+
+		ColorSwatchWidget.prototype.eq = function(other) {
+			return other.color === this.color && other.from === this.from && other.to === this.to;
+		};
+
+		ColorSwatchWidget.prototype.ignoreEvent = function() {
+			return false;
+		};
+
+		// Convert color to hex for the color picker
+		this._toHex = function(color) {
+			// If already hex, return as is
+			if (color.startsWith("#")) {
+				// Expand shorthand
+				if (color.length === 4) {
+					return "#" + color[1] + color[1] + color[2] + color[2] + color[3] + color[3];
+				}
+				return color.slice(0, 7); // Remove alpha if present
+			}
+
+			// Create temp element to get computed color
+			var temp = document.createElement("div");
+			temp.style.color = color;
+			document.body.appendChild(temp);
+			var computed = getComputedStyle(temp).color;
+			document.body.removeChild(temp);
+
+			// Parse rgb(r, g, b)
+			var match = computed.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+			if (match) {
+				var r = parseInt(match[1]).toString(16).padStart(2, "0");
+				var g = parseInt(match[2]).toString(16).padStart(2, "0");
+				var b = parseInt(match[3]).toString(16).padStart(2, "0");
+				return "#" + r + g + b;
+			}
+
+			return "#000000";
+		};
+
+		// Find colors in document
+		function findColors(doc) {
+			var colors = [];
+			var text = doc.toString();
+
+			// Find hex colors
+			var match;
+			HEX_COLOR.lastIndex = 0;
+			while ((match = HEX_COLOR.exec(text)) !== null) {
+				colors.push({ from: match.index, to: match.index + match[0].length, color: match[0] });
+			}
+
+			// Find rgb colors
+			RGB_COLOR.lastIndex = 0;
+			while ((match = RGB_COLOR.exec(text)) !== null) {
+				colors.push({ from: match.index, to: match.index + match[0].length, color: match[0] });
+			}
+
+			// Find hsl colors
+			HSL_COLOR.lastIndex = 0;
+			while ((match = HSL_COLOR.exec(text)) !== null) {
+				colors.push({ from: match.index, to: match.index + match[0].length, color: match[0] });
+			}
+
+			return colors;
+		}
+
+		// Create decorations for colors
+		function buildDecorations(view) {
+			var widgets = [];
+			var colors = findColors(view.state.doc);
+
+			for (var i = 0; i < colors.length; i++) {
+				var c = colors[i];
+				var deco = Decoration.widget({
+					widget: new ColorSwatchWidget(c.color, c.from, c.to),
+					side: -1 // Before the color text
+				});
+				widgets.push(deco.range(c.from));
+			}
+
+			return Decoration.set(widgets);
+		}
+
+		// View plugin
+		var colorPlugin = ViewPlugin.fromClass(
+			function ColorPickerView(view) {
+				this.decorations = buildDecorations(view);
+			},
+			{
+				decorations: function(v) { return v.decorations; },
+				update: function(update) {
+					if (update.docChanged || update.viewportChanged) {
+						this.decorations = buildDecorations(update.view);
+					}
+				}
+			}
+		);
+
+		// Add the class method
+		colorPlugin.spec.class = function ColorPickerView(view) {
+			this.decorations = buildDecorations(view);
+		};
+		colorPlugin.spec.class.prototype.update = function(update) {
+			if (update.docChanged || update.viewportChanged) {
+				this.decorations = buildDecorations(update.view);
+			}
+		};
+
+		extensions.push(colorPlugin);
+
+		return extensions;
+	}
+};
+
+})();

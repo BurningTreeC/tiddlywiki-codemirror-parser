@@ -539,7 +539,7 @@ function CodeMirrorEngine(options) {
 	if (this._compartments.spellcheck) {
 		extensions.push(
 			this._compartments.spellcheck.of(
-				spellcheckEnabled ? EditorView.contentAttributes.of({ spellcheck: "true" }) : []
+				EditorView.contentAttributes.of({ spellcheck: spellcheckEnabled ? "true" : "false" })
 			)
 		);
 	}
@@ -1255,10 +1255,11 @@ CodeMirrorEngine.prototype._handleSettingsChanged = function(settings) {
 	// Spellcheck toggle
 	if (settings.spellcheck !== undefined && this._compartments.spellcheck) {
 		var EditorView = core.view.EditorView;
-		var spellcheckExtension = settings.spellcheck
-			? EditorView.contentAttributes.of({ spellcheck: "true" })
-			: [];
-		effects.push(this._compartments.spellcheck.reconfigure(spellcheckExtension));
+		// Always set the attribute (true or false) rather than removing it
+		var spellcheckValue = settings.spellcheck ? "true" : "false";
+		effects.push(this._compartments.spellcheck.reconfigure(
+			EditorView.contentAttributes.of({ spellcheck: spellcheckValue })
+		));
 	}
 
 	// Apply all effects
