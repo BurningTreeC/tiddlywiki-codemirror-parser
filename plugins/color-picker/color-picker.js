@@ -159,6 +159,11 @@ exports.plugin = {
 			var match;
 			HEX_COLOR.lastIndex = 0;
 			while ((match = HEX_COLOR.exec(text)) !== null) {
+				// Skip if # is at start of line (numbered list in TiddlyWiki)
+				var pos = match.index;
+				if (pos === 0 || text[pos - 1] === "\n") {
+					continue;
+				}
 				colors.push({ from: match.index, to: match.index + match[0].length, color: match[0] });
 			}
 
