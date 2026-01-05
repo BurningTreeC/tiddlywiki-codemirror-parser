@@ -1357,11 +1357,13 @@ const filterOperatorMeta: Record<string, {
   "getindex": { dynamicOperands: "fields" },
   "field": { dynamicOperands: "fields" },
   "fields": { operands: [] },  // No operand, returns all field names
-  "indexes": { dynamicOperands: "fields" },  // Operand is field name containing JSON
+  "indexes": { operands: [] },  // No operand, returns indexes of input tiddlers
 
   // Tag-related operators
   "tag": { dynamicOperands: "tags" },
-  "tagging": { dynamicOperands: "tags" },
+  "tagging": { operands: [] },  // No operand, uses input titles as tags
+  "tags": { operands: [] },  // No operand, returns tags of input tiddlers
+  "untagged": { operands: [] },  // No operand, filters to untagged tiddlers
 
   // Function/subfilter operators
   "function": { dynamicOperands: "functions" },
@@ -1429,6 +1431,25 @@ const filterOperatorMeta: Record<string, {
   // Special operators
   "each": { dynamicOperands: "fields" },
   "eachday": { dynamicOperands: "fields" },
+
+  // No-operand operators (ignore any operand, work on input titles)
+  "backlinks": { operands: [] },
+  "backtranscludes": { operands: [] },
+  "commands": { operands: [] },
+  "count": { operands: [] },
+  "deserializers": { operands: [] },
+  "duplicateslugs": { operands: [] },
+  "editions": { operands: [] },
+  "haschanged": { operands: [] },
+  "links": { operands: [] },
+  "moduletypes": { operands: [] },
+  "plugintiddlers": { operands: [] },
+  "shadowsource": { operands: [] },
+  "slugify": { operands: [] },
+  "storyviews": { operands: [] },
+  "title": { operands: [] },
+  "transcludes": { operands: [] },
+  "variables": { operands: [] },
 }
 
 /**
