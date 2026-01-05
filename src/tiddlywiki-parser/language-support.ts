@@ -2392,12 +2392,47 @@ function createFilterOperatorResult(
   const customOperators = getFilterOperators ? getFilterOperators() : []
   const operators = customOperators.length > 0 ? customOperators : coreFilterOperators
 
-  const options: Completion[] = operators.map(op => ({
-    label: op,
-    type: "function",
-    detail: "filter operator",
-    apply: op + "["
-  }))
+  const options: Completion[] = operators.map(op => {
+    const meta = filterOperatorMeta[op]
+    // Operators with operands: [] take no parameters - auto-close and move cursor past ]
+    const noOperand = meta && Array.isArray(meta.operands) && meta.operands.length === 0
+
+    if (noOperand) {
+      return {
+        label: op,
+        type: "function",
+        detail: "filter operator",
+        apply: (view, completion, from, to) => {
+          // Check if there are already closing brackets after cursor
+          const textAfter = view.state.sliceDoc(to, to + 2)
+          const hasDoubleClose = textAfter === "]]"
+
+          if (hasDoubleClose) {
+            // Already has ]], just insert operator with [ and position before first ]
+            const insert = op + "["
+            view.dispatch({
+              changes: { from, to, insert },
+              selection: { anchor: from + insert.length }
+            })
+          } else {
+            // Auto-close with [] and position cursor after ]
+            const insert = op + "[]"
+            view.dispatch({
+              changes: { from, to, insert },
+              selection: { anchor: from + insert.length }
+            })
+          }
+        }
+      }
+    }
+
+    return {
+      label: op,
+      type: "function",
+      detail: "filter operator",
+      apply: op + "["
+    }
+  })
 
   return {
     from: pos - partial.length,
