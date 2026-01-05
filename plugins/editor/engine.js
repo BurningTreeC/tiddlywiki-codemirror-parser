@@ -585,6 +585,47 @@ function CodeMirrorEngine(options) {
 		}
 	}
 
+	// Custom: Auto-close triple braces {{{ → {{{  }}}
+	// This handles TiddlyWiki filtered transclusion syntax
+	if (EditorView.inputHandler) {
+		extensions.push(EditorView.inputHandler.of(function(view, from, to, text) {
+			// Only handle single { insertion
+			if (text !== "{") return false;
+
+			// Check if we're completing {{{ (already have {{ before cursor)
+			var before = view.state.sliceDoc(Math.max(0, from - 2), from);
+			if (before !== "{{") return false;
+
+			// Check what's after the cursor
+			var after = view.state.sliceDoc(to, to + 3);
+
+			// Check how many closing braces are already present
+			var afterTwo = view.state.sliceDoc(to, to + 2);
+			var afterOne = view.state.sliceDoc(to, to + 1);
+
+			var insert;
+			if (after === "}}}") {
+				// Already have }}}, just add { + spaces to make {{{  }}}
+				insert = "{  ";
+			} else if (afterTwo === "}}") {
+				// Already have }}, just add { + space + one } to complete {{{  }}}
+				insert = "{  }";
+			} else if (afterOne === "}") {
+				// Already have one }, add { + space + two }} to complete {{{  }}}
+				insert = "{  }}";
+			} else {
+				// No closing braces yet, add full {  }}}
+				insert = "{  }}}";
+			}
+
+			view.dispatch({
+				changes: { from: from, to: to, insert: insert },
+				selection: { anchor: from + 2 }  // Position after "{ " (the space)
+			});
+			return true;
+		}));
+	}
+
 	// Core: Indent unit (with compartment for dynamic config)
 	var indentUnit = (core.language || {}).indentUnit;
 	if (indentUnit && this._compartments.indentUnit) {
