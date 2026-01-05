@@ -65,7 +65,7 @@ function clearCache() {
 // ============================================================================
 
 /**
- * Get all tiddler titles (cached)
+ * Get all tiddler titles including shadow tiddlers (cached)
  * Returns simple string array for use with language-support.ts
  */
 function getTiddlerTitles() {
@@ -76,11 +76,9 @@ function getTiddlerTitles() {
 
 	var titles = [];
 	if ($tw && $tw.wiki) {
-		$tw.wiki.each(function(tiddler, title) {
-			// Skip temp and state tiddlers
-			if (!title.startsWith("$:/temp/") && !title.startsWith("$:/state/")) {
-				titles.push(title);
-			}
+		// Use eachShadowPlusTiddlers to include shadow tiddlers (like $:/core/ui/...)
+		$tw.wiki.eachShadowPlusTiddlers(function(tiddler, title) {
+			titles.push(title);
 		});
 	}
 

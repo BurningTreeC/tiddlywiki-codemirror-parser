@@ -159,14 +159,23 @@ function getTiddlerTitles(): string[] {
   try {
     const wiki = _currentEngine?.widget?.wiki || $tw.wiki
     if (!wiki) return []
-    // Get all tiddlers and shadows using direct wiki methods
-    // filterTiddlers may not return shadows without widget context
-    const tiddlers = wiki.allTitles ? wiki.allTitles() : []
-    const shadows = wiki.allShadowTitles ? wiki.allShadowTitles() : []
-    // Combine and deduplicate (shadows override tiddlers with same title)
-    const allTitles = new Set([...tiddlers, ...shadows])
-    return Array.from(allTitles).sort((a, b) => {
-      // Sort non-system tiddlers first
+
+    // Use eachShadowPlusTiddlers to get all titles including shadows
+    const allTitles: string[] = []
+    if (wiki.eachShadowPlusTiddlers) {
+      wiki.eachShadowPlusTiddlers((_tiddler: any, title: string) => {
+        allTitles.push(title)
+      })
+    } else {
+      // Fallback: try allTitles + allShadowTitles
+      const tiddlers = wiki.allTitles ? wiki.allTitles() : []
+      const shadows = wiki.allShadowTitles ? wiki.allShadowTitles() : []
+      allTitles.push(...tiddlers, ...shadows)
+    }
+
+    // Deduplicate and sort (non-system tiddlers first)
+    const uniqueTitles = [...new Set(allTitles)]
+    return uniqueTitles.sort((a, b) => {
       const aSystem = a.startsWith("$:/")
       const bSystem = b.startsWith("$:/")
       if (aSystem !== bSystem) return aSystem ? 1 : -1
