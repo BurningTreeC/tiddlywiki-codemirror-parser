@@ -159,8 +159,19 @@ function getTiddlerTitles(): string[] {
   try {
     const wiki = _currentEngine?.widget?.wiki || $tw.wiki
     if (!wiki) return []
-    // Get all tiddlers including shadows, with system tiddlers ($:/) sorted last
-    return wiki.filterTiddlers("[all[tiddlers+shadows]!prefix[$:/]sort[title]] [all[tiddlers+shadows]prefix[$:/]sort[title]]") || []
+    // Get all tiddlers and shadows using direct wiki methods
+    // filterTiddlers may not return shadows without widget context
+    const tiddlers = wiki.allTitles ? wiki.allTitles() : []
+    const shadows = wiki.allShadowTitles ? wiki.allShadowTitles() : []
+    // Combine and deduplicate (shadows override tiddlers with same title)
+    const allTitles = new Set([...tiddlers, ...shadows])
+    return Array.from(allTitles).sort((a, b) => {
+      // Sort non-system tiddlers first
+      const aSystem = a.startsWith("$:/")
+      const bSystem = b.startsWith("$:/")
+      if (aSystem !== bSystem) return aSystem ? 1 : -1
+      return a.localeCompare(b)
+    })
   } catch (e) {
     return []
   }
@@ -175,8 +186,12 @@ function getImageTiddlerTitles(): string[] {
   try {
     const wiki = _currentEngine?.widget?.wiki || $tw.wiki
     if (!wiki) return []
-    // Get tiddlers with image type using is[image] operator
-    return wiki.filterTiddlers("[all[tiddlers+shadows]is[image]]") || []
+    const widget = _currentEngine?.widget
+    // Use widget context for filter if available (needed for shadows)
+    const results = widget
+      ? wiki.filterTiddlers("[all[tiddlers+shadows]is[image]]", widget)
+      : wiki.filterTiddlers("[all[tiddlers+shadows]is[image]]")
+    return results || []
   } catch (e) {
     return []
   }
@@ -263,7 +278,12 @@ function getTagNames(): string[] {
   try {
     const wiki = _currentEngine?.widget?.wiki || $tw.wiki
     if (!wiki) return []
-    return wiki.filterTiddlers("[all[tiddlers+shadows]is[tag]]") || []
+    const widget = _currentEngine?.widget
+    // Use widget context for filter if available (needed for shadows)
+    const results = widget
+      ? wiki.filterTiddlers("[all[tiddlers+shadows]is[tag]]", widget)
+      : wiki.filterTiddlers("[all[tiddlers+shadows]is[tag]]")
+    return results || []
   } catch (e) {
     return []
   }

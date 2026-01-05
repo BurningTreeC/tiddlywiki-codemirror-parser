@@ -1719,7 +1719,7 @@ function macroParamCompletion(getMacroParams?: (name: string) => string[] | null
 function tiddlerCompletion(getTiddlerTitles?: () => string[], getImageTiddlerTitles?: () => string[]) {
   return (context: CompletionContext): CompletionResult | null => {
     const { state, pos } = context
-    const textBefore = state.sliceDoc(pos - 100, pos)
+    const textBefore = state.sliceDoc(Math.max(0, pos - 100), pos)
 
     // Match [[ for links (also works inside filters for literal titles)
     const linkMatch = /\[\[[^\]|]*$/.exec(textBefore)
