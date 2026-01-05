@@ -481,6 +481,103 @@ function getKnownFilterOperators() {
 }
 
 // ============================================================================
+// Known Tags
+// ============================================================================
+
+var _knownTags = null;
+var _tagsCacheTime = 0;
+var TAG_CACHE_DURATION = 5000; // 5 seconds
+
+/**
+ * Get known tags from TiddlyWiki using [all[tiddlers+shadows]is[tag]] filter
+ */
+function getKnownTags() {
+	var now = Date.now();
+	if (_knownTags && (now - _tagsCacheTime) < TAG_CACHE_DURATION) {
+		return _knownTags;
+	}
+
+	var tags = new Set();
+
+	if ($tw && $tw.wiki) {
+		try {
+			var tagList = $tw.wiki.filterTiddlers("[all[tiddlers+shadows]is[tag]]");
+			if (tagList && Array.isArray(tagList)) {
+				tagList.forEach(function(tag) {
+					tags.add(tag);
+				});
+			}
+		} catch (e) {
+			// Ignore errors
+		}
+	}
+
+	_knownTags = tags;
+	_tagsCacheTime = now;
+	return tags;
+}
+
+/**
+ * Check if a tag exists
+ */
+function tagExists(tagName) {
+	if (!$tw || !$tw.wiki) return true; // Assume exists if we can't check
+	var knownTags = getKnownTags();
+	return knownTags.has(tagName);
+}
+
+/**
+ * Find invalid tag references in filter expressions
+ * Looks for tag[...] and tagging[...] operators with non-existent tags
+ */
+function findInvalidTagReferences(tree, state) {
+	var issues = [];
+
+	tree.iterate({
+		enter: function(node) {
+			// Look for FilterOperator nodes
+			if (node.type.name === "FilterOperator") {
+				var text = state.doc.sliceString(node.from, node.to);
+
+				// Match tag[...] or tagging[...] patterns
+				// Handles: tag[TagName], !tag[TagName], tag:suffix[TagName]
+				var tagMatch = text.match(/^(!?)tag(?::[^\[]*)?(\[[^\]]+\])/);
+				var taggingMatch = text.match(/^(!?)tagging(?::[^\[]*)?(\[[^\]]+\])/);
+
+				var match = tagMatch || taggingMatch;
+				if (match) {
+					var operatorName = tagMatch ? "tag" : "tagging";
+					var bracketPart = match[2]; // e.g., [TagName]
+					var tagName = bracketPart.slice(1, -1); // Remove [ and ]
+
+					// Skip if empty, variable reference, or text reference
+					if (!tagName || tagName.startsWith("<") || tagName.startsWith("{")) {
+						return;
+					}
+
+					// Check if tag exists
+					if (!tagExists(tagName)) {
+						// Calculate position of the tag name within the operator
+						var bracketStart = text.indexOf("[");
+						var tagFrom = node.from + bracketStart + 1;
+						var tagTo = tagFrom + tagName.length;
+
+						issues.push({
+							from: tagFrom,
+							to: tagTo,
+							tagName: tagName,
+							operatorName: operatorName
+						});
+					}
+				}
+			}
+		}
+	});
+
+	return issues;
+}
+
+// ============================================================================
 // Bracket Matching Helpers
 // ============================================================================
 
@@ -1897,6 +1994,23 @@ function createTiddlyWikiLinter(view) {
 						view.dispatch({ changes: { from: line.from, to: endLine.to + 1, insert: "" } });
 					}
 				}]
+			});
+		});
+	}
+
+	// ========================================
+	// Invalid Tag References
+	// ========================================
+
+	if (isRuleEnabled("invalidTags")) {
+		var tagIssues = findInvalidTagReferences(tree, state);
+		tagIssues.forEach(function(issue) {
+			diagnostics.push({
+				from: issue.from,
+				to: issue.to,
+				severity: "warning",
+				message: "Unknown tag in " + issue.operatorName + "[]: " + issue.tagName,
+				source: "tiddlywiki"
 			});
 		});
 	}

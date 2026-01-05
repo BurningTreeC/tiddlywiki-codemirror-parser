@@ -28,6 +28,7 @@ Highlight potential issues in your TiddlyWiki content as you type.
 <<render-lint-option "$:/config/codemirror-6/lint/missingLinks">>
 <<render-lint-option "$:/config/codemirror-6/lint/undefinedMacros">>
 <<render-lint-option "$:/config/codemirror-6/lint/unknownWidgets">>
+<<render-lint-option "$:/config/codemirror-6/lint/invalidTags">>
 
 !! Definition Issues
 

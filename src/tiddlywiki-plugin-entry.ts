@@ -255,6 +255,21 @@ function getFilterOperators(): string[] {
 }
 
 /**
+ * Get tag names for autocompletion in tag[], tagging[] operators
+ * Uses [all[tiddlers+shadows]is[tag]] filter
+ */
+function getTagNames(): string[] {
+  if (typeof $tw === "undefined") return []
+  try {
+    const wiki = _currentEngine?.widget?.wiki || $tw.wiki
+    if (!wiki) return []
+    return wiki.filterTiddlers("[all[tiddlers+shadows]is[tag]]") || []
+  } catch (e) {
+    return []
+  }
+}
+
+/**
  * Get macro/procedure/function parameters for autocompletion
  * Uses widget.wiki for proper context (locally defined macros/procedures)
  */
@@ -320,7 +335,8 @@ function buildLanguageSupport(context: CM6PluginContext): Extension {
     getMacroNames,
     getMacroParams,
     getWidgetNames,
-    getFilterOperators
+    getFilterOperators,
+    getTagNames
   })
 }
 

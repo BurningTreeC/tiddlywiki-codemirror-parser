@@ -681,6 +681,14 @@ export function tiddlywiki(config: TiddlyWikiLanguageConfig = {}): LanguageSuppo
   return new LanguageSupport(lang, support)
 }
 
+/**
+ * Calculate boost value for autocompletion based on whether title is a system tiddler.
+ * Non-system tiddlers get higher boost (appear first), system tiddlers get lower boost.
+ */
+function getTiddlerBoost(title: string): number {
+  return title.startsWith("$:/") ? -1 : 1
+}
+
 // TiddlyWiki Core Widgets (with $ prefix as stored)
 const coreWidgets = [
   "$action-confirm", "$action-createtiddler", "$action-deletefield", "$action-deletetiddler",
@@ -1135,6 +1143,7 @@ function attributeValueCompletion(
         label: title,
         type: "variable",
         detail,
+        boost: getTiddlerBoost(title),
         apply: (view, _completion, from, to) => {
           const textAfter = view.state.sliceDoc(to, to + 1)
           const suffix = textAfter === quoteChar ? "" : quoteChar
@@ -1156,6 +1165,7 @@ function attributeValueCompletion(
         label: title,
         type: "variable",
         detail,
+        boost: getTiddlerBoost(title),
         apply: (view, _completion, from, to) => {
           const textAfter = view.state.sliceDoc(to, to + 1)
           const suffix = textAfter === quoteChar ? "" : quoteChar
@@ -1765,6 +1775,7 @@ function tiddlerCompletion(getTiddlerTitles?: () => string[], getImageTiddlerTit
         label: prefix + title,
         type: "variable",
         detail,
+        boost: getTiddlerBoost(title),
         apply: (view, _completion, from, to) => {
           const textAfter = view.state.sliceDoc(to, to + 2)
           const hasClosingBrace = textAfter[0] === "}"
@@ -1817,6 +1828,7 @@ function tiddlerCompletion(getTiddlerTitles?: () => string[], getImageTiddlerTit
         label: prefix + title,
         type: "variable",
         detail,
+        boost: getTiddlerBoost(title),
         apply: (view, _completion, from, to) => {
           const textAfter = view.state.sliceDoc(to, to + 2)
           const hasFirstBracket = textAfter[0] === "]"
@@ -1885,6 +1897,7 @@ function tiddlerCompletion(getTiddlerTitles?: () => string[], getImageTiddlerTit
       label: prefix + title,
       type: "variable",
       detail,
+      boost: getTiddlerBoost(title),
       apply: (view, _completion, from, to) => {
         // Check what's after the cursor to handle auto-close brackets
         const textAfter = view.state.sliceDoc(to, to + suffix.length)
@@ -2811,6 +2824,7 @@ function filterOperandValueCompletion(
 
       // Add global values
       const seen = new Set<string>(usedValues)
+      const needsBoost = meta.dynamicOperands === 'tags' || meta.dynamicOperands === 'tiddlers'
       options.push(...values
         .filter(v => {
           if (seen.has(v)) return false
@@ -2822,7 +2836,8 @@ function filterOperandValueCompletion(
           type: meta.dynamicOperands === 'fields' ? 'variable' as const :
                 meta.dynamicOperands === 'functions' ? 'function' as const :
                 'text' as const,
-          detail: detailType
+          detail: detailType,
+          ...(needsBoost ? { boost: getTiddlerBoost(v) } : {})
         })))
 
       // Add local definitions (from current document) with special detail
