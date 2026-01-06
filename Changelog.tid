@@ -3,6 +3,39 @@ tags:
 
 ! Changelog
 
+!! Version 0.0.19
+
+!!! Code Cleanup
+
+* ''Removed All Logging'' - Eliminated all console.log/warn/error statements from source and plugins
+** Cleaner production code without debug output
+** Affected files: language.ts, engine.js, edit-text.js, emoji-picker.js, zen-mode startup, keymap plugins, lint.js, plugin-combiner.js
+
+!!! Infrastructure
+
+* ''Fixed Clean Script'' - `npm run clean:plugins` no longer deletes plugin.js files
+** Previously the script incorrectly removed required plugin.js files
+** Now only removes generated .js.meta files and lang-tiddlywiki.js
+
+* ''Source File Restructuring'' - Renamed TypeScript source files for clarity
+** `tiddlywiki-parser/` → `parser/`
+** `parser-utils.ts` → `utils.ts`
+** `language-support.ts` → `extensions.ts`
+** `codemirror-index.ts` → `codemirror.ts`
+** `codemirror-tiddlywiki.ts` → `compat.ts`
+** `tiddlywiki-plugin-entry.ts` → `plugin.ts`
+
+* ''Extended NPM Scripts'' - New convenience scripts for development
+** `npm run clean:all` - Clean dist and plugins
+** `npm run build:all` - Build everything
+** `npm run rebuild` - Clean all and rebuild
+** `npm run rebuild:tiddlywiki` - Clean plugins and rebuild
+** `npm run dev` - Watch mode for TiddlyWiki plugin development
+
+* ''Updated Dependencies'' - Fresh npm install with latest compatible versions
+
+---
+
 !! Version 0.0.18
 
 !!! Bug Fixes
