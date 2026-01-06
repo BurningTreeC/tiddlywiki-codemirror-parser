@@ -767,8 +767,8 @@ function CodeMirrorEngine(options) {
 	}
 
 	// Core: Autocompletion (enables completion popups for all languages)
-	// Uses a wrapper function to dynamically retrieve registered completion sources
-	// while also preserving language-based completions
+	// Don't use override - let CodeMirror combine all completion sources naturally
+	// This avoids conflicts with language plugins that also configure autocompletion
 	var autocompletion = (core.autocomplete || {}).autocompletion;
 	var completionKeymap = (core.autocomplete || {}).completionKeymap;
 	var completeAnyWord = (core.autocomplete || {}).completeAnyWord;
@@ -781,30 +781,30 @@ function CodeMirrorEngine(options) {
 
 	if (autocompletion) {
 		var self = this;
-		extensions.push(autocompletion({
-			override: [function(context) {
-				// First try registered plugin sources (higher priority)
-				var sources = self.getCompletionSources();
-				for (var i = 0; i < sources.length; i++) {
-					var result = sources[i](context);
-					if (result) return result;
-				}
-				// Fall back to language-based completions
-				var langCompletions = context.state.languageDataAt("autocomplete", context.pos);
-				for (var j = 0; j < langCompletions.length; j++) {
-					var langResult = langCompletions[j](context);
-					if (langResult) return langResult;
-				}
-				// Last resort: completeAnyWord if enabled
-				if (self._completeAnyWordEnabled && self._completeAnyWord) {
-					return self._completeAnyWord(context);
-				}
-				return null;
-			}]
-		}));
+		// Use autocompletion without override - sources come from languageData
+		extensions.push(autocompletion());
 		if (completionKeymap && cmKeymap) {
 			extensions.push(cmKeymap.of(completionKeymap));
 		}
+		// Register a completion source that wraps our plugin sources
+		// This gets combined with language-specific sources automatically
+		extensions.push(EditorState.languageData.of(function() {
+			return {
+				autocomplete: function(context) {
+					// Try registered plugin sources first
+					var sources = self.getCompletionSources();
+					for (var i = 0; i < sources.length; i++) {
+						var result = sources[i](context);
+						if (result) return result;
+					}
+					// completeAnyWord as fallback if enabled
+					if (self._completeAnyWordEnabled && self._completeAnyWord) {
+						return self._completeAnyWord(context);
+					}
+					return null;
+				}
+			};
+		}));
 	}
 
 	// Core: Keymap compartment (for vim/emacs dynamic switching)
