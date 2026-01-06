@@ -47,4 +47,4 @@ export {
   tiddlywikiLanguage, headerIndent, mkLang, getCodeParser,
   tiddlywiki, tiddlywikiHighlightStyle, tiddlywikiKeymap,
   TiddlyWikiLanguageConfig,
-} from "./tiddlywiki-parser"
+} from "./parser"

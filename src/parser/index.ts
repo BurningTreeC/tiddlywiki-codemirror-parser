@@ -57,4 +57,4 @@ export {
   tiddlywikiHighlightStyle,
   tiddlywikiKeymap,
   TiddlyWikiLanguageConfig,
-} from "./language-support"
+} from "./extensions"

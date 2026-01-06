@@ -29,7 +29,7 @@ const jsPlugins = [
 export default [
   // JS builds (ESM + CJS) from the same input
   {
-    input: "src/codemirror-index.ts",
+    input: "src/codemirror.ts",
     external,
     plugins: jsPlugins,
     output: [
@@ -49,7 +49,7 @@ export default [
 
   // Type definitions
   {
-    input: "src/codemirror-index.ts",
+    input: "src/codemirror.ts",
     external,
     plugins: [dts()],
     output: {

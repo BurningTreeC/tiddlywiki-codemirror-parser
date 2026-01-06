@@ -50,9 +50,9 @@ export {
   tiddlywikiLanguage, headerIndent, mkLang, getCodeParser,
   tiddlywiki, tiddlywikiHighlightStyle, tiddlywikiKeymap,
   TiddlyWikiLanguageConfig,
-} from "./tiddlywiki-parser"
+} from "./parser"
 
-import { tiddlywikiLanguage } from "./tiddlywiki-parser"
+import { tiddlywikiLanguage } from "./parser"
 
 // Re-export commands
 export {

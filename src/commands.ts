@@ -8,7 +8,7 @@ import {StateCommand, Text, EditorState, EditorSelection, ChangeSpec, countColum
 import {EditorView} from "@codemirror/view"
 import {syntaxTree, indentUnit, getIndentation} from "@codemirror/language"
 import {SyntaxNode, Tree} from "@lezer/common"
-import {tiddlywikiLanguage} from "./tiddlywiki-parser/language"
+import {tiddlywikiLanguage} from "./parser/language"
 
 // ============================================================================
 // Context Class für List/Quote Continuation

@@ -14,7 +14,7 @@ import {
   parseMacroParams as parseMacroParamsUtil,
   Patterns,
   isWhitespaceOrEmpty,
-} from "./parser-utils"
+} from "./utils"
 
 // ============================================================================
 // Escape Parser (~WikiWord prevents linking)
@@ -97,7 +97,7 @@ export const InlineCode: InlineParser = {
 // ============================================================================
 // Delimiter-based Formatters (Bold, Italic, Underline, Strikethrough, etc.)
 // ============================================================================
-// These all use the createDelimiterParser factory from parser-utils.ts
+// These all use the createDelimiterParser factory from utils.ts
 
 const BoldDelim: DelimiterType = { resolve: "Bold", mark: "BoldMark" }
 const ItalicDelim: DelimiterType = { resolve: "Italic", mark: "ItalicMark" }
@@ -447,7 +447,7 @@ export const ImageLink: InlineParser = {
 
 const transclusionRe = /^\{\{([^{}|]*?)(?:\|\|([^{}|]+?))?(?:\|([^{}]+?))?\}\}/
 
-// parseTransclusionTarget is now imported from parser-utils.ts
+// parseTransclusionTarget is now imported from utils.ts
 
 export const Transclusion: InlineParser = {
   name: "Transclusion",
@@ -717,7 +717,7 @@ export const FilteredTransclusion: InlineParser = {
 // Macro Call Parser (<<macro params>>)
 // ============================================================================
 
-// parseMacroParams is imported from parser-utils.ts as parseMacroParamsUtil
+// parseMacroParams is imported from utils.ts as parseMacroParamsUtil
 
 export const MacroCall: InlineParser = {
   name: "MacroCall",

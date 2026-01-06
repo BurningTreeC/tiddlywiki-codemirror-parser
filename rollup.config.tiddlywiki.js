@@ -48,7 +48,7 @@ const twPaths = {
 const external = Object.keys(twPaths);
 
 export default {
-  input: "src/tiddlywiki-plugin-entry.ts",
+  input: "src/plugin.ts",
   external,
   output: {
     file: "plugins/lang-tiddlywiki/lang-tiddlywiki.js",

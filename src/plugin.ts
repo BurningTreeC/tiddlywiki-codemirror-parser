@@ -10,7 +10,7 @@
 import {Extension, Compartment, Prec} from "@codemirror/state"
 import {keymap, EditorView} from "@codemirror/view"
 import {LanguageDescription} from "@codemirror/language"
-import {tiddlywikiLanguage, headerIndent, tiddlywiki} from "./tiddlywiki-parser"
+import {tiddlywikiLanguage, headerIndent, tiddlywiki} from "./parser"
 import {
   insertNewlineContinueMarkup,
   deleteMarkupBackward,

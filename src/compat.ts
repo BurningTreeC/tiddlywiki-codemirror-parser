@@ -1,9 +1,9 @@
 /**
  * @codemirror/lang-tiddlywiki - Backwards Compatibility Re-exports
  *
- * This file re-exports from tiddlywiki-parser for backwards compatibility.
+ * This file re-exports from parser for backwards compatibility.
  *
- * @deprecated Import from "./tiddlywiki-parser" instead
+ * @deprecated Import from "./parser" instead
  */
 
 export {
@@ -11,8 +11,8 @@ export {
   mkLang,
   getCodeParser,
   headerIndent
-} from "./tiddlywiki-parser"
+} from "./parser"
 
 // Backwards compatibility alias
-import { tiddlywikiLanguage } from "./tiddlywiki-parser"
+import { tiddlywikiLanguage } from "./parser"
 export const tiddlywikiBaseLanguage = tiddlywikiLanguage

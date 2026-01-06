@@ -7,7 +7,7 @@
 import { Type } from "./types"
 import { Element, elt, Line, BlockParser, BlockResult, Ch, space } from "./core"
 import type { BlockContext } from "./block-context"
-import { parseTransclusionTarget, parseMacroParams } from "./parser-utils"
+import { parseTransclusionTarget, parseMacroParams } from "./utils"
 
 // ============================================================================
 // Heading Parser (! to !!!!!!)
@@ -538,7 +538,7 @@ export const CommentBlock: BlockParser = {
 
 const transclusionBlockRe = /^\{\{([^{}|]*)(?:\|\|([^{}|]+))?(?:\|([^{}]+))?\}\}\s*$/
 
-// parseTransclusionTarget is now imported from parser-utils.ts
+// parseTransclusionTarget is now imported from utils.ts
 
 export const TransclusionBlock: BlockParser = {
   name: "TransclusionBlock",
@@ -721,7 +721,7 @@ export const FilteredTransclusionBlock: BlockParser = {
 // Macro Call Block (<<...>>)
 // ============================================================================
 
-// parseMacroParams is imported from parser-utils.ts
+// parseMacroParams is imported from utils.ts
 
 export const MacroCallBlock: BlockParser = {
   name: "MacroCallBlock",

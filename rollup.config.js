@@ -52,7 +52,7 @@ export default [
 
   // Full CodeMirror integration
   {
-    input: "src/codemirror-index.ts",
+    input: "src/codemirror.ts",
     external,
     plugins: jsPlugins,
     output: [
@@ -83,7 +83,7 @@ export default [
 
   // Type definitions for full package entry
   {
-    input: "src/codemirror-index.ts",
+    input: "src/codemirror.ts",
     external,
     plugins: [dts()],
     output: {

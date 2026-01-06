@@ -23,7 +23,11 @@
   "sideEffects": false,
   "scripts": {
     "clean": "rm -rf dist",
+    "clean:plugins": "rm -f plugins/*/plugin.js plugins/*/*.js.meta plugins/lang-tiddlywiki/lang-tiddlywiki.js",
+    "clean:all": "npm run clean && npm run clean:plugins",
+
     "typecheck": "tsc -p tsconfig.ci.json --noEmit",
+
     "build": "rollup -c rollup.config.js",
     "build:tiddlywiki": "rollup -c rollup.config.tiddlywiki.js",
     "build:cm6-libs": "rollup -c rollup.config.cm6-libs.js",
@@ -31,6 +35,17 @@
     "build:cm6-keymaps": "rollup -c rollup.config.cm6-keymaps.js",
     "build:search": "rollup -c rollup.config.search.js",
     "build:lint": "rollup -c rollup.config.lint.js",
+    "build:plugins": "npm run build:tiddlywiki && npm run build:cm6-libs && npm run build:cm6-languages && npm run build:cm6-keymaps && npm run build:search && npm run build:lint",
+    "build:all": "npm run build && npm run build:plugins",
+
+    "rebuild": "npm run clean:all && npm run build:all",
+    "rebuild:tiddlywiki": "npm run clean:plugins && npm run build:plugins",
+
+    "watch": "rollup -c rollup.config.js --watch",
+    "watch:tiddlywiki": "rollup -c rollup.config.tiddlywiki.js --watch",
+
+    "dev": "npm run watch:tiddlywiki",
+
     "prepublishOnly": "npm run clean && npm run typecheck && npm run build",
     "test": "echo \"No tests yet\" && exit 0"
   },
