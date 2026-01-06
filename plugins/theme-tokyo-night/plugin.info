@@ -2,7 +2,7 @@
     "title": "$:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/theme-tokyo-night",
     "name": "CodeMirror 6 Tokyo Night Theme",
     "description": "Tokyo Night theme for CodeMirror 6 (Night, Storm, Day variants)",
-    "version": "0.0.18",
+    "version": "0.0.19",
     "plugin-type": "plugin",
     "dependents": "$:/plugins/BurningTreeC/tiddlywiki-codemirror",
     "list": "readme styles license",

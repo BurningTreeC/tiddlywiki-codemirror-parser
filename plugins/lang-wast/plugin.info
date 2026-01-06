@@ -2,7 +2,7 @@
     "title": "$:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/lang-wast",
     "name": "CodeMirror 6 WebAssembly Text Language",
     "description": "WebAssembly Text (WAT/WAST) syntax highlighting for CodeMirror 6",
-    "version": "0.0.18",
+    "version": "0.0.19",
     "plugin-type": "plugin",
     "dependents": "$:/plugins/BurningTreeC/tiddlywiki-codemirror",
     "list": "readme license",

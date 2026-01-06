@@ -2254,7 +2254,6 @@ exports.plugin = {
 						effects: compartment.reconfigure(newContent)
 					});
 				} catch (e) {
-					console.error("CM6 Lint: reconfigure error:", e);
 				}
 
 				// Clear cache
@@ -2285,7 +2284,6 @@ exports.plugin = {
 						effects: compartment.reconfigure(newContent)
 					});
 				} catch (e) {
-					console.error("CM6 Lint: reconfigure error:", e);
 				}
 
 				// Trigger linting after reconfigure
@@ -2365,7 +2363,6 @@ exports.plugin = {
 					effects: compartment.reconfigure(newContent)
 				});
 			} catch (e) {
-				console.error("CM6 Lint: toggle reconfigure error:", e);
 			}
 
 			// Clear cache

@@ -71,12 +71,10 @@ function loadEmojiData() {
             EMOJI_DATA = EMOJI_DATA.concat(categoryEmojis);
           }
         } catch (parseError) {
-          console.warn("Emoji picker: Failed to parse", tiddlerTitle, parseError);
         }
       }
     });
 
-    console.log("Emoji picker: Loaded " + EMOJI_DATA.length + " base emojis");
 
     // Load shortcodes
     var shortcodesJson = $tw.wiki.getTiddlerText(CONFIG.shortcodesTiddler);
@@ -90,7 +88,6 @@ function loadEmojiData() {
     buildSearchIndex();
 
   } catch (e) {
-    console.error("Emoji picker: Error loading emoji data", e);
     EMOJI_DATA = [];
     SHORTCODES = {};
   }
@@ -137,7 +134,6 @@ function buildSearchIndex() {
     }
   });
 
-  console.log("Emoji picker: Search index built with " + SEARCH_INDEX.length + " entries");
 }
 
 /**

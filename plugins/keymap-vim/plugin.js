@@ -107,7 +107,6 @@ exports.plugin = {
   getExtensions: function(context) {
     // The engine calls this only when vim keymap is selected
     if (!vimModule || !vimModule.vim) {
-      console.warn("CM6 Vim: vim module not loaded");
       return [];
     }
 

@@ -23,7 +23,7 @@
   "sideEffects": false,
   "scripts": {
     "clean": "rm -rf dist",
-    "clean:plugins": "rm -f plugins/*/plugin.js plugins/*/*.js.meta plugins/lang-tiddlywiki/lang-tiddlywiki.js",
+    "clean:plugins": "rm -f plugins/*/*.js.meta plugins/lang-tiddlywiki/lang-tiddlywiki.js",
     "clean:all": "npm run clean && npm run clean:plugins",
 
     "typecheck": "tsc -p tsconfig.ci.json --noEmit",

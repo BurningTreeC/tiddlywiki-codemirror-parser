@@ -239,19 +239,15 @@ function discoverPlugins() {
 						try {
 							pluginDef.init(core);
 						} catch (e) {
-							console.error("Plugin init failed for '" + pluginDef.name + "':", e);
 						}
 					}
 					
 					plugins.push(pluginDef);
-					console.log("CM6: Loaded plugin '" + pluginDef.name + "' (priority: " + pluginDef.priority + ")");
 				}
 			} catch (e) {
-				console.error("Failed to load CM6 plugin '" + title + "':", e);
 			}
 		});
 	} else {
-		console.warn("CM6: $tw.modules.forEachModuleOfType not available");
 	}
 
 	// Sort by priority (higher first)
@@ -259,7 +255,6 @@ function discoverPlugins() {
 		return (b.priority || 0) - (a.priority || 0);
 	});
 
-	console.log("CM6: Discovered " + plugins.length + " plugins");
 	_pluginCache = plugins;
 	return plugins;
 }
@@ -443,12 +438,6 @@ function CodeMirrorEngine(options) {
 	this._pluginContext = context;
 	this._currentType = context.tiddlerType;
 
-	console.log("CM6: Initial context:", {
-		tiddlerTitle: context.tiddlerTitle,
-		tiddlerType: context.tiddlerType,
-		readOnly: context.readOnly
-	});
-
 	// ========================================================================
 	// Process Plugins
 	// ========================================================================
@@ -468,7 +457,6 @@ function CodeMirrorEngine(options) {
 					for (var compName in pluginCompartments) {
 						if (pluginCompartments.hasOwnProperty(compName) && !this._compartments[compName]) {
 							this._compartments[compName] = pluginCompartments[compName];
-							console.log("CM6: Registered compartment '" + compName + "' from plugin '" + plugin.name + "'");
 						}
 					}
 				}
@@ -477,7 +465,6 @@ function CodeMirrorEngine(options) {
 			// Track keymap plugins by their keymapId
 			if (isString(plugin.keymapId)) {
 				this._keymapPlugins[plugin.keymapId] = plugin;
-				console.log("CM6: Registered keymap plugin '" + plugin.keymapId + "'");
 			}
 
 			// Track conditional plugins separately
@@ -489,18 +476,15 @@ function CodeMirrorEngine(options) {
 			var shouldActivate = true;
 			if (hasCondition) {
 				shouldActivate = plugin.condition(context);
-				console.log("CM6: Plugin '" + plugin.name + "' condition: " + shouldActivate + " (type: '" + (context.tiddlerType || "") + "')");
 			}
 
 			if (shouldActivate) {
 				this._activePlugins.push(plugin);
 			}
 		} catch (e) {
-			console.error("Error processing plugin '" + plugin.name + "':", e);
 		}
 	}
 	
-	console.log("CM6: Active plugins: " + this._activePlugins.map(function(p) { return p.name; }).join(", "));
 
 	// ========================================================================
 	// Build Extensions
@@ -744,7 +728,6 @@ function CodeMirrorEngine(options) {
 		if (multiCursorKeymap.length && cmKeymap) {
 			multiCursorExtensions.push(cmKeymap.of(multiCursorKeymap));
 		}
-		console.log("CM6: Multi-cursor enabled with native selection + custom secondary cursors/selections");
 	}
 	extensions.push(this._compartments.multiCursor.of(multiCursorExtensions));
 
@@ -817,9 +800,7 @@ function CodeMirrorEngine(options) {
 		if (isFunction(keymapPlugin.getExtensions)) {
 			try {
 				initialKeymapExtensions = keymapPlugin.getExtensions(context) || [];
-				console.log("CM6: Loaded keymap '" + initialKeymapId + "' with " + initialKeymapExtensions.length + " extensions");
 			} catch (e) {
-				console.error("CM6: Error loading keymap '" + initialKeymapId + "':", e);
 			}
 		}
 	}
@@ -859,14 +840,12 @@ function CodeMirrorEngine(options) {
 						var pluginExts = pluginJ.getExtensions(context);
 						if (isArray(pluginExts)) {
 							extensions = extensions.concat(pluginExts);
-							console.log("CM6: Plugin '" + pluginJ.name + "' active, added " + pluginExts.length + " extensions");
 						}
 					} else {
 						// Plugin is NOT active - add empty compartment placeholder
 						// This allows reconfiguration later when type changes
 						if (compartmentName && this._compartments[compartmentName]) {
 							extensions.push(this._compartments[compartmentName].of([]));
-							console.log("CM6: Plugin '" + pluginJ.name + "' inactive, added empty compartment '" + compartmentName + "'");
 						}
 					}
 				} else if (hasConditionJ && !hasCompartment) {
@@ -875,22 +854,18 @@ function CodeMirrorEngine(options) {
 						var condExts = pluginJ.getExtensions(context);
 						if (isArray(condExts)) {
 							extensions = extensions.concat(condExts);
-							console.log("CM6: Plugin '" + pluginJ.name + "' active (no compartment), added " + condExts.length + " extensions");
 						}
 					} else {
-						console.log("CM6: Plugin '" + pluginJ.name + "' inactive, no compartment - cannot switch later");
 					}
 				} else if (isActive) {
 					// Unconditional plugin - always add
 					var unconditionalExts = pluginJ.getExtensions(context);
 					if (isArray(unconditionalExts)) {
 						extensions = extensions.concat(unconditionalExts);
-						console.log("CM6: Plugin '" + pluginJ.name + "' provided " + unconditionalExts.length + " extensions");
 					}
 				}
 			}
 		} catch (e) {
-			console.error("Error getting extensions from plugin '" + pluginJ.name + "':", e);
 		}
 	}
 
@@ -1072,7 +1047,6 @@ function CodeMirrorEngine(options) {
 				registeredEventPlugins[apiPlugin.name] = true;
 			}
 		} catch (e) {
-			console.error("Error extending API from plugin '" + apiPlugin.name + "':", e);
 		}
 	}
 
@@ -1100,9 +1074,7 @@ function CodeMirrorEngine(options) {
 						}
 					}
 				}
-				console.log("CM6: Registered events for inactive toggleable plugin '" + inactivePlugin.name + "'");
 			} catch (e) {
-				console.error("Error registering events for inactive plugin '" + inactivePlugin.name + "':", e);
 			}
 		}
 	}
@@ -1174,7 +1146,6 @@ CodeMirrorEngine.prototype._emitNow = function() {
 		try {
 			this._onChange(text);
 		} catch (e) {
-			console.error("onChange failed:", e);
 		}
 	}
 
@@ -1182,7 +1153,6 @@ CodeMirrorEngine.prototype._emitNow = function() {
 		try {
 			this.widget.saveChanges(text);
 		} catch (e) {
-			console.error("widget.saveChanges failed:", e);
 		}
 	}
 };
@@ -1196,7 +1166,6 @@ CodeMirrorEngine.prototype._handleBlur = function() {
 		try {
 			this._onBlurSave();
 		} catch (e) {
-			console.error("onBlurSave failed:", e);
 		}
 	}
 };
@@ -1209,7 +1178,6 @@ CodeMirrorEngine.prototype._triggerEvent = function(eventName, data) {
 		try {
 			handlers[i].call(this, data);
 		} catch (e) {
-			console.error("Event handler failed for '" + eventName + "':", e);
 		}
 	}
 };
@@ -1248,13 +1216,10 @@ CodeMirrorEngine.prototype._handleSettingsChanged = function(settings) {
 			if (isFunction(keymapPlugin.getExtensions)) {
 				try {
 					newKeymapExtensions = keymapPlugin.getExtensions(this._pluginContext) || [];
-					console.log("CM6: Switching to keymap '" + newKeymapId + "' with " + newKeymapExtensions.length + " extensions");
 				} catch (e) {
-					console.error("CM6: Error loading keymap '" + newKeymapId + "':", e);
 				}
 			}
 		} else if (newKeymapId === "default") {
-			console.log("CM6: Switching to default keymap");
 		}
 
 		this._currentKeymap = newKeymapId;
@@ -1369,9 +1334,7 @@ CodeMirrorEngine.prototype._handleSettingsChanged = function(settings) {
 			if (mcKeymap.length && core.view.keymap) {
 				mcExtensions.push(core.view.keymap.of(mcKeymap));
 			}
-			console.log("CM6: Multi-cursor enabled");
 		} else {
-			console.log("CM6: Multi-cursor disabled");
 		}
 		effects.push(this._compartments.multiCursor.reconfigure(mcExtensions));
 	}
@@ -1462,7 +1425,6 @@ CodeMirrorEngine.prototype.setText = function(text, type) {
 
 	// Check if type changed - trigger language switch
 	if (type !== undefined && type !== this._currentType) {
-		console.log("CM6: Type changed from '" + this._currentType + "' to '" + type + "'");
 		this.setType(type);
 	}
 
@@ -1505,7 +1467,6 @@ CodeMirrorEngine.prototype.setType = function(newType) {
 		this._pluginContext.tiddlerType = newType;
 	}
 	
-	console.log("CM6: Switching type from '" + oldType + "' to '" + newType + "'");
 	
 	// Build new context with updated type
 	var context = buildPluginContext(this.options, this, newType);
@@ -1522,10 +1483,8 @@ CodeMirrorEngine.prototype.setType = function(newType) {
 		try {
 			shouldBeActive = plugin.condition(context);
 		} catch (e) {
-			console.error("Error evaluating condition for plugin '" + plugin.name + "':", e);
 		}
 		
-		console.log("CM6: Plugin '" + plugin.name + "' was=" + wasActive + " should=" + shouldBeActive);
 		
 		if (wasActive !== shouldBeActive) {
 			// Find the compartment for this plugin
@@ -1545,17 +1504,14 @@ CodeMirrorEngine.prototype.setType = function(newType) {
 							newContent = plugin.getCompartmentContent(context) || [];
 							if (!isArray(newContent)) newContent = [newContent];
 						} catch (e) {
-							console.error("Error getting compartment content from plugin '" + plugin.name + "':", e);
 						}
 					} else {
 						// Fallback: try to use getExtensions, but warn about potential issues
 						// This works if the plugin doesn't use compartment.of() in getExtensions()
-						console.warn("CM6: Plugin '" + plugin.name + "' has no getCompartmentContent() - reconfiguration may not work correctly");
 						try {
 							newContent = plugin.getExtensions(context) || [];
 							if (!isArray(newContent)) newContent = [newContent];
 						} catch (e) {
-							console.error("Error getting extensions from plugin '" + plugin.name + "':", e);
 						}
 					}
 				}
@@ -1565,9 +1521,7 @@ CodeMirrorEngine.prototype.setType = function(newType) {
 					this._compartments[compartmentName].reconfigure(newContent)
 				);
 				
-				console.log("CM6: Reconfigured '" + compartmentName + "' with " + newContent.length + " items (active: " + shouldBeActive + ")");
 			} else {
-				console.warn("CM6: Plugin '" + plugin.name + "' has no compartment - cannot switch dynamically");
 			}
 			
 			// Update active plugins list
@@ -1625,7 +1579,6 @@ CodeMirrorEngine.prototype.refreshLanguageConditions = function() {
 		return; // No tag change
 	}
 
-	console.log("CM6: Tags changed from [" + oldTagsStr + "] to [" + newTagsStr + "]");
 
 	// Update context with new tiddler fields
 	this._pluginContext.tiddlerFields = tiddler.fields;
@@ -1642,7 +1595,6 @@ CodeMirrorEngine.prototype.refreshLanguageConditions = function() {
 		try {
 			shouldBeActive = plugin.condition(context);
 		} catch (e) {
-			console.error("Error evaluating condition for plugin '" + plugin.name + "':", e);
 		}
 
 		if (wasActive !== shouldBeActive) {
@@ -1657,14 +1609,12 @@ CodeMirrorEngine.prototype.refreshLanguageConditions = function() {
 							newContent = plugin.getCompartmentContent(context) || [];
 							if (!isArray(newContent)) newContent = [newContent];
 						} catch (e) {
-							console.error("Error getting compartment content from plugin '" + plugin.name + "':", e);
 						}
 					} else if (isFunction(plugin.getExtensions)) {
 						try {
 							newContent = plugin.getExtensions(context) || [];
 							if (!isArray(newContent)) newContent = [newContent];
 						} catch (e) {
-							console.error("Error getting extensions from plugin '" + plugin.name + "':", e);
 						}
 					}
 				}
@@ -1673,7 +1623,6 @@ CodeMirrorEngine.prototype.refreshLanguageConditions = function() {
 					this._compartments[compartmentName].reconfigure(newContent)
 				);
 
-				console.log("CM6: Tag change - reconfigured '" + compartmentName + "' (active: " + shouldBeActive + ")");
 			}
 
 			// Update active plugins list
@@ -1731,7 +1680,6 @@ CodeMirrorEngine.prototype.reconfigure = function(compartmentName, extension) {
 	
 	var compartment = this._compartments[compartmentName];
 	if (!compartment) {
-		console.warn("Unknown compartment:", compartmentName);
 		return;
 	}
 	
@@ -2022,7 +1970,6 @@ CodeMirrorEngine.prototype.destroy = function() {
 			try {
 				plugin.destroy(this);
 			} catch (e) {
-				console.error("Plugin destroy failed for '" + plugin.name + "':", e);
 			}
 		}
 	}
@@ -2035,7 +1982,6 @@ CodeMirrorEngine.prototype.destroy = function() {
 	try {
 		if (this.view) this.view.destroy();
 	} catch (e) {
-		console.error("view.destroy failed:", e);
 	}
 
 	try {
@@ -2074,7 +2020,6 @@ CodeMirrorEngine.prototype.dispatchPluginEvent = function(eventName) {
 			try {
 				plugin[eventName].apply(plugin, args);
 			} catch (e) {
-				console.error("Plugin event '" + eventName + "' failed for '" + plugin.name + "':", e);
 			}
 		}
 	}

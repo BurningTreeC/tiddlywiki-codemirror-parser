@@ -2,7 +2,7 @@
     "title": "$:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/lang-latex",
     "name": "CodeMirror 6 LaTeX Language",
     "description": "LaTeX syntax highlighting for CodeMirror 6",
-    "version": "0.0.18",
+    "version": "0.0.19",
     "plugin-type": "plugin",
     "dependents": "$:/plugins/BurningTreeC/tiddlywiki-codemirror",
     "list": "readme license",

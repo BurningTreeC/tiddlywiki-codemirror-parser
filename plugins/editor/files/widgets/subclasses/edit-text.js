@@ -290,7 +290,6 @@ var pluginRegistry = {
 				try {
 					plugin[hook].apply(null, args);
 				} catch (e) {
-					console.error("CM6 plugin error (" + pluginNames[i] + "." + hook + "):", e);
 				}
 			}
 		}
@@ -312,7 +311,6 @@ var pluginRegistry = {
 					plugin.onMessage[message](widget, event);
 					return true;
 				} catch (e) {
-					console.error("CM6 plugin message error (" + pluginNames[i] + "." + message + "):", e);
 				}
 			}
 		}
@@ -646,7 +644,6 @@ exports.prototype.dispatchEvent = function (event) {
 					plugin.onMessage[event.type](this, event);
 					return true;
 				} catch (e) {
-					console.error("CM6 engine plugin message error (" + plugin.name + "." + event.type + "):", e);
 				}
 			}
 		}

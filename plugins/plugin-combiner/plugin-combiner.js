@@ -244,14 +244,12 @@ PluginCombinerWidget.prototype.getPluginTiddlers = function(pluginTitle) {
     // Method 1: getPluginInfo (for registered plugins)
     var pluginInfo = this.wiki.getPluginInfo(pluginTitle);
     if (pluginInfo && pluginInfo.tiddlers) {
-        console.log("Plugin " + pluginTitle + ": found via getPluginInfo");
         return pluginInfo.tiddlers;
     }
 
     // Method 2: getTiddlerData (for JSON plugin tiddlers)
     var pluginData = this.wiki.getTiddlerData(pluginTitle);
     if (pluginData && pluginData.tiddlers) {
-        console.log("Plugin " + pluginTitle + ": found via getTiddlerData");
         return pluginData.tiddlers;
     }
 
@@ -261,7 +259,6 @@ PluginCombinerWidget.prototype.getPluginTiddlers = function(pluginTitle) {
         try {
             var parsed = JSON.parse(pluginTiddler.fields.text);
             if (parsed && parsed.tiddlers) {
-                console.log("Plugin " + pluginTitle + ": found via text parse");
                 return parsed.tiddlers;
             }
         } catch (e) {
@@ -283,11 +280,9 @@ PluginCombinerWidget.prototype.getPluginTiddlers = function(pluginTitle) {
     });
 
     if (Object.keys(tiddlers).length > 0) {
-        console.log("Plugin " + pluginTitle + ": found via shadow tiddlers");
         return tiddlers;
     }
 
-    console.log("Plugin " + pluginTitle + ": no tiddlers found!");
     return tiddlers;
 };
 
@@ -309,7 +304,6 @@ PluginCombinerWidget.prototype.resolveDependencies = function(selectedPlugins) {
         if (!pluginTiddler) {
             // Dependency doesn't exist in this wiki
             missingDeps.push(pluginTitle);
-            console.warn("Dependency not found in wiki: " + pluginTitle);
             return;
         }
 
@@ -381,7 +375,6 @@ PluginCombinerWidget.prototype.buildCombinedPlugin = function() {
         throw new Error("Please select at least one plugin");
     }
 
-    console.log("Selected plugins:", selectedPlugins);
 
     // Check if we should include dependencies
     var includeDeps = this.includeDepsCheckbox.checked;
@@ -395,15 +388,12 @@ PluginCombinerWidget.prototype.buildCombinedPlugin = function() {
         allPlugins = resolved.plugins;
         missingDeps = resolved.missing;
         addedDeps = allPlugins.length - selectedPlugins.length;
-        console.log("Resolved plugins (with dependencies):", allPlugins);
     } else {
         // Just use selected plugins without resolving dependencies
         allPlugins = selectedPlugins;
-        console.log("Using selected plugins only (no dependency resolution)");
     }
     
     if (missingDeps.length > 0) {
-        console.warn("Missing dependencies:", missingDeps);
     }
 
     var combinedTiddlers = {};
@@ -412,14 +402,12 @@ PluginCombinerWidget.prototype.buildCombinedPlugin = function() {
     allPlugins.forEach(function(pluginTitle) {
         var pluginTiddler = self.wiki.getTiddler(pluginTitle);
         if (!pluginTiddler) {
-            console.warn("Plugin not found: " + pluginTitle);
             return;
         }
 
         var tiddlers = self.getPluginTiddlers(pluginTitle);
         var tiddlerCount = Object.keys(tiddlers).length;
         
-        console.log("Plugin " + pluginTitle + ": " + tiddlerCount + " tiddlers");
 
         // Merge tiddlers, ensuring title is included and arrays are serialized
         $tw.utils.each(tiddlers, function(fields, title) {
@@ -448,7 +436,6 @@ PluginCombinerWidget.prototype.buildCombinedPlugin = function() {
 
     var tiddlerCount = Object.keys(combinedTiddlers).length;
     
-    console.log("Total combined tiddlers: " + tiddlerCount);
     
     if (tiddlerCount === 0) {
         throw new Error("No tiddlers found in selected plugins. Check browser console for details.");
@@ -517,7 +504,6 @@ PluginCombinerWidget.prototype.handleDownload = function() {
         this.showStatus("success", message);
     } catch (e) {
         this.showStatus("error", e.message);
-        console.error("Plugin combiner error:", e);
     }
 };
 
@@ -538,7 +524,6 @@ PluginCombinerWidget.prototype.handleInstall = function() {
         this.showStatus("success", message);
     } catch (e) {
         this.showStatus("error", e.message);
-        console.error("Plugin combiner error:", e);
     }
 };
 

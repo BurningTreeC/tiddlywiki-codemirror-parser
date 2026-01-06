@@ -62,6 +62,5 @@ exports.startup = function() {
 		}
 	} catch (e) {
 		// Core plugin not loaded yet or registry not available
-		console.log("Zen Mode: Widget registry not available, using fallback");
 	}
 };

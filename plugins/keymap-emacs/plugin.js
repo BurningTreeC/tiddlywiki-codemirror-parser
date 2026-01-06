@@ -28,7 +28,6 @@ exports.plugin = {
     var commands = core.commands || {};
 
     if (!keymap || !commands.emacsStyleKeymap) {
-      console.warn("CM6 Emacs: emacsStyleKeymap not available");
       return [];
     }
 
