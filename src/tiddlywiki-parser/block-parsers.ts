@@ -760,19 +760,6 @@ export const MacroCallBlock: BlockParser = {
     }
 
     if (closeIdx === -1) {
-      // Check if line is just <<name (with optional whitespace after)
-      // In this case, treat as incomplete macro immediately (don't look at subsequent lines)
-      const afterName = line.text.slice(nameEnd).trim()
-      if (!afterName) {
-        // Incomplete macro on a single line: <<name
-        const children: Element[] = [
-          elt(Type.MacroCallMark, start, start + 2),
-        ]
-        buildNameElement(children)
-        cx.addElement(elt(Type.MacroCallBlock, start, endPos, children))
-        return true
-      }
-
       // Multi-line macro: accumulate lines until we find >>
       while (cx.nextLine()) {
         const currentLine = cx.line.text

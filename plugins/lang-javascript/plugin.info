@@ -2,7 +2,7 @@
     "title": "$:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/lang-javascript",
     "name": "CodeMirror 6 JavaScript Language",
     "description": "JavaScript/TypeScript syntax highlighting for CodeMirror 6 code blocks",
-    "version": "0.0.17",
+    "version": "0.0.18",
     "plugin-type": "plugin",
     "dependents": "$:/plugins/BurningTreeC/tiddlywiki-codemirror",
     "list": "readme license",

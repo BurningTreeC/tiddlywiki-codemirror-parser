@@ -766,11 +766,9 @@ function CodeMirrorEngine(options) {
 		extensions.push(syntaxHighlighting(classHighlighter, { fallback: true }));
 	}
 
-	// Core: Autocompletion (enables completion popups for all languages)
-	// Don't use override - let CodeMirror combine all completion sources naturally
-	// This avoids conflicts with language plugins that also configure autocompletion
-	var autocompletion = (core.autocomplete || {}).autocompletion;
-	var completionKeymap = (core.autocomplete || {}).completionKeymap;
+	// Core: Autocompletion sources from engine plugins
+	// NOTE: We do NOT add autocompletion() here - language plugins (like lang-tiddlywiki)
+	// provide that. We only register additional completion sources that get merged in.
 	var completeAnyWord = (core.autocomplete || {}).completeAnyWord;
 
 	// Store completeAnyWord reference and read initial config
@@ -779,33 +777,36 @@ function CodeMirrorEngine(options) {
 		this._completeAnyWordEnabled = true;
 	}
 
-	if (autocompletion) {
-		var self = this;
-		// Use autocompletion without override - sources come from languageData
-		extensions.push(autocompletion());
-		if (completionKeymap && cmKeymap) {
-			extensions.push(cmKeymap.of(completionKeymap));
+	// Register plugin completion sources via languageData
+	// These get combined with language-specific sources automatically
+	// NOTE: languageData.of() callback receives (state, pos, side) and must return an ARRAY
+	// IMPORTANT: We cache the result to avoid creating new objects on every call,
+	// which would cause CodeMirror to think sources changed and trigger re-evaluation loops
+	var self = this;
+	var cachedAutocompleteData = [{
+		autocomplete: function(context) {
+			// Try registered plugin sources first (emoji, snippets, etc.)
+			var sources = self.getCompletionSources();
+			for (var i = 0; i < sources.length; i++) {
+				var result = sources[i](context);
+				if (result) return result;
+			}
+			// completeAnyWord as fallback if enabled
+			if (self._completeAnyWordEnabled && self._completeAnyWord) {
+				return self._completeAnyWord(context);
+			}
+			return null;
 		}
-		// Register a completion source that wraps our plugin sources
-		// This gets combined with language-specific sources automatically
-		extensions.push(EditorState.languageData.of(function() {
-			return {
-				autocomplete: function(context) {
-					// Try registered plugin sources first
-					var sources = self.getCompletionSources();
-					for (var i = 0; i < sources.length; i++) {
-						var result = sources[i](context);
-						if (result) return result;
-					}
-					// completeAnyWord as fallback if enabled
-					if (self._completeAnyWordEnabled && self._completeAnyWord) {
-						return self._completeAnyWord(context);
-					}
-					return null;
-				}
-			};
-		}));
-	}
+	}];
+	var emptyData = [];
+	extensions.push(EditorState.languageData.of(function(state, pos, side) {
+		var sources = self.getCompletionSources();
+		// Only provide autocomplete if we have sources to offer
+		if (sources.length === 0 && !self._completeAnyWordEnabled) {
+			return emptyData;
+		}
+		return cachedAutocompleteData;
+	}));
 
 	// Core: Keymap compartment (for vim/emacs dynamic switching)
 	// Get initial keymap from config and load extensions from matching plugin
@@ -951,10 +952,17 @@ function CodeMirrorEngine(options) {
 				// Handle Escape key specially
 				var isEscape = (event.keyCode === 27) && !event.ctrlKey && !event.shiftKey && !event.altKey && !event.metaKey;
 				if (isEscape) {
-					// If completion popup is active, let CM close it
-					if (completionStatus && completionStatus(view.state) === "active") {
+					// If completion popup is active or pending, close it and consume the event
+					// Status can be: null (no completion), "active" (showing results), "pending" (loading)
+					var closeCompletion = core.autocomplete && core.autocomplete.closeCompletion;
+					var status = completionStatus ? completionStatus(view.state) : null;
+					if (status === "active" || status === "pending") {
+						if (closeCompletion) {
+							closeCompletion(view);
+						}
 						event.stopPropagation();
-						return false;
+						event.preventDefault();
+						return true; // Consume the event - we handled it
 					}
 				}
 

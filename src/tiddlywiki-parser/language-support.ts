@@ -5,10 +5,10 @@
  * for CodeMirror 6, similar to markdown() in @codemirror/lang-markdown.
  */
 
-import { Prec, EditorState } from "@codemirror/state"
+import { Prec, EditorState, StateEffect } from "@codemirror/state"
 import { KeyBinding, keymap } from "@codemirror/view"
 import { Language, LanguageSupport, LanguageDescription, syntaxTree, ParseContext, indentOnInput, getIndentation, getIndentUnit } from "@codemirror/language"
-import { Completion, CompletionContext, CompletionResult, autocompletion, completionKeymap, CompletionSource, startCompletion } from "@codemirror/autocomplete"
+import { Completion, CompletionContext, CompletionResult, autocompletion, completionKeymap, CompletionSource, startCompletion, completionStatus } from "@codemirror/autocomplete"
 import { EditorView } from "@codemirror/view"
 import { syntaxHighlighting, HighlightStyle } from "@codemirror/language"
 import { tags as t } from "@lezer/highlight"
@@ -49,6 +49,33 @@ import {
 
 // Re-export core language
 export { tiddlywikiLanguage, headerIndent }
+
+/**
+ * State effect to request completion trigger after a completion is accepted.
+ * This allows chaining completions (e.g., after inserting attr="" trigger value completion)
+ * without causing loops or flickering.
+ */
+const triggerCompletionEffect = StateEffect.define<null>()
+
+/**
+ * Extension that listens for triggerCompletionEffect and triggers completion.
+ * Used to chain completions (e.g., after inserting attr="" trigger value completion).
+ */
+const triggerCompletionOnAccept = EditorView.updateListener.of((update) => {
+  for (const tr of update.transactions) {
+    for (const effect of tr.effects) {
+      if (effect.is(triggerCompletionEffect)) {
+        // Use setTimeout to ensure we're outside the current transaction
+        setTimeout(() => {
+          if (completionStatus(update.view.state) === null) {
+            startCompletion(update.view)
+          }
+        }, 10)
+        return
+      }
+    }
+  }
+})
 
 // Self-closing HTML tags (no closing tag needed)
 const selfClosingTags = new Set([
@@ -425,7 +452,7 @@ function createMixedLanguageWrapper(
   defaultCodeLanguage: Language | undefined,
   tiddlywikiParser?: TiddlyWikiParser
 ) {
-  const getParser = getCodeParser(codeLanguages, defaultCodeLanguage)
+  const getParser = getCodeParser(codeLanguages, defaultCodeLanguage, tiddlywikiParser)
 
   return parseMixed((node: SyntaxNodeRef, input: Input) => {
     // CODE BLOCKS: Full replacement parsing for CodeText
@@ -595,6 +622,8 @@ export function tiddlywiki(config: TiddlyWikiLanguageConfig = {}): LanguageSuppo
     keymap.of(completionKeymap),
     // Input handler for upgrading list markers (e.g., "* " + "*" → "** ")
     listMarkerUpgradeHandler,
+    // Listen for triggerCompletionEffect to chain completions after accept
+    triggerCompletionOnAccept,
   ]
 
   // Handle default code language
@@ -607,10 +636,21 @@ export function tiddlywiki(config: TiddlyWikiLanguageConfig = {}): LanguageSuppo
   }
 
   // Include support extensions for code languages (enables autocompletion in nested code blocks)
+  // NOTE: We skip TiddlyWiki itself to avoid adding duplicate completion sources.
+  // The TiddlyWiki language may be in codeLanguages (registered via core.registerLanguage),
+  // but we're already creating the TiddlyWiki support here - adding it again would duplicate completions.
+  // IMPORTANT: Check name/alias BEFORE accessing .support to avoid triggering lazy load of TiddlyWiki
+  const twAliases = ["tiddlywiki", "wikitext", "tw", "tw5"]
   if (codeLanguages && Array.isArray(codeLanguages)) {
     for (const langDesc of codeLanguages) {
+      // Skip TiddlyWiki FIRST to avoid triggering lazy load (accessing .support triggers load)
+      const langName = langDesc.name?.toLowerCase() || ""
+      const langAlias = langDesc.alias?.map((a: string) => a.toLowerCase()) || []
+      if (langName === "tiddlywiki" || twAliases.some(a => langAlias.includes(a))) {
+        continue
+      }
+      // Now safe to access .support for non-TiddlyWiki languages
       if (langDesc.support) {
-        // Language already loaded - include its support extensions
         support.push(langDesc.support.support)
       }
     }
@@ -662,7 +702,7 @@ export function tiddlywiki(config: TiddlyWikiLanguageConfig = {}): LanguageSuppo
 
     // Trigger completion when typing opening quote after = in attribute context
     // This is needed because CodeMirror doesn't auto-trigger completion for quote characters
-    support.push(EditorView.inputHandler.of((view, from, to, text) => {
+    support.push(EditorView.inputHandler.of((view, from, _to, text) => {
       // Only handle quote characters
       if (text !== '"' && text !== "'") return false
 
@@ -671,8 +711,11 @@ export function tiddlywiki(config: TiddlyWikiLanguageConfig = {}): LanguageSuppo
       if (charBefore !== "=") return false
 
       // Let the default insertion happen, then trigger completion
-      // Use setTimeout to allow the character to be inserted first
-      setTimeout(() => startCompletion(view), 0)
+      setTimeout(() => {
+        if (completionStatus(view.state) === null) {
+          startCompletion(view)
+        }
+      }, 10)
 
       // Return false to allow default handling (insert the quote)
       return false
@@ -795,9 +838,16 @@ export function tiddlywiki(config: TiddlyWikiLanguageConfig = {}): LanguageSuppo
     support.push(lang.data.of({
       autocomplete: htmlAttributeCompletion
     }))
-    // Also try the native HTML completion source (works if mixed parsing is active)
+    // Wrap native HTML completion to skip widget contexts (prevents pending state issues)
     support.push(lang.data.of({
-      autocomplete: htmlCompletionSource
+      autocomplete: (context: CompletionContext) => {
+        // Skip for widget contexts - our custom sources handle those
+        const textBefore = context.state.sliceDoc(Math.max(0, context.pos - 25), context.pos)
+        if (/<\$[\w\-\.]*$/.test(textBefore)) {
+          return null
+        }
+        return htmlCompletionSource(context)
+      }
     }))
   }
 
@@ -941,15 +991,9 @@ const widgetAttributes: Record<string, string[]> = {
  */
 function widgetCompletion(getWidgetNames?: () => string[], getSelfClosingWidgets?: () => string[]) {
   return (context: CompletionContext): CompletionResult | null => {
-    // Build self-closing set dynamically to support live config updates
-    const allSelfClosing = new Set(selfClosingWidgets)
-    if (getSelfClosingWidgets) {
-      for (const w of getSelfClosingWidgets()) {
-        allSelfClosing.add(w)
-      }
-    }
     const { state, pos } = context
     // Allow dots in widget names for namespaced widgets like <$my.widget
+    // Check pattern FIRST before any expensive operations
     const m = /<\$[\w\-\.]*$/.exec(state.sliceDoc(pos - 50, pos))
     if (!m) return null
 
@@ -962,6 +1006,14 @@ function widgetCompletion(getWidgetNames?: () => string[], getSelfClosingWidgets
         return null
       }
       node = node.parent!
+    }
+
+    // Build self-closing set (only after we know we need completions)
+    const allSelfClosing = new Set(selfClosingWidgets)
+    if (getSelfClosingWidgets) {
+      for (const w of getSelfClosingWidgets()) {
+        allSelfClosing.add(w)
+      }
     }
 
     // Collect all widget names with their sources
@@ -1141,10 +1193,11 @@ function widgetAttributeCompletion(
         const changes = buildMultiSelectionChanges(view, from, endTo, insert, patternLen)
         view.dispatch({
           changes,
-          selection: { anchor: cursorPos }
+          selection: { anchor: cursorPos },
+          // Dispatch effect to trigger value completion after this transaction
+          // The listener will guard against loops by checking completionStatus
+          effects: triggerCompletionEffect.of(null)
         })
-        // Trigger value completion after inserting the attribute
-        setTimeout(() => startCompletion(view), 0)
       }
     }))
 
@@ -2361,10 +2414,27 @@ function transclusionFieldCompletion(
     const transcludeFieldMatch = /(?<!\{)\{\{([^{}|]*?)!![^{}|!]*$/.exec(textBefore)
     // Match {{tiddler## for index completion in transclusions
     const transcludeIndexMatch = /(?<!\{)\{\{([^{}|]*?)##[^{}|#]*$/.exec(textBefore)
-    // Match {tiddler!! for field completion in filter text references (single brace, not double)
-    const textRefFieldMatch = /(?<!\{)\{(?!\{)([^{}]*?)!![^{}!]*$/.exec(textBefore)
-    // Match {tiddler## for index completion in filter text references
-    const textRefIndexMatch = /(?<!\{)\{(?!\{)([^{}]*?)##[^{}#]*$/.exec(textBefore)
+
+    // For single-brace text references, check if we're in a filter context first
+    let textRefFieldMatch: RegExpExecArray | null = null
+    let textRefIndexMatch: RegExpExecArray | null = null
+
+    // Check for filter context: inside [...], {{{ }}}, or filter="..."
+    const inFilterContext = (
+      // Inside filter operand: [...{
+      /\[[^\]]*\{[^{}]*$/.test(textBefore) ||
+      // Inside filtered transclusion: {{{ ... {
+      /\{\{\{[^}]*\{[^{}]*$/.test(textBefore) ||
+      // Inside filter attribute: filter="...{
+      /\bfilter\s*=\s*(?:"[^"]*|'[^']*|"""[^"]*)\{[^{}]*$/.test(textBefore)
+    )
+
+    if (inFilterContext) {
+      // Match {tiddler!! for field completion in filter text references (single brace, not double)
+      textRefFieldMatch = /(?<!\{)\{(?!\{)([^{}]*?)!![^{}!]*$/.exec(textBefore)
+      // Match {tiddler## for index completion in filter text references
+      textRefIndexMatch = /(?<!\{)\{(?!\{)([^{}]*?)##[^{}#]*$/.exec(textBefore)
+    }
 
     // Determine which pattern matched
     const isTransclusion = !!(transcludeFieldMatch || transcludeIndexMatch)
@@ -3047,9 +3117,18 @@ const builtInVariables = [
   "tv-tiddler-preview"
 ]
 
+// Cache for extractLocalDefinitions to avoid re-parsing on every keystroke
+// This is important because multiple completion sources call this function
+// on each completion cycle, and re-parsing the document is expensive.
+let _localDefsCache: {
+  text: string
+  result: ReturnType<typeof extractLocalDefinitions> | null
+} = { text: "", result: null }
+
 /**
  * Extract definition names from document text
  * Finds \define, \procedure, \function, \widget pragmas
+ * Results are cached - the cache is invalidated when the document text changes.
  */
 function extractLocalDefinitions(text: string): {
   functions: string[]
@@ -3062,6 +3141,11 @@ function extractLocalDefinitions(text: string): {
   /** Maps definition names to their parameter names */
   definitionParams: Record<string, string[]>
 } {
+  // Check cache first
+  if (_localDefsCache.text === text && _localDefsCache.result) {
+    return _localDefsCache.result
+  }
+
   const functions: string[] = []
   const procedures: string[] = []
   const macros: string[] = []
@@ -3192,7 +3276,12 @@ function extractLocalDefinitions(text: string): {
     ...widgetVars
   ]
 
-  return { functions, procedures, macros, widgets, widgetVars, builtIns: builtInVariables, variables, definitionParams }
+  const result = { functions, procedures, macros, widgets, widgetVars, builtIns: builtInVariables, variables, definitionParams }
+
+  // Cache the result for subsequent calls with the same text
+  _localDefsCache = { text, result }
+
+  return result
 }
 
 /**
@@ -3211,11 +3300,6 @@ function filterOperandValueCompletion(
     const { state, pos } = context
     const textBefore = state.sliceDoc(Math.max(0, pos - 100), pos)
 
-    // Extract local definitions from current document for functions/variables
-    // Cache per-document to avoid re-parsing on every keystroke
-    const docText = state.doc.toString()
-    const localDefs = extractLocalDefinitions(docText)
-
     // Match: [operator[partial or [operator:suffix[partial or ]operator[partial
     // Pattern breakdown:
     // - [\[\]}>] - start after [, ], }, or > (filter syntax boundaries)
@@ -3224,6 +3308,7 @@ function filterOperandValueCompletion(
     // - ((?::[\w]+)*) - zero or more :suffix segments
     // - \[ - opening bracket for operand
     // - ([^\]]*) - the partial operand text (what user is typing)
+    // Check pattern FIRST before any expensive operations
     const match = /[\[\]}>](!?)([\w.]+)((?::[\w]+)*)\[([^\]]*)$/.exec(textBefore)
     if (!match) return null
 
@@ -3266,6 +3351,10 @@ function filterOperandValueCompletion(
 
     // Dynamic operands based on type
     if (meta.dynamicOperands) {
+      // Only extract local definitions when we need them (for functions/variables)
+      const docText = state.doc.toString()
+      const localDefs = extractLocalDefinitions(docText)
+
       let values: string[] = []
       let localValues: string[] = []
       let detailType = ""

@@ -29,11 +29,33 @@ exports.startup = function() {
 	}
 
 	var LanguageDescription = core.language.LanguageDescription;
+	var LanguageSupport = core.language.LanguageSupport;
+	var latexLanguage = langLatex.latexLanguage;
+	var latexCompletionSource = langLatex.latexCompletionSource;
+
+	// Use latexLanguage directly instead of latex() to avoid autocompletion({override:...})
+	// which would override ALL completion sources in the editor.
+	// Instead, we register completions via languageData which scopes them to LaTeX content only.
+	var latexSupport;
+	if (LanguageSupport && latexLanguage) {
+		var support = [];
+		// Add LaTeX-specific completions via languageData (not override)
+		// latexCompletionSource is a factory: latexCompletionSource(autoCloseTagsEnabled) => CompletionSource
+		if (latexCompletionSource) {
+			// Call the factory to get the actual completion source
+			var actualSource = latexCompletionSource(false);
+			support.push(latexLanguage.data.of({ autocomplete: actualSource }));
+		}
+		latexSupport = new LanguageSupport(latexLanguage, support);
+	} else {
+		// Fallback if latexLanguage isn't available
+		latexSupport = langLatex.latex();
+	}
 
 	core.registerLanguage(LanguageDescription.of({
 		name: "LaTeX",
 		alias: ["latex", "tex"],
 		extensions: ["tex", "latex", "sty", "cls", "ltx"],
-		support: langLatex.latex()
+		support: latexSupport
 	}));
 };

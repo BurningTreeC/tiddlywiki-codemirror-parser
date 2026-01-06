@@ -299,6 +299,40 @@ function getTagNames(): string[] {
 }
 
 /**
+ * Get field names for a specific tiddler
+ * Used for {{tiddler!!field}} completion
+ */
+function getTiddlerFields(tiddlerTitle: string): string[] {
+  if (typeof $tw === "undefined" || !tiddlerTitle) return []
+  try {
+    const wiki = _currentEngine?.widget?.wiki || $tw.wiki
+    if (!wiki) return []
+    const tiddler = wiki.getTiddler(tiddlerTitle)
+    if (!tiddler || !tiddler.fields) return []
+    return Object.keys(tiddler.fields).sort()
+  } catch (e) {
+    return []
+  }
+}
+
+/**
+ * Get index/property names for a specific data tiddler
+ * Used for {{tiddler##index}} completion
+ */
+function getTiddlerIndexes(tiddlerTitle: string): string[] {
+  if (typeof $tw === "undefined" || !tiddlerTitle) return []
+  try {
+    const wiki = _currentEngine?.widget?.wiki || $tw.wiki
+    if (!wiki) return []
+    const data = wiki.getTiddlerDataCached(tiddlerTitle)
+    if (!data || typeof data !== "object") return []
+    return Object.keys(data).sort()
+  } catch (e) {
+    return []
+  }
+}
+
+/**
  * Get macro/procedure/function parameters for autocompletion
  * Uses widget.wiki for proper context (locally defined macros/procedures)
  */
@@ -365,7 +399,9 @@ function buildLanguageSupport(context: CM6PluginContext): Extension {
     getMacroParams,
     getWidgetNames,
     getFilterOperators,
-    getTagNames
+    getTagNames,
+    getTiddlerFields,
+    getTiddlerIndexes
   })
 }
 

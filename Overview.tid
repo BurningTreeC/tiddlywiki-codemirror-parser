@@ -33,6 +33,7 @@ These plugins teach the editor how to understand and colorize different programm
 
 !!! TiddlyWiki Mode
 The most important one! It understands TiddlyWiki's special syntax:
+
 * WikiLinks like `[[My Page]]`
 * Bold `''text''` and italic `//text//`
 * Headings, lists, tables
@@ -42,13 +43,22 @@ The most important one! It understands TiddlyWiki's special syntax:
 * Typed blocks with syntax highlighting (`$$$.js`, `$$$.css`, etc.)
 
 !!! Other Languages
+* ''C++'' - Systems programming and game development
 * ''CSS'' - For styling (colors, fonts, layouts)
+* ''Go'' - Google's programming language for servers
 * ''HTML'' - For web page structure
+* ''Java'' - Enterprise and Android development
 * ''JavaScript'' - The programming language of the web
 * ''JSON'' - For data (like settings files)
+* ''LaTeX'' - For academic papers and math formulas
+* ''Lezer'' - Grammar definition language (for parser developers)
 * ''Markdown'' - Another way to format text
+* ''PHP'' - Server-side web programming
 * ''Python'' - A popular programming language
+* ''Rust'' - Safe systems programming
+* ''Sass/SCSS'' - CSS with superpowers (variables, nesting)
 * ''SQL'' - For database queries
+* ''WAST'' - WebAssembly Text format
 * ''XML'' - For structured data
 * ''YAML'' - For configuration files
 
@@ -108,6 +118,7 @@ Create shortcuts for text you type often. For example, make "hw" expand into "He
 
 !!! Lint (Error Checker)
 Finds potential problems in your code, like:
+
 * Forgetting to close a widget (`<$list>` without `</$list>`)
 * Unclosed brackets or links
 * Undefined macros, procedures, or variables
@@ -126,6 +137,7 @@ Shows how many words, characters, and lines your tiddler has. When you select te
 
 !!! Zen Mode
 Distraction-free writing! Hides everything except your text so you can focus. Features:
+
 * Clean, centered writing area
 * Typewriter mode (keeps your line in the middle of the screen)
 * Can hide everything except what you're typing
@@ -161,6 +173,7 @@ This plugin gives you 10 different looks for the toolbar buttons (the buttons ab
 !! Settings
 
 Most plugins have settings you can change in the Control Panel. Look for "CodeMirror 6" in the settings to:
+
 * Turn features on/off
 * Change how things work
 * Customize the editor to your liking
@@ -196,9 +209,10 @@ Here are some handy shortcuts that work in the editor:
 !! Questions?
 
 If something doesn't work or you're confused:
-1. Make sure the main editor plugin is installed
-2. Check that the plugin is enabled in settings
-3. Try refreshing the page
-4. Check the browser console for error messages (press F12)
+
+# Make sure the main editor plugin is installed
+# Check that the plugin is enabled in settings
+# Try refreshing the page
+# Check the browser console for error messages (press F12)
 
 Happy writing!

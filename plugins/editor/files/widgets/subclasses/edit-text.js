@@ -629,12 +629,27 @@ exports.prototype.handleKeydownEvent = function(event) {
 // ============================================================================
 
 /**
- * Handle messages - first check registered plugins, then fall back to built-in handlers
+ * Handle messages - first check registered plugins, then engine plugins, then fall back to built-in handlers
  */
 exports.prototype.dispatchEvent = function (event) {
-	// Try plugin handlers first
+	// Try plugin registry handlers first
 	if (event.type && pluginRegistry.handleMessage(event.type, this, event)) {
 		return true;
+	}
+
+	// Try engine plugin handlers (codemirror6-plugin modules with onMessage)
+	if (event.type && this.engine && this.engine._activePlugins) {
+		for (var i = 0; i < this.engine._activePlugins.length; i++) {
+			var plugin = this.engine._activePlugins[i];
+			if (plugin.onMessage && typeof plugin.onMessage[event.type] === "function") {
+				try {
+					plugin.onMessage[event.type](this, event);
+					return true;
+				} catch (e) {
+					console.error("CM6 engine plugin message error (" + plugin.name + "." + event.type + "):", e);
+				}
+			}
+		}
 	}
 
 	// Check local event listeners (same as Widget.prototype.dispatchEvent)

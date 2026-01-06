@@ -2105,6 +2105,18 @@ function isLintEnabled(wiki) {
 }
 
 /**
+ * Check if linting is disabled for a specific tiddler
+ * @param {string} tiddlerTitle - The tiddler title
+ * @param {object} wiki - The wiki object (defaults to $tw.wiki)
+ */
+function isLintDisabledForTiddler(tiddlerTitle, wiki) {
+	wiki = wiki || $tw.wiki;
+	if (!wiki || !tiddlerTitle) return false;
+	// Check for per-tiddler disable via temp tiddler
+	return wiki.tiddlerExists("$:/temp/codemirror-6/lint-disabled/" + tiddlerTitle);
+}
+
+/**
  * Build lint extensions array
  */
 function buildLintExtensions(core, context) {
@@ -2167,8 +2179,14 @@ exports.plugin = {
 
 		var core = this._core;
 
-		// If disabled, return empty compartment
+		// If globally disabled, return empty compartment
 		if (!isLintEnabled()) {
+			return [compartment.of([])];
+		}
+
+		// If disabled for this specific tiddler, return empty compartment
+		var tiddlerTitle = context.tiddlerTitle;
+		if (tiddlerTitle && isLintDisabledForTiddler(tiddlerTitle)) {
 			return [compartment.of([])];
 		}
 
@@ -2181,6 +2199,9 @@ exports.plugin = {
 	getCompartmentContent: function(context) {
 		if (!_linter || !_syntaxTree) return [];
 		if (!isLintEnabled()) return [];
+		// Check per-tiddler disable
+		var tiddlerTitle = context.tiddlerTitle;
+		if (tiddlerTitle && isLintDisabledForTiddler(tiddlerTitle)) return [];
 		return buildLintExtensions(this._core, context);
 	},
 
@@ -2194,31 +2215,38 @@ exports.plugin = {
 	 */
 	onRefresh: function(widget, changedTiddlers) {
 		if (!widget || !widget.engine || !widget.engine.view) {
-			console.log("CM6 Lint: onRefresh - no view");
 			return;
 		}
+
+		var engine = widget.engine;
+		var context = engine._pluginContext || {};
+		var tiddlerTitle = context.tiddlerTitle;
 
 		// Check if any lint config tiddlers changed
 		var lintConfigChanged = false;
 		var globalConfigChanged = false;
+		var perTiddlerChanged = false;
+		var perTiddlerDisableTiddler = tiddlerTitle ? "$:/temp/codemirror-6/lint-disabled/" + tiddlerTitle : null;
+
 		for (var title in changedTiddlers) {
 			if (title === "$:/config/codemirror-6/lint") {
 				globalConfigChanged = true;
 				lintConfigChanged = true;
-				break;
 			} else if (title.indexOf("$:/config/codemirror-6/lint/") === 0) {
 				lintConfigChanged = true;
+			} else if (perTiddlerDisableTiddler && title === perTiddlerDisableTiddler) {
+				perTiddlerChanged = true;
 			}
 		}
 
-		if (globalConfigChanged) {
-			// Global lint toggle changed - reconfigure compartment
-			var engine = widget.engine;
+		if (globalConfigChanged || perTiddlerChanged) {
+			// Global lint toggle or per-tiddler toggle changed - reconfigure compartment
 			var compartment = engine._compartments && engine._compartments.lint;
 
 			if (compartment) {
-				var context = engine._pluginContext || {};
-				var enabled = isLintEnabled();
+				var globalEnabled = isLintEnabled();
+				var perTiddlerDisabled = tiddlerTitle && isLintDisabledForTiddler(tiddlerTitle);
+				var enabled = globalEnabled && !perTiddlerDisabled;
 				var newContent = enabled ? buildLintExtensions(this._core, context) : [];
 
 				try {
@@ -2241,11 +2269,14 @@ exports.plugin = {
 			}
 		} else if (lintConfigChanged) {
 			// Individual rule changed - reconfigure to force fresh linter
-			var engine = widget.engine;
 			var compartment = engine._compartments && engine._compartments.lint;
 
 			if (compartment) {
-				var context = engine._pluginContext || {};
+				// Check if lint is actually enabled for this tiddler
+				var globalEnabled = isLintEnabled();
+				var perTiddlerDisabled = tiddlerTitle && isLintDisabledForTiddler(tiddlerTitle);
+				if (!globalEnabled || perTiddlerDisabled) return;
+
 				var newContent = buildLintExtensions(this._core, context);
 				_knownDefinitions = null;
 
@@ -2263,6 +2294,88 @@ exports.plugin = {
 						_forceLinting(engine.view);
 					}, 50);
 				}
+			}
+		}
+	},
+
+	/**
+	 * Message handlers for toolbar button interactions
+	 */
+	onMessage: {
+		/**
+		 * Handle tm-cm6-toggle-lint message from toolbar button
+		 * Toggles the per-tiddler lint setting and reconfigures the compartment
+		 */
+		"tm-cm6-toggle-lint": function(widget, event) {
+			if (!widget || !widget.engine || !widget.engine.view) {
+				return;
+			}
+
+			var engine = widget.engine;
+			var context = engine._pluginContext || {};
+			var tiddlerTitle = context.tiddlerTitle;
+			var compartment = engine._compartments && engine._compartments.lint;
+
+			if (!compartment || !tiddlerTitle) {
+				return;
+			}
+
+			var globalEnabled = isLintEnabled();
+			var perTiddlerDisabled = isLintDisabledForTiddler(tiddlerTitle);
+			var currentlyEnabled = globalEnabled && !perTiddlerDisabled;
+
+			// Toggle the per-tiddler state by creating/deleting the temp tiddler
+			var disableTiddler = "$:/temp/codemirror-6/lint-disabled/" + tiddlerTitle;
+			if (perTiddlerDisabled) {
+				// Currently disabled for this tiddler - delete the temp tiddler to enable
+				$tw.wiki.deleteTiddler(disableTiddler);
+			} else {
+				// Currently enabled - create the temp tiddler to disable
+				$tw.wiki.addTiddler({
+					title: disableTiddler,
+					text: "disabled"
+				});
+			}
+
+			// Calculate the NEW state after toggle
+			var newPerTiddlerDisabled = !perTiddlerDisabled;
+			var newEnabled = globalEnabled && !newPerTiddlerDisabled;
+
+			// Get the plugin instance to access _core
+			var lintPlugin = null;
+			if ($tw && $tw.modules) {
+				var plugins = $tw.modules.types["codemirror6-plugin"];
+				for (var moduleName in plugins) {
+					var mod = plugins[moduleName];
+					if (mod && mod.plugin && mod.plugin.name === "lint") {
+						lintPlugin = mod.plugin;
+						break;
+					}
+				}
+			}
+
+			if (!lintPlugin || !lintPlugin._core) {
+				return;
+			}
+
+			var newContent = newEnabled ? buildLintExtensions(lintPlugin._core, context) : [];
+
+			try {
+				engine.view.dispatch({
+					effects: compartment.reconfigure(newContent)
+				});
+			} catch (e) {
+				console.error("CM6 Lint: toggle reconfigure error:", e);
+			}
+
+			// Clear cache
+			_knownDefinitions = null;
+
+			// If enabling, trigger linting after a short delay
+			if (newEnabled && _forceLinting) {
+				setTimeout(function() {
+					_forceLinting(engine.view);
+				}, 50);
 			}
 		}
 	}

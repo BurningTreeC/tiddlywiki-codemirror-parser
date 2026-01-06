@@ -3,6 +3,41 @@ tags:
 
 ! Changelog
 
+!! Version 0.0.18
+
+!!! Bug Fixes
+
+* ''Multiline Macro Attributes'' - Attributes in multiline macros now parse and highlight correctly
+** Previously `<<tabs\n    explicitState:""\n>>` would not highlight `explicitState:""` as an attribute
+** Block-level macro parser now always looks for `>>` on subsequent lines
+
+* ''Autocomplete Flickering'' - Fixed dropdown constantly re-rendering
+** Root cause: `languageData.of()` callback in engine.js was returning new array/object references on every state change
+** CodeMirror interpreted this as completion sources changing, triggering constant re-evaluation
+** Fix: Cache the wrapper objects and return same references
+
+* ''Duplicate Completions'' - Fixed widgets like `<$list` appearing 4 times
+** TiddlyWiki language was being registered twice (via `registerLanguage()` and `codeLanguages`)
+** Now filtered from `codeLanguages` loop to prevent duplication
+
+* ''Escape Key Not Closing Popup'' - Autocomplete popup now closes on Escape
+** Previously Escape was handled by TiddlyWiki, closing the tiddler instead
+** Now checks for both "active" and "pending" completion states
+
+* ''Transclusion Field/Index Completion'' - Fixed `{{tiddler!!field}}` and `{{tiddler##index}}` completion not working
+** Plugin entry point was missing `getTiddlerFields` and `getTiddlerIndexes` callbacks
+** Fixed TiddlyWiki language being re-initialized without callbacks when used as nested code language
+** `getCodeParser` now skips TiddlyWiki to avoid circular re-initialization
+
+* ''Filter Text Reference Completion'' - `{tiddler!!field}` now only triggers inside filter contexts
+** Single-brace text references only complete inside `[...{`, `{{{...{`, or `filter="...{`
+** Double-brace transclusions `{{tiddler!!` still work anywhere
+
+* ''Snippets Don't Interfere'' - Snippet completions no longer trigger during field/index completion
+** Snippets are suppressed when typing `{{tiddler!!` or `{{tiddler##`
+
+---
+
 !! Version 0.0.17
 
 !!! New Language Plugins
@@ -19,6 +54,12 @@ tags:
 ** LaTeX
 
 !!! Linting Improvements
+
+* ''Per-Tiddler Lint Toggle'' - Disable/enable linting on a per-tiddler basis via toolbar button
+** New toolbar button to toggle linting for the current tiddler
+** Uses temporary tiddlers (`$:/temp/codemirror-6/lint-disabled/`) - settings are session-based
+** Visual feedback: button appears dimmed with strikethrough when lint is disabled
+** Linting reconfigures dynamically without reload when toggled
 
 * ''JSON Linting'' - Built-in JSON syntax validation using CodeMirror's `jsonParseLinter`
 ** Highlights JSON syntax errors in real-time

@@ -164,6 +164,11 @@ function isInRestrictedContext(context) {
 		return true; // Inside an attribute value
 	}
 
+	// Check for transclusion field/index completion context: {{tiddler!! or {{tiddler##
+	if (/\{\{[^{}]*!![^{}]*$/.test(textBefore) || /\{\{[^{}]*##[^{}]*$/.test(textBefore)) {
+		return true; // Inside transclusion field/index completion
+	}
+
 	return false;
 }
 

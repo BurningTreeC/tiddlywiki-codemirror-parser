@@ -3,7 +3,7 @@
     "name": "Toolbar Styles",
     "description": "10 different toolbar button styles from elegant to fancy",
     "author": "BurningTreeC",
-    "version": "0.0.17",
+    "version": "0.0.18",
     "core-version": ">=5.3.0",
     "plugin-type": "plugin",
     "dependents": "$:/plugins/BurningTreeC/tiddlywiki-codemirror",

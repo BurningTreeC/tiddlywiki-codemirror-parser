@@ -47,6 +47,8 @@ exports.synchronous = true;
 var _cache = {
 	tiddlers: null,
 	tiddlersTime: 0,
+	imageTiddlers: null,
+	imageTiddlersTime: 0,
 	macros: null,
 	macroParams: null,
 	widgets: null,
@@ -58,7 +60,11 @@ var _cache = {
 	functions: null,
 	functionsTime: 0,
 	variables: null,
-	variablesTime: 0
+	variablesTime: 0,
+	storyViews: null,
+	deserializers: null,
+	selfClosingWidgets: null,
+	selfClosingWidgetsTime: 0
 };
 
 var CACHE_TTL = 5000; // 5 seconds
@@ -69,6 +75,8 @@ var CACHE_TTL = 5000; // 5 seconds
 function clearCache() {
 	_cache.tiddlers = null;
 	_cache.tiddlersTime = 0;
+	_cache.imageTiddlers = null;
+	_cache.imageTiddlersTime = 0;
 	_cache.macros = null;
 	_cache.macroParams = null;
 	_cache.widgets = null;
@@ -81,6 +89,10 @@ function clearCache() {
 	_cache.functionsTime = 0;
 	_cache.variables = null;
 	_cache.variablesTime = 0;
+	_cache.storyViews = null;
+	_cache.deserializers = null;
+	_cache.selfClosingWidgets = null;
+	_cache.selfClosingWidgetsTime = 0;
 }
 
 // ============================================================================
@@ -88,15 +100,23 @@ function clearCache() {
 // ============================================================================
 
 /**
- * Get image tiddler titles for [img[ autocompletion
+ * Get image tiddler titles for [img[ autocompletion (cached)
  * Returns tiddlers with type starting with "image/"
  */
 function getImageTiddlerTitles() {
+	var now = Date.now();
+	if (_cache.imageTiddlers && (now - _cache.imageTiddlersTime) < CACHE_TTL) {
+		return _cache.imageTiddlers;
+	}
+
 	var titles = [];
 	if ($tw && $tw.wiki) {
 		titles = $tw.wiki.filterTiddlers("[all[tiddlers+shadows]is[image]]");
 	}
-	return titles || [];
+
+	_cache.imageTiddlers = titles || [];
+	_cache.imageTiddlersTime = now;
+	return _cache.imageTiddlers;
 }
 
 /**
@@ -489,10 +509,12 @@ function getFunctionNames() {
 }
 
 /**
- * Get storyview names for $list widget storyview attribute completion
+ * Get storyview names for $list widget storyview attribute completion (cached)
  * Returns simple string array
  */
 function getStoryViews() {
+	if (_cache.storyViews) return _cache.storyViews;
+
 	var storyviews = [];
 	var seen = {};
 
@@ -509,14 +531,17 @@ function getStoryViews() {
 		}
 	});
 
-	return storyviews.sort();
+	_cache.storyViews = storyviews.sort();
+	return _cache.storyViews;
 }
 
 /**
- * Get deserializer names for deserializer attribute completion
+ * Get deserializer names for deserializer attribute completion (cached)
  * Returns simple string array of MIME types
  */
 function getDeserializers() {
+	if (_cache.deserializers) return _cache.deserializers;
+
 	var deserializers = [];
 	var seen = {};
 
@@ -532,7 +557,8 @@ function getDeserializers() {
 		}
 	});
 
-	return deserializers.sort();
+	_cache.deserializers = deserializers.sort();
+	return _cache.deserializers;
 }
 
 /**
@@ -612,13 +638,22 @@ exports.startup = function() {
 
 	var LanguageDescription = core.language.LanguageDescription;
 
-	// Callback to get self-closing widgets config (called dynamically for live updates)
+	// Callback to get self-closing widgets config (cached with TTL for live updates)
 	function getSelfClosingWidgets() {
+		var now = Date.now();
+		if (_cache.selfClosingWidgets && (now - _cache.selfClosingWidgetsTime) < CACHE_TTL) {
+			return _cache.selfClosingWidgets;
+		}
+
 		var text = $tw.wiki.getTiddlerText("$:/config/codemirror-6/selfClosingWidgets", "");
-		return text
+		var widgets = text
 			.split(/[\s,]+/)
 			.map(function(w) { return w.trim(); })
 			.filter(function(w) { return w.length > 0; });
+
+		_cache.selfClosingWidgets = widgets;
+		_cache.selfClosingWidgetsTime = now;
+		return _cache.selfClosingWidgets;
 	}
 
 	// Cache for widget attributes (parsed from widget source code)

@@ -490,22 +490,39 @@ export const tiddlywikiLanguage = mkLang(configured)
 
 /**
  * Get a code parser for nested code blocks
+ * @param tiddlywikiParser - Optional TiddlyWiki parser to use directly (avoids re-loading TiddlyWiki language)
  */
 export function getCodeParser(
   languages: readonly LanguageDescription[] | ((info: string) => Language | LanguageDescription | null) | undefined,
-  defaultLanguage?: Language
+  defaultLanguage?: Language,
+  tiddlywikiParser?: TiddlyWikiParser
 ) {
+  // TiddlyWiki aliases - skip loading these via LanguageDescription to avoid circular re-initialization
+  const twAliases = ["tiddlywiki", "wikitext", "tw", "tw5"]
+
   return (info: string) => {
     if (info && languages) {
       let found = null
       // Strip anything after whitespace
       info = /\S*/.exec(info)![0]
+
+      // Check if this is TiddlyWiki - use passed parser directly instead of loading via LanguageDescription
+      if (twAliases.includes(info.toLowerCase())) {
+        return tiddlywikiParser ?? defaultLanguage?.parser ?? null
+      }
+
       if (typeof languages === "function") {
         found = languages(info)
       } else {
         found = LanguageDescription.matchLanguageName(languages, info, true)
       }
       if (found instanceof LanguageDescription) {
+        // Double-check: skip TiddlyWiki to avoid re-loading (matchLanguageName might find it)
+        const langName = found.name?.toLowerCase() || ""
+        const langAlias = found.alias?.map((a: string) => a.toLowerCase()) || []
+        if (langName === "tiddlywiki" || twAliases.some(a => langAlias.includes(a))) {
+          return tiddlywikiParser ?? defaultLanguage?.parser ?? null
+        }
         return found.support ? found.support.language.parser : ParseContext.getSkippingParser(found.load())
       } else if (found) {
         return found.parser

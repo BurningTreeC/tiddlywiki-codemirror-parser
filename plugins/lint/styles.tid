@@ -91,3 +91,34 @@ tags: $:/tags/Stylesheet
 .cm-panel.cm-lint-panel li:hover {
     background: var(--color-muted-background, #e9ecef);
 }
+
+/* Lint toggle toolbar button */
+.cm6-toolbar-btn-lint {
+    position: relative;
+}
+
+/* When lint is enabled - normal icon appearance */
+.cm6-lint-enabled svg {
+    opacity: 1;
+}
+
+/* When lint is disabled - dimmed appearance with strikethrough */
+.cm6-lint-disabled {
+    position: relative;
+}
+
+.cm6-lint-disabled svg {
+    opacity: 0.4;
+}
+
+.cm6-lint-disabled::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 10%;
+    right: 10%;
+    height: 2px;
+    background: currentColor;
+    transform: rotate(-45deg);
+    opacity: 0.7;
+}

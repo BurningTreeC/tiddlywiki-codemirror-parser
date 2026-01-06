@@ -11,6 +11,7 @@ LaTeX language support for CodeMirror 6
 "use strict";
 
 var langLatex = require("$:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/lang-latex/lang-latex.js");
+var cmAutocomplete = require("$:/plugins/BurningTreeC/tiddlywiki-codemirror/lib/codemirror-autocomplete.js");
 
 // Content types that activate this plugin
 var LATEX_TYPES = [
@@ -22,6 +23,47 @@ var LATEX_TYPES = [
 
 var TAGS_CONFIG_TIDDLER = "$:/config/codemirror-6/lang-latex/tags";
 var hasConfiguredTag = require("$:/plugins/BurningTreeC/tiddlywiki-codemirror/utils.js").hasConfiguredTag;
+
+// Cache the LanguageSupport for LaTeX with properly scoped autocompletion
+var _latexSupport = null;
+
+function getLatexSupport(core) {
+	if (_latexSupport) return _latexSupport;
+
+	// Use latexLanguage directly (without latex() which includes autocompletion with override)
+	// The override option in latex() replaces ALL completion sources, breaking other languages.
+	// Instead, we register completions via languageData which scopes them to LaTeX content only.
+	var LanguageSupport = core.language.LanguageSupport;
+	var latexLanguage = langLatex.latexLanguage;
+	var latexCompletionSource = langLatex.latexCompletionSource;
+	var autocompletion = cmAutocomplete.autocompletion;
+
+	if (LanguageSupport && latexLanguage) {
+		// Create LanguageSupport with LaTeX completions scoped to LaTeX content
+		var support = [];
+
+		// Add LaTeX-specific completions via languageData (not override)
+		// latexCompletionSource is a factory: latexCompletionSource(autoCloseTagsEnabled) => CompletionSource
+		if (latexCompletionSource) {
+			// Call the factory to get the actual completion source
+			var actualSource = latexCompletionSource(false);
+			support.push(latexLanguage.data.of({ autocomplete: actualSource }));
+		}
+
+		// Add autocompletion extension - needed for pure LaTeX tiddlers where
+		// TiddlyWiki plugin isn't active. For TiddlyWiki content, the TiddlyWiki
+		// plugin provides autocompletion, but this plugin won't be active then.
+		if (autocompletion) {
+			support.push(autocompletion({ activateOnTyping: true }));
+		}
+
+		_latexSupport = new LanguageSupport(latexLanguage, support);
+	} else {
+		// Fallback to full latex() if we can't create a custom version
+		_latexSupport = langLatex.latex();
+	}
+	return _latexSupport;
+}
 
 exports.plugin = {
 	name: "lang-latex",
@@ -48,7 +90,7 @@ exports.plugin = {
 	},
 
 	getCompartmentContent: function(context) {
-		return [langLatex.latex()];
+		return [getLatexSupport(this._core)];
 	},
 
 	getExtensions: function(context) {
