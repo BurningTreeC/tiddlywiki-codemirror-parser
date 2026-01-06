@@ -2,7 +2,7 @@
     "title": "$:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/theme-gruvbox",
     "name": "CodeMirror 6 Gruvbox Theme",
     "description": "Gruvbox color scheme for CodeMirror 6 (dark, dark-hard, light, light-hard variants)",
-    "version": "0.0.19",
+    "version": "0.0.20",
     "plugin-type": "plugin",
     "dependents": "$:/plugins/BurningTreeC/tiddlywiki-codemirror",
     "list": "readme styles license",

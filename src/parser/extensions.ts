@@ -842,8 +842,13 @@ export function tiddlywiki(config: TiddlyWikiLanguageConfig = {}): LanguageSuppo
     support.push(lang.data.of({
       autocomplete: (context: CompletionContext) => {
         // Skip for widget contexts - our custom sources handle those
-        const textBefore = context.state.sliceDoc(Math.max(0, context.pos - 25), context.pos)
+        const textBefore = context.state.sliceDoc(Math.max(0, context.pos - 100), context.pos)
+        // Skip widget name completion: <$widg
         if (/<\$[\w\-\.]*$/.test(textBefore)) {
+          return null
+        }
+        // Skip widget attribute completion: <$widget attr (inside widget tag)
+        if (/<\$[\w\-\.]+\s+[^>]*$/.test(textBefore)) {
           return null
         }
         return htmlCompletionSource(context)
