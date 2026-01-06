@@ -1,0 +1,9 @@
+title: $:/plugins/BurningTreeC/plugin-combiner/readme
+
+! Plugin Combiner
+
+A utility plugin for combining multiple TiddlyWiki plugins into a single package.
+
+!! Usage
+
+This plugin provides tools for plugin developers to merge multiple plugins into one distributable package, reducing the number of separate plugins users need to install.

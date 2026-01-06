@@ -12,8 +12,25 @@ Provides TiddlyWiki-specific completion callbacks for tiddlers, macros, widgets,
 "use strict";
 
 exports.name = "cm6-lang-tiddlywiki";
+
 // Run after other language modules so core.getLanguages() includes them (e.g., CSS for <style> tags)
-exports.after = ["startup", "cm6-lang-css", "cm6-lang-javascript", "cm6-lang-json", "cm6-lang-html", "cm6-lang-markdown", "cm6-lang-python", "cm6-lang-xml", "cm6-lang-yaml", "cm6-lang-sql"];
+// Dynamically discover which language modules exist
+(function() {
+	var baseDeps = ["startup"];
+
+	if ($tw && $tw.modules && $tw.modules.forEachModuleOfType) {
+		$tw.modules.forEachModuleOfType("startup", function(title, mod) {
+			if (mod.name &&
+			    mod.name.indexOf("cm6-lang-") === 0 &&
+			    mod.name !== "cm6-lang-tiddlywiki") {
+				baseDeps.push(mod.name);
+			}
+		});
+	}
+
+	exports.after = baseDeps;
+})();
+
 exports.before = ["render"];
 exports.synchronous = true;
 
@@ -65,21 +82,34 @@ function clearCache() {
 // ============================================================================
 
 /**
+ * Get image tiddler titles for [img[ autocompletion
+ * Returns tiddlers with type starting with "image/"
+ */
+function getImageTiddlerTitles() {
+	var titles = [];
+	if ($tw && $tw.wiki) {
+		titles = $tw.wiki.filterTiddlers("[all[tiddlers+shadows]is[image]]");
+	}
+	return titles || [];
+}
+
+/**
  * Get all tiddler titles including shadow tiddlers (cached)
  * Returns simple string array for use with language-support.ts
+ * Sorted with non-system tiddlers first, then system tiddlers
+ * @param {object} wiki - The wiki object (defaults to $tw.wiki)
  */
-function getTiddlerTitles() {
+function getTiddlerTitles(wiki) {
 	var now = Date.now();
 	if (_cache.tiddlers && (now - _cache.tiddlersTime) < CACHE_TTL) {
 		return _cache.tiddlers;
 	}
 
+	wiki = wiki || $tw.wiki;
 	var titles = [];
-	if ($tw && $tw.wiki) {
-		// Use eachShadowPlusTiddlers to include shadow tiddlers (like $:/core/ui/...)
-		$tw.wiki.eachShadowPlusTiddlers(function(tiddler, title) {
-			titles.push(title);
-		});
+	if (wiki) {
+		// Get all tiddlers and shadow tiddlers, non-system first then system
+		titles = wiki.filterTiddlers("[all[tiddlers+shadows]!is[system]sort[title]] [all[tiddlers+shadows]is[system]sort[title]]");
 	}
 
 	_cache.tiddlers = titles;
@@ -453,6 +483,53 @@ function getFunctionNames() {
 }
 
 /**
+ * Get storyview names for $list widget storyview attribute completion
+ * Returns simple string array
+ */
+function getStoryViews() {
+	var storyviews = [];
+	var seen = {};
+
+	$tw.modules.forEachModuleOfType("storyview", function(title, mod) {
+		// The storyview name is typically derived from the module title
+		// e.g., "$:/core/modules/storyviews/classic.js" -> "classic"
+		var match = /\/([^\/]+)\.js$/.exec(title);
+		if (match) {
+			var name = match[1];
+			if (!seen[name]) {
+				seen[name] = true;
+				storyviews.push(name);
+			}
+		}
+	});
+
+	return storyviews.sort();
+}
+
+/**
+ * Get deserializer names for deserializer attribute completion
+ * Returns simple string array of MIME types
+ */
+function getDeserializers() {
+	var deserializers = [];
+	var seen = {};
+
+	$tw.modules.forEachModuleOfType("tiddlerdeserializer", function(title, mod) {
+		// Each deserializer module exports functions keyed by MIME type
+		for (var mimeType in mod) {
+			if (mod.hasOwnProperty(mimeType) && typeof mod[mimeType] === "function") {
+				if (!seen[mimeType]) {
+					seen[mimeType] = true;
+					deserializers.push(mimeType);
+				}
+			}
+		}
+	});
+
+	return deserializers.sort();
+}
+
+/**
  * Get variable names (from \define, \procedure, \widget, \function)
  * Returns simple string array
  */
@@ -613,6 +690,7 @@ exports.startup = function() {
 
 			// Completion callbacks - provide TiddlyWiki data to the parser
 			getTiddlerTitles: getTiddlerTitles,
+			getImageTiddlerTitles: getImageTiddlerTitles,
 			getMacroNames: getMacroNames,
 			getMacroParams: getMacroParams,
 			getWidgetNames: getWidgetNames,
@@ -624,6 +702,8 @@ exports.startup = function() {
 			getVariableNames: getVariableNames,
 			getTiddlerIndexes: getTiddlerIndexes,
 			getTiddlerFields: getTiddlerFields,
+			getStoryViews: getStoryViews,
+			getDeserializers: getDeserializers,
 
 			// Enable all completions
 			completeTiddlers: true,

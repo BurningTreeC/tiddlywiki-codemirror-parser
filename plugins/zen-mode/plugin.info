@@ -2,7 +2,7 @@
     "title": "$:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/zen-mode",
     "name": "CodeMirror 6 Zen Mode",
     "description": "Distraction-free writing mode for CodeMirror 6 with focus modes, typewriter scrolling, and live statistics",
-    "version": "0.0.15",
+    "version": "0.0.16",
     "plugin-type": "plugin",
     "dependents": "$:/plugins/BurningTreeC/tiddlywiki-codemirror",
     "list": "readme settings license",

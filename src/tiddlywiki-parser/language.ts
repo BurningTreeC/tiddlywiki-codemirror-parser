@@ -410,6 +410,13 @@ const configured = baseParser.configure({
             if (DEBUG_INDENT) console.log(`  -> ${baseIndent + context.unit} (prev line is opening tag)`)
             return baseIndent + context.unit
           }
+
+          // Check for \end on previous line - stay at same indent as \end
+          if (/^\s*\\end(?:\s|$)/.test(prevLineText)) {
+            const endLineIndent = getLineIndent(context, prevLine.from)
+            if (DEBUG_INDENT) console.log(`  -> ${endLineIndent} (prev line is \\end)`)
+            return endLineIndent
+          }
         }
 
         return null

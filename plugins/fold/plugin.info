@@ -3,7 +3,7 @@
     "name": "Fold",
     "description": "CodeMirror 6 code folding with TiddlyWiki syntax support",
     "author": "BurningTreeC",
-    "version": "0.0.15",
+    "version": "0.0.16",
     "core-version": ">=5.3.0",
     "plugin-type": "plugin",
     "dependents": "$:/plugins/BurningTreeC/tiddlywiki-codemirror",

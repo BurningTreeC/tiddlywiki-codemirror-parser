@@ -192,6 +192,9 @@ export enum Type {
   FilterSubstitutionMark, // ${ and }$
   Placeholder,          // $param$ in macro definitions
   PlaceholderMark,      // $ in $param$
+  SubstitutedParam,     // __param__ in macro calls/filter variables
+  SubstitutedParamMark, // __ in __param__
+  SubstitutedParamName, // param in __param__
 
   // Filter expression components
   FilterRun,            // A run in a filter (space-separated)

@@ -82,6 +82,12 @@ export {
   insertHorizontalRule
 } from "./commands"
 
+// Re-export linter
+export {
+  substitutedParamLinter,
+  tiddlywikiLinter
+} from "./linter"
+
 // ============================================================================
 // Paste URL as Link Extension
 // ============================================================================

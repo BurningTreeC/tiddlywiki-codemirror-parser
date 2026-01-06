@@ -156,6 +156,9 @@ const defaultStyleTags = styleTags({
   FilterSubstitutionMark: t.processingInstruction,
   Placeholder: t.special(t.variableName),
   PlaceholderMark: t.processingInstruction,
+  SubstitutedParam: t.special(t.variableName),
+  SubstitutedParamMark: t.processingInstruction,
+  SubstitutedParamName: t.variableName,
   HardBreak: t.processingInstruction,
 
   // Filter expression components

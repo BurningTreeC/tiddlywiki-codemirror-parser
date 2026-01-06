@@ -179,11 +179,28 @@ function parseFilterBody(filterContent: string, offset: number): Element[] {
           stepChildren.push(elt(Type.FilterOperand, offset + operandStart, offset + pos))
           if (pos < len && filterContent[pos] === ']') pos++
         } else if (operandCh === '<') {
-          // Variable: <varname>
+          // Variable: <varname> or <__param__>
           pos++
           const operandStart = pos
           while (pos < len && filterContent[pos] !== '>') pos++
-          stepChildren.push(elt(Type.FilterVariable, offset + operandStart, offset + pos))
+          const varContent = filterContent.slice(operandStart, pos)
+          // Always create SubstitutedParam for __param__ pattern for proper syntax highlighting
+          // (linter can validate if param is actually defined)
+          const substitutedMatch = /^__([^_]+)__$/.exec(varContent)
+          if (substitutedMatch) {
+            const paramName = substitutedMatch[1]
+            const varStart = offset + operandStart - 1  // Include <
+            const varEnd = offset + pos + 1  // Include >
+            const innerStart = offset + operandStart
+            const nameChildren: Element[] = [
+              elt(Type.SubstitutedParamMark, innerStart, innerStart + 2),  // __
+              elt(Type.SubstitutedParamName, innerStart + 2, innerStart + 2 + paramName.length),
+              elt(Type.SubstitutedParamMark, innerStart + 2 + paramName.length, offset + pos),  // __
+            ]
+            stepChildren.push(elt(Type.SubstitutedParam, varStart, varEnd, nameChildren))
+          } else {
+            stepChildren.push(elt(Type.FilterVariable, offset + operandStart, offset + pos))
+          }
           if (pos < len) pos++
         } else if (operandCh === '{') {
           // Text reference: {textref}
@@ -325,6 +342,7 @@ export const MacroDefPragma: PragmaParser = {
             elt(Type.PragmaName, pragmaStart + text.indexOf(name), pragmaStart + text.indexOf(name) + name.length),
           ]
 
+          // Parse parameters
           if (paramStr) {
             const paramStart = pragmaStart + text.indexOf("(") + 1
             children.push(...parseParams(paramStr, paramStart))

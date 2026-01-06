@@ -142,9 +142,9 @@ function normalizeIndent(content: string, state: EditorState): string {
 // Insert Newline Continue Markup Command
 // ============================================================================
 
-/// Konfigurierbare Version des Continue-Markup Befehls
-export const insertNewlineContinueMarkupCommand = (config: {
-  /// Verhalten bei leerem zweiten Listen-Item
+/// Configurable version of the continue-markup command
+export const insertNewlineContinueMarkupCommand = (_config: {
+  /// Unused - kept for backward compatibility
   nonTightLists?: boolean
 } = {}): StateCommand => ({state, dispatch}) => {
   let tree = syntaxTree(state)
@@ -219,12 +219,16 @@ export const insertNewlineContinueMarkupCommand = (config: {
       // Get the indentation for the next line from the language
       let indent = getIndentation(state, pos)
 
-      // Fallback: if indentation is null/0, check line text for patterns that need indentation
-      if (indent == null || indent === 0) {
-        // Check for patterns that need indentation on next line
-        const trimmed = lineText.trim()
-        const textAfterCursorTrimmed = textAfterCursor.trim()
+      const trimmed = lineText.trim()
+      const textAfterCursorTrimmed = textAfterCursor.trim()
 
+      // After \end - always use the \end line's indent (same as the opening pragma)
+      // This check must be outside the fallback to override getIndentation's result
+      if (/^\\end(?:\s|$)/.test(trimmed) && textAfterCursorTrimmed === "") {
+        indent = baseIndent
+      }
+      // Fallback: if indentation is null/0, check line text for patterns that need indentation
+      else if (indent == null || indent === 0) {
         // If line is empty (just whitespace), preserve current indentation
         if (trimmed === "") {
           indent = baseIndent
@@ -272,27 +276,23 @@ export const insertNewlineContinueMarkupCommand = (config: {
     
     let emptyLine = pos >= (inner.to - inner.spaceAfter.length) && !/\S/.test(line.text.slice(inner.to))
     
-    // Leere Zeile in Liste - Markup entfernen
+    // Empty line in list - remove markup
+    // For TiddlyWiki, always remove the list marker when pressing Enter on an empty list line
     if (inner.item && emptyLine) {
-      let first = inner.node.firstChild!
-      let second = inner.node.getChild("ListItem", "ListItem")
-      
-      if (first.to >= pos || second && second.to < pos ||
-          line.from > 0 && !/[^\s>]/.test(doc.lineAt(line.from - 1).text) ||
-          config.nonTightLists === false) {
-        let next = context.length > 1 ? context[context.length - 2] : null
-        let delTo: number, insert = ""
-        
-        if (next && next.item) {
-          delTo = line.from + next.from
-          insert = next.marker(doc, 1)
-        } else {
-          delTo = line.from + (next ? next.to : 0)
-        }
-        
-        let changes: ChangeSpec[] = [{from: delTo, to: pos, insert}]
-        return {range: EditorSelection.cursor(delTo + insert.length), changes}
+      let next = context.length > 1 ? context[context.length - 2] : null
+      let delTo: number, insert = ""
+
+      if (next && next.item) {
+        // Nested list - revert to outer list level
+        delTo = line.from + next.from
+        insert = next.marker(doc, 1)
+      } else {
+        // Top-level list - remove marker entirely
+        delTo = line.from + (next ? next.to : 0)
       }
+
+      let changes: ChangeSpec[] = [{from: delTo, to: pos, insert}]
+      return {range: EditorSelection.cursor(delTo + insert.length), changes}
     }
     
     let changes: ChangeSpec[] = []
@@ -942,7 +942,7 @@ export const indentList: StateCommand = ({state, dispatch}) => {
  * - "## text" → "# text"
  * - "*## text" → "*# text" (removes the last marker #)
  * - "*#** text" → "*#* text" (removes the last marker *)
- * Does nothing if already at level 1
+ * - "* text" → "text" (removes single marker, converting to paragraph)
  * Supports multi-line selections - all list lines in selection are outdented
  */
 export const outdentList: StateCommand = ({state, dispatch}) => {
@@ -983,15 +983,26 @@ export const outdentList: StateCommand = ({state, dispatch}) => {
         continue
       }
 
-      // Check if it's a level-1 list (still counts as having a list line)
-      if (/^([*#>]|[;:]) /.test(lineText)) {
+      // Match single list marker: *, #, or > followed by space - remove marker and space
+      let singleListMatch = /^([*#>]) /.exec(lineText)
+      if (singleListMatch) {
+        changes.push({from: line.from, to: line.from + 2}) // Remove marker + space
         hasListLine = true
+        continue
+      }
+
+      // Match single definition marker: ; or : followed by space - remove marker and space
+      let singleDefMatch = /^([;:]) /.exec(lineText)
+      if (singleDefMatch) {
+        changes.push({from: line.from, to: line.from + 2}) // Remove marker + space
+        hasListLine = true
+        continue
       }
     }
   }
 
   if (!hasListLine) return false
-  if (changes.length === 0) return true // Already at level 1, consume the key
+  if (changes.length === 0) return true // No changes needed
 
   // Apply changes and let CodeMirror adjust selection automatically
   dispatch(state.update({

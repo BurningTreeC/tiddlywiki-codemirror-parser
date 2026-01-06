@@ -27,7 +27,8 @@ exports.plugin = {
 	priority: 40,
 
 	condition: function(context) {
-		return $tw.wiki.getTiddlerText(CONFIG_TIDDLER) === "yes";
+		var wiki = context.options && context.options.widget && context.options.widget.wiki;
+		return wiki && wiki.getTiddlerText(CONFIG_TIDDLER) === "yes";
 	},
 
 	init: function(cm6Core) {
@@ -71,40 +72,39 @@ exports.plugin = {
 			swatch.style.backgroundColor = this.color;
 			swatch.title = "Click to edit color: " + this.color;
 
-			var from = this.from;
-			var to = this.to;
-			var currentColor = this.color;
+			var currentFrom = this.from;
+			var currentTo = this.to;
 
+			// For mobile compatibility, we create an always-present but hidden color input
+			// that responds to direct touch/click events
+			var picker = document.createElement("input");
+			picker.type = "color";
+			picker.className = "cm-color-picker-input";
+			picker.value = self._toHex(this.color);
+			// Position it over the swatch so touch events hit it directly
+			picker.style.cssText = "position:absolute;top:0;left:0;width:100%;height:100%;opacity:0;cursor:pointer;border:none;padding:0;";
+			wrapper.style.position = "relative";
+			wrapper.appendChild(picker);
+
+			picker.addEventListener("input", function() {
+				var newColor = picker.value;
+				var newLength = newColor.length;
+				// Update swatch color immediately for visual feedback
+				swatch.style.backgroundColor = newColor;
+				// Replace the color at current tracked position
+				view.dispatch({
+					changes: { from: currentFrom, to: currentTo, insert: newColor }
+				});
+				// Update tracked position for next input event
+				// The 'to' position changes based on the new color length
+				currentTo = currentFrom + newLength;
+			});
+
+			// Also handle the swatch click for desktop fallback
 			swatch.addEventListener("click", function(e) {
 				e.preventDefault();
 				e.stopPropagation();
-
-				// Create color input
-				var picker = document.createElement("input");
-				picker.type = "color";
-				picker.value = self._toHex(currentColor);
-				picker.style.position = "absolute";
-				picker.style.opacity = "0";
-				picker.style.pointerEvents = "none";
-				document.body.appendChild(picker);
-
-				picker.addEventListener("input", function() {
-					var newColor = picker.value;
-					view.dispatch({
-						changes: { from: from, to: to, insert: newColor }
-					});
-				});
-
-				picker.addEventListener("change", function() {
-					document.body.removeChild(picker);
-				});
-
-				picker.addEventListener("blur", function() {
-					if (document.body.contains(picker)) {
-						document.body.removeChild(picker);
-					}
-				});
-
+				picker.focus();
 				picker.click();
 			});
 
@@ -159,9 +159,25 @@ exports.plugin = {
 			var match;
 			HEX_COLOR.lastIndex = 0;
 			while ((match = HEX_COLOR.exec(text)) !== null) {
-				// Skip if # is at start of line (numbered list in TiddlyWiki)
+				// Skip if # is at start of line or has only whitespace before it
+				// (numbered list in TiddlyWiki)
 				var pos = match.index;
-				if (pos === 0 || text[pos - 1] === "\n") {
+				var isListMarker = false;
+				if (pos === 0) {
+					isListMarker = true;
+				} else {
+					// Look backward to find start of line
+					var lineStart = pos;
+					while (lineStart > 0 && text[lineStart - 1] !== "\n") {
+						lineStart--;
+					}
+					// Check if only whitespace between line start and #
+					var beforeHash = text.substring(lineStart, pos);
+					if (/^\s*$/.test(beforeHash)) {
+						isListMarker = true;
+					}
+				}
+				if (isListMarker) {
 					continue;
 				}
 				colors.push({ from: match.index, to: match.index + match[0].length, color: match[0] });

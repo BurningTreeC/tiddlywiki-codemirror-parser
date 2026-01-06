@@ -419,11 +419,28 @@ export function parseFilterExpression(
       continue
     }
 
-    // Variable: <varname>
+    // Variable: <varname> or <__param__>
     if (ch === '<') {
       const varMatch = content.slice(pos).match(/^<([^<>]+)>/)
       if (varMatch) {
-        elements.push(elt(Type.FilterVariable, offset + pos, offset + pos + varMatch[0].length))
+        const varContent = varMatch[1]
+        const varStart = offset + pos
+        const varEnd = varStart + varMatch[0].length
+
+        // Check if it's a substituted parameter: <__param__>
+        const substitutedMatch = /^__([^_]+)__$/.exec(varContent)
+        if (substitutedMatch) {
+          const paramName = substitutedMatch[1]
+          const innerStart = varStart + 1  // After <
+          const children: Element[] = [
+            elt(Type.SubstitutedParamMark, innerStart, innerStart + 2),  // __
+            elt(Type.SubstitutedParamName, innerStart + 2, innerStart + 2 + paramName.length),
+            elt(Type.SubstitutedParamMark, innerStart + 2 + paramName.length, varEnd - 1),  // __
+          ]
+          elements.push(elt(Type.SubstitutedParam, varStart, varEnd, children))
+        } else {
+          elements.push(elt(Type.FilterVariable, varStart, varEnd))
+        }
         pos += varMatch[0].length
         continue
       }
@@ -497,11 +514,28 @@ function parseFilterStep(content: string, offset: number): Element[] {
       }
     }
 
-    // Operand in angle brackets: <variable>
+    // Operand in angle brackets: <variable> or <__param__>
     if (ch === '<') {
       const closePos = findMatchingBracket(content, pos, '<', '>')
       if (closePos > pos) {
-        elements.push(elt(Type.FilterVariable, offset + pos, offset + closePos + 1))
+        const varContent = content.slice(pos + 1, closePos)
+        const varStart = offset + pos
+        const varEnd = offset + closePos + 1
+
+        // Check if it's a substituted parameter: <__param__>
+        const substitutedMatch = /^__([^_]+)__$/.exec(varContent)
+        if (substitutedMatch) {
+          const paramName = substitutedMatch[1]
+          const innerStart = varStart + 1  // After <
+          const children: Element[] = [
+            elt(Type.SubstitutedParamMark, innerStart, innerStart + 2),  // __
+            elt(Type.SubstitutedParamName, innerStart + 2, innerStart + 2 + paramName.length),
+            elt(Type.SubstitutedParamMark, innerStart + 2 + paramName.length, varEnd - 1),  // __
+          ]
+          elements.push(elt(Type.SubstitutedParam, varStart, varEnd, children))
+        } else {
+          elements.push(elt(Type.FilterVariable, varStart, varEnd))
+        }
         pos = closePos + 1
         continue
       }

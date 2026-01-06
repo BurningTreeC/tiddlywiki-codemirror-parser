@@ -409,7 +409,8 @@ exports.plugin = {
 		var type = context.tiddlerType;
 		if (context.options.linkPreview === false) return false;
 		// Check config tiddler
-		var enabled = $tw.wiki.getTiddlerText("$:/config/codemirror-6/linkPreview", "yes");
+		var wiki = context.options && context.options.widget && context.options.widget.wiki;
+		var enabled = wiki && wiki.getTiddlerText("$:/config/codemirror-6/linkPreview", "yes");
 		if (enabled !== "yes") return false;
 		return !type || type === "" || type === "text/vnd.tiddlywiki" || type === "text/x-tiddlywiki";
 	},

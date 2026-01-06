@@ -8,7 +8,8 @@
 import { Prec, EditorState } from "@codemirror/state"
 import { KeyBinding, keymap } from "@codemirror/view"
 import { Language, LanguageSupport, LanguageDescription, syntaxTree, ParseContext, indentOnInput, getIndentation, getIndentUnit } from "@codemirror/language"
-import { Completion, CompletionContext, CompletionResult, autocompletion, completionKeymap, CompletionSource } from "@codemirror/autocomplete"
+import { Completion, CompletionContext, CompletionResult, autocompletion, completionKeymap, CompletionSource, startCompletion } from "@codemirror/autocomplete"
+import { EditorView } from "@codemirror/view"
 import { syntaxHighlighting, HighlightStyle } from "@codemirror/language"
 import { tags as t } from "@lezer/highlight"
 import { html, htmlCompletionSource } from "@codemirror/lang-html"
@@ -48,6 +49,20 @@ import {
 
 // Re-export core language
 export { tiddlywikiLanguage, headerIndent }
+
+// Self-closing HTML tags (no closing tag needed)
+const selfClosingTags = new Set([
+  "area", "base", "br", "col", "embed", "hr", "img", "input",
+  "link", "meta", "param", "source", "track", "wbr"
+])
+
+// Self-closing widgets (action widgets that don't have content)
+const selfClosingWidgets = new Set([
+  "$action-confirm", "$action-createtiddler", "$action-deletetiddler",
+  "$action-deletefield", "$action-listops", "$action-log",
+  "$action-navigate", "$action-popup", "$action-sendmessage",
+  "$action-setfield", "$action-setmultiplefields"
+])
 
 /**
  * Helper to build changes for all selections (multi-cursor support)
@@ -313,6 +328,16 @@ export interface TiddlyWikiLanguageConfig {
   getTiddlerFields?: (tiddlerTitle: string) => string[]
 
   /**
+   * Function to get storyview names for completion in $list widget's storyview attribute
+   */
+  getStoryViews?: () => string[]
+
+  /**
+   * Function to get deserializer names for completion in deserializer attribute
+   */
+  getDeserializers?: () => string[]
+
+  /**
    * Language support for HTML tags (default: html without tag matching)
    */
   htmlTagLanguage?: LanguageSupport
@@ -347,6 +372,46 @@ function mimeToLanguage(mimeType: string): string {
     "text/vnd.tiddlywiki": "",
     "text/plain": "",
   }
+
+  // File extension mapping (for $$$.js, $$$.css, etc.)
+  const extMap: Record<string, string> = {
+    ".js": "javascript",
+    ".mjs": "javascript",
+    ".cjs": "javascript",
+    ".ts": "typescript",
+    ".tsx": "typescript",
+    ".jsx": "javascript",
+    ".css": "css",
+    ".html": "html",
+    ".htm": "html",
+    ".json": "json",
+    ".md": "markdown",
+    ".markdown": "markdown",
+    ".xml": "xml",
+    ".svg": "xml",
+    ".py": "python",
+    ".rb": "ruby",
+    ".java": "java",
+    ".c": "c",
+    ".cpp": "cpp",
+    ".h": "c",
+    ".hpp": "cpp",
+    ".rs": "rust",
+    ".go": "go",
+    ".php": "php",
+    ".sql": "sql",
+    ".sh": "shell",
+    ".bash": "shell",
+    ".yaml": "yaml",
+    ".yml": "yaml",
+    ".toml": "toml",
+  }
+
+  // Check file extension first
+  if (mimeType.startsWith(".")) {
+    return extMap[mimeType.toLowerCase()] ?? ""
+  }
+
   // Try direct lookup, then strip common prefixes
   return mimeMap[mimeType] ??
     mimeType.replace(/^text\/x-/, "").replace(/^application\//, "").replace(/^text\//, "")
@@ -406,15 +471,17 @@ function createMixedLanguageWrapper(
     }
 
     // CSS IN <style> TAGS: Parse content as CSS (like ```css code blocks)
+    // JAVASCRIPT IN <script> TAGS: Parse content as JavaScript
     if (node.name === "HTMLBlock") {
-      // Check if this is a <style> tag
+      // Check if this is a <style> or <script> tag
       const tagNameNode = node.node.getChild("TagName")
       if (tagNameNode) {
         const tagName = input.read(tagNameNode.from, tagNameNode.to).toLowerCase()
-        if (tagName === "style") {
-          const cssParser = getParser("css")
-          if (cssParser) {
-            // Find the content range: after opening tag's > and before closing </style>
+        if (tagName === "style" || tagName === "script") {
+          const parserName = tagName === "style" ? "css" : "javascript"
+          const contentParser = getParser(parserName)
+          if (contentParser) {
+            // Find the content range: after opening tag's > and before closing tag
             let contentStart = -1
             let contentEnd = -1
 
@@ -435,7 +502,7 @@ function createMixedLanguageWrapper(
 
             if (contentStart > 0 && contentEnd > contentStart) {
               return {
-                parser: cssParser,
+                parser: contentParser,
                 overlay: [{ from: contentStart, to: contentEnd }]
               }
             }
@@ -499,6 +566,8 @@ export function tiddlywiki(config: TiddlyWikiLanguageConfig = {}): LanguageSuppo
     getVariableNames,
     getTiddlerIndexes,
     getTiddlerFields,
+    getStoryViews,
+    getDeserializers,
     htmlTagLanguage = htmlNoMatch,
     getSelfClosingWidgets,
   } = config
@@ -586,9 +655,112 @@ export function tiddlywiki(config: TiddlyWikiLanguageConfig = {}): LanguageSuppo
     support.push(lang.data.of({
       autocomplete: widgetAttributeCompletion(getMacroParams, getWidgetAttributes)
     }))
-    // Add attribute value completion (for $variable=", tiddler=", etc.)
+    // Add attribute value completion (for $variable=", tiddler=", field=", index=", storyview=", deserializer=", etc.)
     support.push(lang.data.of({
-      autocomplete: attributeValueCompletion(getMacroNames, getTiddlerTitles, getFunctionNames, getVariableNames)
+      autocomplete: attributeValueCompletion(getMacroNames, getTiddlerTitles, getFunctionNames, getVariableNames, getFieldNames, getTiddlerIndexes, getStoryViews, getDeserializers)
+    }))
+
+    // Trigger completion when typing opening quote after = in attribute context
+    // This is needed because CodeMirror doesn't auto-trigger completion for quote characters
+    support.push(EditorView.inputHandler.of((view, from, to, text) => {
+      // Only handle quote characters
+      if (text !== '"' && text !== "'") return false
+
+      // Check if previous character is = (attribute value context)
+      const charBefore = view.state.sliceDoc(Math.max(0, from - 1), from)
+      if (charBefore !== "=") return false
+
+      // Let the default insertion happen, then trigger completion
+      // Use setTimeout to allow the character to be inserted first
+      setTimeout(() => startCompletion(view), 0)
+
+      // Return false to allow default handling (insert the quote)
+      return false
+    }))
+
+    // Auto-close tags when typing ">"
+    // Uses the syntax tree to determine if we're in an unclosed tag
+    support.push(EditorView.inputHandler.of((view, from, _to, text) => {
+      if (text !== ">") return false
+
+      // Check if previous character is "/" (self-closing tag like <br/>)
+      const charBefore = view.state.sliceDoc(Math.max(0, from - 1), from)
+      if (charBefore === "/") return false
+
+      // Use syntax tree to find context
+      const tree = syntaxTree(view.state)
+      const node = tree.resolveInner(from, -1)
+
+      // Walk up to find the containing tag node
+      let current = node
+      let tagNode = null
+      let tagName = ""
+      let isWidget = false
+
+      while (current && !current.type.isTop) {
+        const name = current.name
+        // Check if we're in a macro - don't auto-close
+        if (name === "MacroCall" || name === "MacroName") {
+          return false
+        }
+        // Check if we're inside an attribute value (string) - don't auto-close
+        // This prevents auto-closing when typing > inside text="<tag></tag>"
+        if (name === "AttributeValue" || name === "AttributeString") {
+          return false
+        }
+        // Found an unclosed tag container
+        if (name === "InlineWidget" || name === "Widget" || name === "HTMLBlock" || name === "HTMLTag") {
+          // Check if this tag already has a closing > (TagMark at end of opening)
+          // by looking for TagMark children
+          let hasClosingMark = false
+          let nameNode = null
+          const cursor = current.cursor()
+          if (cursor.firstChild()) {
+            do {
+              if (cursor.name === "WidgetName" || cursor.name === "TagName") {
+                nameNode = cursor.node
+              }
+              // TagMark after name (not at position 0) indicates closing >
+              if (cursor.name === "TagMark" && cursor.from > current.from) {
+                hasClosingMark = true
+              }
+            } while (cursor.nextSibling())
+          }
+
+          if (!hasClosingMark && nameNode) {
+            tagNode = current
+            tagName = view.state.sliceDoc(nameNode.from, nameNode.to)
+            isWidget = name === "InlineWidget" || name === "Widget"
+            break
+          }
+        }
+        current = current.parent!
+      }
+
+      if (!tagNode || !tagName) return false
+
+      // For widgets, check if self-closing
+      if (isWidget) {
+        const allSelfClosingWidgets = new Set(selfClosingWidgets)
+        if (getSelfClosingWidgets) {
+          for (const w of getSelfClosingWidgets()) {
+            allSelfClosingWidgets.add(w)
+          }
+        }
+        if (allSelfClosingWidgets.has(tagName)) return false
+      } else {
+        // For HTML, check self-closing tags
+        if (selfClosingTags.has(tagName.toLowerCase())) return false
+      }
+
+      const closingTag = `</${tagName}>`
+
+      // Insert > and closing tag, place cursor between them
+      view.dispatch({
+        changes: { from, to: from, insert: ">" + closingTag },
+        selection: { anchor: from + 1 }
+      })
+      return true
     }))
   }
 
@@ -762,14 +934,6 @@ const widgetAttributes: Record<string, string[]> = {
   "$view": ["tiddler", "field", "index", "format", "template", "subtiddler", "mode"],
   "$wikify": ["name", "text", "type", "mode", "output"]
 }
-
-// Self-closing widgets (action widgets that don't have content)
-const selfClosingWidgets = new Set([
-  "$action-confirm", "$action-createtiddler", "$action-deletetiddler",
-  "$action-deletefield", "$action-listops", "$action-log",
-  "$action-navigate", "$action-popup", "$action-sendmessage",
-  "$action-setfield", "$action-setmultiplefields"
-])
 
 /**
  * Widget completion source (<$widget)
@@ -1000,7 +1164,11 @@ function attributeValueCompletion(
   getMacroNames?: () => string[],
   getTiddlerTitles?: () => string[],
   getFunctionNames?: () => string[],
-  getVariableNames?: () => string[]
+  getVariableNames?: () => string[],
+  getFieldNames?: () => string[],
+  getTiddlerIndexes?: (tiddlerTitle: string) => string[],
+  getStoryViews?: () => string[],
+  getDeserializers?: () => string[]
 ) {
   return (context: CompletionContext): CompletionResult | null => {
     const { state, pos } = context
@@ -1018,15 +1186,27 @@ function attributeValueCompletion(
     const from = pos - partial.length
     const patternLen = partial.length
 
-    // Check we're not in a code block or comment
+    // Check we're inside a widget/HTML tag context and not in a code block or comment
     const tree = syntaxTree(state).resolveInner(pos, -1)
     let node = tree
+    let inWidgetContext = false
+
     while (node && !node.type.isTop) {
       if (node.name === "FencedCode" || node.name === "CodeBlock" ||
           node.name === "TypedBlock" || node.name === "CommentBlock") {
         return null
       }
+      // Check if we're inside a widget or HTML tag (block or inline)
+      if (node.name === "Widget" || node.name === "InlineWidget" ||
+          node.name === "HTMLTag" || node.name === "HTMLBlock") {
+        inWidgetContext = true
+      }
       node = node.parent!
+    }
+
+    // Only provide completions if we're inside a widget/HTML tag context
+    if (!inWidgetContext) {
+      return null
     }
 
     let options: Completion[] = []
@@ -1178,6 +1358,135 @@ function attributeValueCompletion(
         }
       }))
     }
+    // $message or message attribute (for $action-sendmessage, $button, etc.) - complete with widget messages
+    else if (attrName === "$message" || attrName === "message") {
+      const lowerPartial = partial.toLowerCase()
+      const filtered = tiddlyWikiMessages.filter(msg =>
+        msg.toLowerCase().startsWith(lowerPartial)
+      )
+      detail = "message"
+      options = filtered.map(msg => ({
+        label: msg,
+        type: "keyword",
+        detail,
+        boost: 2,
+        apply: (view, _completion, from, to) => {
+          const textAfter = view.state.sliceDoc(to, to + 1)
+          const suffix = textAfter === quoteChar ? "" : quoteChar
+          const insert = msg + suffix
+          const changes = buildMultiSelectionChanges(view, from, to, insert, patternLen)
+          view.dispatch({
+            changes,
+            selection: { anchor: from + insert.length }
+          })
+        }
+      }))
+    }
+    // $field or field attribute (for $action-setfield, $transclude, etc.) - complete with field names
+    else if (attrName === "$field" || attrName === "field") {
+      const fields = getFieldNames ? getFieldNames() : defaultFieldNames
+      const lowerPartial = partial.toLowerCase()
+      const filtered = fields.filter(f => f.toLowerCase().startsWith(lowerPartial))
+      detail = "field"
+      options = filtered.map(fieldName => ({
+        label: fieldName,
+        type: "property",
+        detail,
+        boost: 2,
+        apply: (view, _completion, from, to) => {
+          const textAfter = view.state.sliceDoc(to, to + 1)
+          const suffix = textAfter === quoteChar ? "" : quoteChar
+          const insert = fieldName + suffix
+          const changes = buildMultiSelectionChanges(view, from, to, insert, patternLen)
+          view.dispatch({
+            changes,
+            selection: { anchor: from + insert.length }
+          })
+        }
+      }))
+    }
+    // $index or index attribute (for $action-setfield, $transclude, etc.) - complete with indexes from the referenced tiddler
+    else if (attrName === "$index" || attrName === "index") {
+      if (getTiddlerIndexes) {
+        // Look for sibling $tiddler or tiddler attribute within the CURRENT tag only
+        // Find the last '<' to get only the current tag's content
+        const tagStart = textBefore.lastIndexOf('<')
+        const currentTag = tagStart >= 0 ? textBefore.slice(tagStart) : textBefore
+        // Search for tiddler="..." or $tiddler="..." in current tag
+        const tiddlerAttrMatch = /(?:\$tiddler|tiddler)\s*=\s*(["'])([^"']*)\1/.exec(currentTag)
+        if (tiddlerAttrMatch) {
+          const tiddlerTitle = tiddlerAttrMatch[2]
+          const indexes = getTiddlerIndexes(tiddlerTitle)
+          if (indexes.length > 0) {
+            const lowerPartial = partial.toLowerCase()
+            const filtered = indexes.filter(idx => idx.toLowerCase().startsWith(lowerPartial))
+            detail = "index"
+            options = filtered.map(indexName => ({
+              label: indexName,
+              type: "property",
+              detail,
+              boost: 2,
+              apply: (view, _completion, from, to) => {
+                const textAfter = view.state.sliceDoc(to, to + 1)
+                const suffix = textAfter === quoteChar ? "" : quoteChar
+                const insert = indexName + suffix
+                const changes = buildMultiSelectionChanges(view, from, to, insert, patternLen)
+                view.dispatch({
+                  changes,
+                  selection: { anchor: from + insert.length }
+                })
+              }
+            }))
+          }
+        }
+      }
+    }
+    // storyview attribute (for $list widget) - complete with available storyviews
+    else if (attrName === "storyview") {
+      const storyviews = getStoryViews ? getStoryViews() : defaultStoryViews
+      const lowerPartial = partial.toLowerCase()
+      const filtered = storyviews.filter(sv => sv.toLowerCase().startsWith(lowerPartial))
+      detail = "storyview"
+      options = filtered.map(storyview => ({
+        label: storyview,
+        type: "keyword",
+        detail,
+        boost: 2,
+        apply: (view, _completion, from, to) => {
+          const textAfter = view.state.sliceDoc(to, to + 1)
+          const suffix = textAfter === quoteChar ? "" : quoteChar
+          const insert = storyview + suffix
+          const changes = buildMultiSelectionChanges(view, from, to, insert, patternLen)
+          view.dispatch({
+            changes,
+            selection: { anchor: from + insert.length }
+          })
+        }
+      }))
+    }
+    // deserializer attribute - complete with available deserializers
+    else if (attrName === "deserializer") {
+      const deserializers = getDeserializers ? getDeserializers() : defaultDeserializers
+      const lowerPartial = partial.toLowerCase()
+      const filtered = deserializers.filter(d => d.toLowerCase().startsWith(lowerPartial))
+      detail = "deserializer"
+      options = filtered.map(deserializer => ({
+        label: deserializer,
+        type: "keyword",
+        detail,
+        boost: 2,
+        apply: (view, _completion, from, to) => {
+          const textAfter = view.state.sliceDoc(to, to + 1)
+          const suffix = textAfter === quoteChar ? "" : quoteChar
+          const insert = deserializer + suffix
+          const changes = buildMultiSelectionChanges(view, from, to, insert, patternLen)
+          view.dispatch({
+            changes,
+            selection: { anchor: from + insert.length }
+          })
+        }
+      }))
+    }
     // $name attribute (for $macrocall) - complete with macro names
     else if (attrName === "$name") {
       const seen = new Set<string>()
@@ -1269,6 +1578,40 @@ const commonMacros = [
   "list-links", "list-links-draggable", "list-tagged-draggable", "copy-to-clipboard",
   "colour-picker", "image-picker", "keyboard-shortcut", "dumpvariables", "qualify",
   "csvtiddlers", "jsontiddlers", "datauri", "makedatauri", "translink"
+]
+
+// TiddlyWiki Storyviews (built-in)
+const defaultStoryViews = [
+  "classic", "pop", "zoomin"
+]
+
+// TiddlyWiki Deserializers (built-in)
+const defaultDeserializers = [
+  "application/javascript",
+  "application/json",
+  "application/x-tiddler",
+  "application/x-tiddler-html-div",
+  "application/x-tiddlers",
+  "text/css",
+  "text/html",
+  "text/plain",
+  "text/vnd.tiddlywiki"
+]
+
+// TiddlyWiki Widget Messages (tm- messages)
+const tiddlyWikiMessages = [
+  "tm-add-field", "tm-add-tag", "tm-auto-save-wiki", "tm-browser-refresh",
+  "tm-cancel-tiddler", "tm-clear-password", "tm-close-all-tiddlers", "tm-close-all-windows",
+  "tm-close-other-tiddlers", "tm-close-tiddler", "tm-close-window", "tm-copy-to-clipboard",
+  "tm-delete-tiddler", "tm-download-file", "tm-edit-bitmap-operation", "tm-edit-text-operation",
+  "tm-edit-tiddler", "tm-focus-selector", "tm-fold-all-tiddlers", "tm-fold-other-tiddlers",
+  "tm-fold-tiddler", "tm-full-screen", "tm-home", "tm-http-cancel-all-requests",
+  "tm-http-request", "tm-import-tiddlers", "tm-load-plugin-from-library", "tm-load-plugin-library",
+  "tm-login", "tm-logout", "tm-modal", "tm-navigate", "tm-new-tiddler", "tm-notify",
+  "tm-open-external-window", "tm-open-window", "tm-perform-import", "tm-permalink",
+  "tm-permaview", "tm-print", "tm-relink-tiddler", "tm-remove-field", "tm-remove-tag",
+  "tm-rename-tiddler", "tm-save-tiddler", "tm-save-wiki", "tm-scroll", "tm-server-refresh",
+  "tm-set-password", "tm-unfold-all-tiddlers", "tm-unload-plugin-library"
 ]
 
 // TiddlyWiki Filter Operators
@@ -1465,10 +1808,15 @@ function macroCompletion(
     const { state, pos } = context
     const textBefore = state.sliceDoc(pos - 50, pos)
 
-    // Match <<macro for regular macro calls
-    const macroMatch = /<<[\w\-]*$/.exec(textBefore)
+    // Match <<macro for regular macro calls (but not <<< which is block quote)
+    // Allow dots in macro names for namespaced macros like <<_tf.something
+    const macroMatch = /<<[\w\-\.]*$/.exec(textBefore)
+    // Check it's not <<< (block quote syntax)
+    if (macroMatch && textBefore[macroMatch.index - 1] === '<') {
+      return null
+    }
     // Match [<variable or [operator<variable or ]operator<variable or }operator<variable or >operator<variable
-    const filterVarMatch = /[\[\]}>][\w\-:!]*<[\w\-]*$/.exec(textBefore)
+    const filterVarMatch = /[\[\]}>][\w\-:!]*<[\w\-\.]*$/.exec(textBefore)
 
     const m = macroMatch || filterVarMatch
     if (!m) return null
@@ -1599,7 +1947,7 @@ function macroCompletion(
         from: pos - filterVarMatch[0].length,
         to: pos,
         options,
-        validFor: /^[\[\]}>][\w\-:!]*<[\w\-]*$/
+        validFor: /^[\[\]}>][\w\-:!]*<[\w\-\.]*$/
       }
     }
 
@@ -1615,7 +1963,7 @@ function macroCompletion(
       from: pos - m[0].length,
       to: pos,
       options,
-      validFor: /^<<[\w\-]*$/
+      validFor: /^<<[\w\-\.]*$/
     }
   }
 }
@@ -1753,26 +2101,40 @@ function tiddlerCompletion(getTiddlerTitles?: () => string[], getImageTiddlerTit
       /<\$\w+[^>]*\bfilter\s*=\s*(?:"[^"]*|'[^']*|"""[^"]*)$/.test(textBefore)
     )
 
-    // If inside a filter context and we have [[, prioritize filterOperandMatch over linkMatch
-    // Otherwise, prioritize linkMatch (for wikilinks)
+    // Prioritize imageMatch (always treat [img[ as image link, not filter operand)
+    // For other cases in filter context, prioritize filterOperandMatch over linkMatch
     let match: RegExpExecArray | null
-    if (inFilterContext && linkMatch && filterOperandMatch) {
+    if (imageMatch) {
+      // [img[ is always an image link
+      match = imageMatch
+    } else if (inFilterContext && linkMatch && filterOperandMatch) {
       // Inside filter: [[ is a literal title operand, not a wikilink
       match = filterOperandMatch
     } else {
-      match = linkMatch || linkTargetMatch || transcludeMatch || imageMatch || filterOperandMatch || filterTextRefMatch
+      match = linkMatch || linkTargetMatch || transcludeMatch || filterOperandMatch || filterTextRefMatch
     }
     if (!match) return null
 
-    // Don't complete inside code blocks or comments
+    // Check syntax tree for context
     const tree = syntaxTree(state).resolveInner(pos, -1)
     let node = tree
+    let inImageLink = false
     while (node && !node.type.isTop) {
+      // Don't complete inside code blocks or comments
       if (node.name === "FencedCode" || node.name === "CodeBlock" ||
           node.name === "TypedBlock" || node.name === "CommentBlock") {
         return null
       }
+      // Check if we're inside an image link
+      if (node.name === "ImageLink" || node.name === "ImageSource") {
+        inImageLink = true
+      }
       node = node.parent!
+    }
+
+    // If syntax tree says we're in an image link, force imageMatch
+    if (inImageLink && imageMatch) {
+      match = imageMatch
     }
 
     let titles = getTiddlerTitles ? getTiddlerTitles() : []
@@ -1825,6 +2187,21 @@ function tiddlerCompletion(getTiddlerTitles?: () => string[], getImageTiddlerTit
         to: pos,
         options,
         validFor
+      }
+    } else if (match === imageMatch) {
+      // Image match - we need to find where the [ starts for the source
+      const bracketPos = match[0].lastIndexOf('[')
+      prefix = match[0].slice(0, bracketPos + 1)
+      suffix = "]]"
+      validFor = /^\[img(?:\s+[^\[]*)?\[[^\]|]*$/
+      detail = "image"
+      // Use image-specific tiddler titles if available, fall back to all tiddlers
+      if (getImageTiddlerTitles) {
+        const imageTitles = getImageTiddlerTitles()
+        if (imageTitles.length > 0) {
+          titles = imageTitles
+        }
+        // If no images, keep all titles as fallback
       }
     } else if (match === filterOperandMatch) {
       // Filter operand: [operator[value]] or [[value]]
@@ -1897,17 +2274,6 @@ function tiddlerCompletion(getTiddlerTitles?: () => string[], getImageTiddlerTit
       suffix = "}}"
       validFor = /^(?<!\{)\{\{[^{}|]*$/
       detail = "tiddler"
-    } else if (match === imageMatch) {
-      // Image match - we need to find where the [ starts for the source
-      const bracketPos = match[0].lastIndexOf('[')
-      prefix = match[0].slice(0, bracketPos + 1)
-      suffix = "]]"
-      validFor = /^\[img(?:\s+[^\[]*)?\[[^\]|]*$/
-      detail = "image"
-      // Use image-specific tiddler titles if available
-      if (getImageTiddlerTitles) {
-        titles = getImageTiddlerTitles()
-      }
     } else {
       // Should not reach here, but return null for safety
       return null
@@ -2109,12 +2475,6 @@ const commonHtmlTags = [
   "iframe", "video", "audio", "source", "canvas", "svg",
   "script", "style", "link", "meta",
 ]
-
-// Self-closing HTML tags (no closing tag needed)
-const selfClosingTags = new Set([
-  "area", "base", "br", "col", "embed", "hr", "img", "input",
-  "link", "meta", "param", "source", "track", "wbr"
-])
 
 /**
  * HTML tag completion source
@@ -2359,7 +2719,8 @@ function filterOperatorCompletion(getFilterOperators?: () => string[]) {
       }
       if (node.name === "FilterExpression" || node.name === "FilteredTransclusion" ||
           node.name === "FilteredTransclusionBlock" || node.name === "AttributeFiltered" ||
-          node.name === "ConditionalBlock") {
+          node.name === "ConditionalBlock" || node.name === "FilterRun" ||
+          node.name === "FilterOperator" || node.name === "FilterOperatorName") {
         inFilter = true
       }
       node = node.parent!
@@ -2371,7 +2732,35 @@ function filterOperatorCompletion(getFilterOperators?: () => string[]) {
                              /<%(?:if|elseif)\s+[^%]*$/.test(textBefore) ||  // <%if filter%>
                              /filter\s*=\s*["'][^"']*$/.test(textBefore)  // filter="..."
 
-    if (!hasFilterContext) return null
+    // If not in a known filter context, check if we're in "standalone" text
+    // where [ could be the start of a filter run (not inside widgets, macros, attributes, etc.)
+    if (!hasFilterContext) {
+      // Check syntax tree to see if we're in a restricted context
+      let inRestrictedContext = false
+      let checkNode = tree
+      while (checkNode && !checkNode.type.isTop) {
+        // These contexts should NOT trigger standalone filter completion
+        if (checkNode.name === "Widget" || checkNode.name === "WidgetBlock" ||
+            checkNode.name === "MacroCall" || checkNode.name === "MacroCallBlock" ||
+            checkNode.name === "HTMLTag" || checkNode.name === "HTMLBlock" ||
+            checkNode.name === "Attribute" || checkNode.name === "AttributeName" ||
+            checkNode.name === "AttributeValue" || checkNode.name === "AttributeString" ||
+            checkNode.name === "PragmaImport" || checkNode.name === "PragmaDefine" ||
+            checkNode.name === "PragmaProcedure" || checkNode.name === "PragmaFunction" ||
+            checkNode.name === "PragmaWidget" || checkNode.name === "PragmaParameters" ||
+            checkNode.name === "WikiLink" || checkNode.name === "ImageLink" ||
+            checkNode.name === "Transclusion" || checkNode.name === "TransclusionBlock") {
+          inRestrictedContext = true
+          break
+        }
+        checkNode = checkNode.parent!
+      }
+
+      // If in a restricted context, don't offer filter completions
+      if (inRestrictedContext) return null
+
+      // In standalone text, [ can start a filter run - allow completion
+    }
 
     const prefix = filterOperatorMatch[1]  // ! or empty
     const partial = filterOperatorMatch[2] // partial operator name
@@ -2487,7 +2876,17 @@ function filterRunPrefixCompletion(context: CompletionContext): CompletionResult
     label: p.label,
     type: "keyword",
     detail: p.detail,
-    apply: p.label + (p.label.startsWith(":") ? "[" : "")
+    apply: p.label.startsWith(":") ? (view, _completion, from, to) => {
+      // Check if there's already a ] after the cursor
+      const textAfter = view.state.sliceDoc(to, to + 10)
+      const hasClosingBracket = /^\s*\]/.test(textAfter)
+      const insert = hasClosingBracket ? p.label + "[" : p.label + "[]"
+      const cursorPos = from + p.label.length + 1  // After the [
+      view.dispatch({
+        changes: { from, to, insert },
+        selection: { anchor: cursorPos }
+      })
+    } : p.label
   }))
 
   return {
@@ -3060,12 +3459,12 @@ function conditionalCompletion(context: CompletionContext): CompletionResult | n
 // Pragma Completion (\define, \procedure, \function, etc.)
 // ============================================================================
 
-const pragmaKeywords: { label: string; detail: string; insert: string; cursorOffset?: number }[] = [
-  { label: "define", detail: "Define a macro", insert: "define name()\n\n\\end", cursorOffset: 8 },
-  { label: "procedure", detail: "Define a procedure", insert: "procedure name()\n\n\\end", cursorOffset: 11 },
-  { label: "function", detail: "Define a function", insert: "function name()\n\n\\end", cursorOffset: 10 },
-  { label: "widget", detail: "Define a widget", insert: "widget $name()\n\n\\end", cursorOffset: 8 },
-  { label: "import", detail: "Import tiddlers", insert: "import [filter]", cursorOffset: 8 },
+const pragmaKeywords: { label: string; detail: string; insert: string; selectFrom?: number; selectTo?: number; cursorOffset?: number }[] = [
+  { label: "define", detail: "Define a macro", insert: "define name()\n\n\\end", selectFrom: 7, selectTo: 11 },
+  { label: "procedure", detail: "Define a procedure", insert: "procedure name()\n\n\\end", selectFrom: 10, selectTo: 14 },
+  { label: "function", detail: "Define a function", insert: "function name()\n\n\\end", selectFrom: 9, selectTo: 13 },
+  { label: "widget", detail: "Define a widget", insert: "widget $name()\n\n\\end", selectFrom: 7, selectTo: 12 },
+  { label: "import", detail: "Import tiddlers", insert: "import [filter]", selectFrom: 8, selectTo: 14 },
   { label: "rules", detail: "Set parser rules", insert: "rules only ", cursorOffset: 11 },
   { label: "parameters", detail: "Declare parameters", insert: "parameters()", cursorOffset: 11 },
   { label: "whitespace", detail: "Whitespace handling", insert: "whitespace trim", cursorOffset: 15 },
@@ -3098,12 +3497,25 @@ function pragmaCompletion(context: CompletionContext): CompletionResult | null {
     type: "keyword",
     detail: kw.detail,
     apply: (view, _completion, from, to) => {
-      const insert = kw.insert
-      const cursorPos = from + (kw.cursorOffset ?? insert.length)
+      // For multiline pragmas, add leading whitespace before \end
+      let insert = kw.insert
+      if (insert.includes("\\end") && leadingWhitespace) {
+        insert = insert.replace(/\n\\end/, "\n" + leadingWhitespace + "\\end")
+      }
+
+      // If selectFrom/selectTo are defined, create a selection range
+      // Otherwise fall back to cursor position
+      let selection
+      if (kw.selectFrom !== undefined && kw.selectTo !== undefined) {
+        selection = { anchor: from + kw.selectFrom, head: from + kw.selectTo }
+      } else {
+        const cursorPos = from + (kw.cursorOffset ?? insert.length)
+        selection = { anchor: cursorPos }
+      }
 
       view.dispatch({
         changes: { from, to, insert },
-        selection: { anchor: cursorPos }
+        selection
       })
     }
   }))

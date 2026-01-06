@@ -7,9 +7,40 @@ tags: $:/tags/Stylesheet
 
 <$list filter="[[$:/config/codemirror-6/toolbar-style]get[text]!match[classic]]" variable="style">
 
+/* Base styles for all custom toolbar styles */
+.tc-editor-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.tc-editor-toolbar button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    min-width: 0;
+    min-height: 0;
+}
+
+.tc-editor-toolbar button svg {
+    width: 1em;
+    height: 1em;
+    flex-shrink: 0;
+}
+
+.tc-editor-toolbar button svg.cm6-icon {
+    fill: none;
+}
+
 /* Base adjunct button fix for custom styles */
 .tc-editor-toolbar button.tc-text-editor-toolbar-item-adjunct {
     padding: 2px;
+}
+
+.tc-editor-toolbar button.tc-text-editor-toolbar-item-adjunct svg {
+    width: 0.75em;
+    height: 0.75em;
 }
 
 /* ============================================================================

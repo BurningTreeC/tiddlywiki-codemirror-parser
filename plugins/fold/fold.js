@@ -25,8 +25,9 @@ exports.plugin = {
 
 	// Load if foldGutter option is enabled
 	condition: function(context) {
+		var wiki = context.options && context.options.widget && context.options.widget.wiki;
 		// Check config tiddler directly since context.options may not have foldGutter set initially
-		var foldGutterEnabled = $tw.wiki.getTiddlerText("$:/config/codemirror-6/foldGutter") === "yes";
+		var foldGutterEnabled = wiki && wiki.getTiddlerText("$:/config/codemirror-6/foldGutter") === "yes";
 		// Only enable for main body editors (not inline text fields)
 		var isBody = context.options && context.options.widget &&
 			context.options.widget.editClass &&

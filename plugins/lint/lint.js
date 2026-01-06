@@ -41,21 +41,36 @@ var _Compartment = null;
 
 /**
  * Check if a specific lint rule is enabled
+ * @param {string} ruleName - The rule name
+ * @param {object} wiki - The wiki object (defaults to $tw.wiki)
  */
-function isRuleEnabled(ruleName) {
-	if (!$tw || !$tw.wiki) return true;
-	var config = ($tw.wiki.getTiddlerText("$:/config/codemirror-6/lint/" + ruleName, "yes") || "").trim();
+function isRuleEnabled(ruleName, wiki) {
+	wiki = wiki || $tw.wiki;
+	if (!wiki) return true;
+	var config = (wiki.getTiddlerText("$:/config/codemirror-6/lint/" + ruleName, "yes") || "").trim();
 	return config === "yes";
 }
 
 /**
  * Check if CamelCase wikilinks are enabled
+ * @param {object} wiki - The wiki object (defaults to $tw.wiki)
  */
-function isCamelCaseEnabled() {
-	if (!$tw || !$tw.wiki) return true;
-	var config = $tw.wiki.getTiddlerText("$:/config/WikiParserRules/Inline/wikilink", "enable");
+function isCamelCaseEnabled(wiki) {
+	wiki = wiki || $tw.wiki;
+	if (!wiki) return true;
+	var config = wiki.getTiddlerText("$:/config/WikiParserRules/Inline/wikilink", "enable");
 	return config !== "disable";
 }
+
+// ============================================================================
+// Built-in Variables (never flagged as undefined)
+// ============================================================================
+
+var builtInVariables = new Set([
+	"currentTiddler",
+	"storyTiddler",
+	"transclusion",
+]);
 
 // ============================================================================
 // Tiddler Existence Checking
@@ -63,10 +78,13 @@ function isCamelCaseEnabled() {
 
 /**
  * Check if a tiddler exists (including shadows)
+ * @param {string} title - The tiddler title
+ * @param {object} wiki - The wiki object (defaults to $tw.wiki)
  */
-function tiddlerExists(title) {
-	if (!$tw || !$tw.wiki) return true;
-	return $tw.wiki.tiddlerExists(title) || $tw.wiki.isShadowTiddler(title);
+function tiddlerExists(title, wiki) {
+	wiki = wiki || $tw.wiki;
+	if (!wiki) return true;
+	return wiki.tiddlerExists(title) || wiki.isShadowTiddler(title);
 }
 
 // ============================================================================
@@ -809,14 +827,12 @@ function findUnclosedWidgets(tree, state) {
 						// Skip void elements that don't need closing
 						var voidElements = ["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"];
 						if (voidElements.indexOf(tagName) === -1) {
-							// For HTMLBlock nodes, check if the block contains its own closing tag
+							// Check if the tag contains its own closing tag
 							// This happens when the parser successfully matched opening and closing tags
-							if (nodeType === "HTMLBlock") {
-								var closePattern = new RegExp("</" + tagName + ">\\s*$", "i");
-								if (closePattern.test(tagText)) {
-									// Self-contained block with matching closing tag - skip
-									return;
-								}
+							var closePattern = new RegExp("</" + tagName + ">\\s*$", "i");
+							if (closePattern.test(tagText)) {
+								// Self-contained tag with matching closing tag - skip
+								return;
 							}
 							// Find containing structure for limit
 							var containerLimit = null;
@@ -1570,12 +1586,13 @@ function createTiddlyWikiLinter(view) {
 					!localDefs.macros.has(macroName) &&
 					!localDefs.procedures.has(macroName) &&
 					!localDefs.functions.has(macroName) &&
-					!localDefs.variables.has(macroName)) {
+					!localDefs.variables.has(macroName) &&
+					!builtInVariables.has(macroName)) {
 					diagnostics.push({
 						from: from,
 						to: to,
 						severity: "info",
-						message: "Possibly undefined macro: " + macroName,
+						message: "Possibly undefined variable / macro / procedure / function: " + macroName,
 						source: "tiddlywiki"
 					});
 				}
@@ -1838,19 +1855,69 @@ function createTiddlyWikiLinter(view) {
 					name: actionName,
 					apply: (function(targetPos) {
 						return function(view, from, to) {
-							// Get the full pragma line(s)
-							var line = view.state.doc.lineAt(from);
-							var pragmaText = view.state.doc.sliceString(line.from, line.to);
+							var docLength = view.state.doc.length;
+							var startLine = view.state.doc.lineAt(from);
+							var pragmaStart = startLine.from;
+							var pragmaEnd = startLine.to;
+
+							// Check if this is a multi-line pragma that needs \end
+							var firstLineText = view.state.doc.sliceString(startLine.from, startLine.to);
+							var multiLineMatch = firstLineText.match(/^\\(define|procedure|function|widget)\s+[^\s(]+(\([^)]*\))?\s*$/);
+
+							if (multiLineMatch) {
+								// Multi-line pragma - find the matching \end
+								var searchStart = startLine.to + 1;
+								var depth = 1;
+								var pos = searchStart;
+
+								// Search for matching \end, handling nested pragmas
+								while (pos < docLength && depth > 0) {
+									var line = view.state.doc.lineAt(pos);
+									var lineText = view.state.doc.sliceString(line.from, line.to).trim();
+
+									// Check for nested pragma open
+									if (/^\\(define|procedure|function|widget)\s+\S+/.test(lineText) &&
+									    !/^\\(define|procedure|function|widget)\s+[^\s(]+(\([^)]*\))?\s+\S/.test(lineText)) {
+										depth++;
+									}
+									// Check for \end
+									else if (/^\\end\b/.test(lineText)) {
+										depth--;
+										if (depth === 0) {
+											pragmaEnd = line.to;
+										}
+									}
+
+									pos = line.to + 1;
+									if (pos > docLength) break;
+								}
+							}
+
+							// Get the full pragma text
+							var pragmaText = view.state.doc.sliceString(pragmaStart, pragmaEnd);
+
+							// Check if this is at the end of document (no trailing newline)
+							var deleteEnd = Math.min(pragmaEnd + 1, docLength);
+							var hasTrailingNewline = pragmaEnd + 1 <= docLength;
+
 							// Calculate adjusted insert position if removal happens before it
 							var adjustedInsertPos = targetPos;
-							if (line.from < targetPos) {
-								// Removal is before insert point, adjust for removed length
-								adjustedInsertPos = targetPos - (line.to + 1 - line.from);
+							var deleteStart = pragmaStart;
+
+							// If removing from end without trailing newline, remove preceding newline
+							if (!hasTrailingNewline && deleteStart > 0) {
+								deleteStart = deleteStart - 1;
 							}
+
+							if (deleteStart < targetPos) {
+								// Removal is before insert point, adjust for removed length
+								adjustedInsertPos = targetPos - (deleteEnd - deleteStart);
+							}
+
 							// Remove from current position and insert at target position
 							view.dispatch({
 								changes: [
-									{ from: line.from, to: line.to + 1, insert: "" },
+									{ from: deleteStart, to: deleteEnd, insert: "" },
 									{ from: adjustedInsertPos, to: adjustedInsertPos, insert: pragmaText + "\n" }
 								]
 							});
@@ -1991,7 +2058,9 @@ function createTiddlyWikiLinter(view) {
 							var endPos = issue.defFrom + endMatch.index + endMatch[0].length;
 							endLine = view.state.doc.lineAt(endPos);
 						}
-						view.dispatch({ changes: { from: line.from, to: endLine.to + 1, insert: "" } });
+						// Don't exceed document length
+						var deleteEnd = Math.min(endLine.to + 1, view.state.doc.length);
+						view.dispatch({ changes: { from: line.from, to: deleteEnd, insert: "" } });
 					}
 				}]
 			});
@@ -2024,10 +2093,12 @@ function createTiddlyWikiLinter(view) {
 
 /**
  * Check if linting is globally enabled
+ * @param {object} wiki - The wiki object (defaults to $tw.wiki)
  */
-function isLintEnabled() {
-	if ($tw && $tw.wiki) {
-		var enabled = ($tw.wiki.getTiddlerText("$:/config/codemirror-6/lint", "yes") || "").trim();
+function isLintEnabled(wiki) {
+	wiki = wiki || $tw.wiki;
+	if (wiki) {
+		var enabled = (wiki.getTiddlerText("$:/config/codemirror-6/lint", "yes") || "").trim();
 		return enabled === "yes";
 	}
 	return true;

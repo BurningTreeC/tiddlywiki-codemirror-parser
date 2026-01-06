@@ -45,6 +45,7 @@ exports.plugin = {
       return [];
     }
 
+    var wiki = context.options && context.options.widget && context.options.widget.wiki || $tw.wiki;
     var ViewPlugin = this._core.view.ViewPlugin;
 
     // ViewPlugin to intercept Escape before TiddlyWiki's keyboard widget
@@ -59,7 +60,7 @@ exports.plugin = {
           var mode = cm.state.vim.mode || "normal";
           if (mode !== "normal") {
             // Set flag so the th-cancelling-tiddler hook prevents tiddler cancellation
-            $tw.wiki.setText(ESCAPE_CONSUMED_TIDDLER, "text", null, "yes");
+            wiki.setText(ESCAPE_CONSUMED_TIDDLER, "text", null, "yes");
 
             // Manually exit insert/visual mode since TiddlyWiki's keyboard widget
             // will intercept the event before vim can process it

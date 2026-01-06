@@ -42,10 +42,12 @@ var TIDDLER_TITLE_OPERATORS = {
 
 /**
  * Check if CamelCase wikilinks are enabled
+ * @param {object} wiki - The wiki object (defaults to $tw.wiki)
  */
-function isCamelCaseEnabled() {
-	if (!$tw || !$tw.wiki) return true; // Default to enabled
-	var config = $tw.wiki.getTiddlerText("$:/config/WikiParserRules/Inline/wikilink", "enable");
+function isCamelCaseEnabled(wiki) {
+	wiki = wiki || $tw.wiki;
+	if (!wiki) return true; // Default to enabled
+	var config = wiki.getTiddlerText("$:/config/WikiParserRules/Inline/wikilink", "enable");
 	return config !== "disable";
 }
 
@@ -439,7 +441,8 @@ exports.plugin = {
 		var type = context.tiddlerType;
 		if (context.options.clickNavigate === false) return false;
 		// Check config tiddler
-		var enabled = $tw.wiki.getTiddlerText("$:/config/codemirror-6/clickNavigate", "yes");
+		var wiki = context.options && context.options.widget && context.options.widget.wiki;
+		var enabled = wiki && wiki.getTiddlerText("$:/config/codemirror-6/clickNavigate", "yes");
 		if (enabled !== "yes") return false;
 		return !type || type === "" || type === "text/vnd.tiddlywiki" || type === "text/x-tiddlywiki";
 	},

@@ -1,0 +1,17 @@
+title: $:/plugins/BurningTreeC/plugin-combiner/ui/ControlPanel/PluginCombiner
+tags: $:/tags/ControlPanel
+caption: Plugin Combiner
+
+\procedure plugin-combiner(prefix)
+<$plugin-combiner
+  filter="[plugin-type[plugin]prefix<prefix>]"
+/>
+\end
+
+<div class="tc-plugin-combiner-wrapper">
+<div class="tc-plugin-combiner-prefix">
+<label>Plugin namespace:</label>
+<$edit-text tag="input" tiddler="$:/temp/plugin-combiner/prefix" placeholder="$:/plugins/yourname/"/>
+</div>
+<$transclude $variable="plugin-combiner" prefix={{{ [[$:/temp/plugin-combiner/prefix]get[text]] }}}/>
+</div>

@@ -21,6 +21,7 @@ var ZenMode = function() {
     this.originalNextSibling = null;
     this.editorWrapper = null;
     this.engine = null;
+    this.wiki = null;
     this.statsInterval = null;
     this.focusModeCleanup = null;
 };
@@ -78,6 +79,7 @@ ZenMode.prototype.enter = function(editorWrapper, engine) {
 
     this.editorWrapper = editorWrapper;
     this.engine = engine;
+    this.wiki = engine && engine.widget && engine.widget.wiki || $tw.wiki;
 
     // Store original position
     this.originalParent = editorWrapper.parentNode;
@@ -114,8 +116,8 @@ ZenMode.prototype.enter = function(editorWrapper, engine) {
     this.setupFocusMode();
     
     // Update state tiddler
-    $tw.wiki.setText("$:/state/codemirror-6/zen-mode", "text", null, "yes");
-    
+    this.wiki.setText("$:/state/codemirror-6/zen-mode", "text", null, "yes");
+
     // Prevent body scroll
     document.body.style.overflow = "hidden";
 };
@@ -168,10 +170,14 @@ ZenMode.prototype.exit = function() {
     }.bind(this), 300);
     
     this.isActive = false;
-    
+
     // Update state tiddler
-    $tw.wiki.setText("$:/state/codemirror-6/zen-mode", "text", null, "no");
-    
+    var wiki = this.wiki || $tw.wiki;
+    wiki.setText("$:/state/codemirror-6/zen-mode", "text", null, "no");
+
+    // Clear wiki reference
+    this.wiki = null;
+
     // Restore body scroll
     document.body.style.overflow = "";
 };
@@ -180,7 +186,7 @@ ZenMode.prototype.exit = function() {
  * Apply settings to editor container
  */
 ZenMode.prototype.applySettings = function() {
-    var wiki = $tw.wiki;
+    var wiki = this.wiki || $tw.wiki;
     
     // CSS custom properties
     var maxWidth = wiki.getTiddlerText("$:/config/codemirror-6/zen-mode/max-width", "700px");
@@ -214,8 +220,9 @@ ZenMode.prototype.updateTheme = function() {
     // Get current theme from engine's DOM or config
     var theme = "vanilla";
     if (this.editorWrapper) {
-        theme = this.editorWrapper.getAttribute("data-cm6-theme") || 
-                $tw.wiki.getTiddlerText("$:/config/codemirror-6/theme", "vanilla");
+        var wiki = this.wiki || $tw.wiki;
+        theme = this.editorWrapper.getAttribute("data-cm6-theme") ||
+                wiki.getTiddlerText("$:/config/codemirror-6/theme", "vanilla");
     }
     this.overlay.setAttribute("data-cm6-theme", theme);
 };
@@ -310,8 +317,9 @@ ZenMode.prototype.setupFocusMode = function() {
         this.focusModeCleanup = null;
     }
     
-    var focusMode = $tw.wiki.getTiddlerText("$:/config/codemirror-6/zen-mode/focus-mode", "none");
-    
+    var wiki = this.wiki || $tw.wiki;
+    var focusMode = wiki.getTiddlerText("$:/config/codemirror-6/zen-mode/focus-mode", "none");
+
     if (focusMode === "none" || !this.engine || !this.engine.view) return;
     
     var self = this;

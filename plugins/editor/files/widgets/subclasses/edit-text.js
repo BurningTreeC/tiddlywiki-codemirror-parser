@@ -85,6 +85,15 @@ exports.prototype.handleRemoveTrailingWhitespace = function(event) {
 };
 
 // ============================================================================
+// Override updateEditorDomNode to not reset language on every refresh
+// ============================================================================
+
+exports.prototype.updateEditorDomNode = function(text) {
+	if (!this.engine) return;
+	this.engine.setText(text);
+};
+
+// ============================================================================
 // Language Switcher handlers
 // ============================================================================
 
@@ -446,7 +455,12 @@ exports.prototype._buildSettingsSnapshot = function () {
 		multiCursor: boolConfig(wiki, "$:/config/codemirror-6/multiCursor"),
 
 		// trailing whitespace highlighting
-		showTrailingWhitespace: boolConfig(wiki, "$:/config/codemirror-6/showTrailingWhitespace")
+		showTrailingWhitespace: boolConfig(wiki, "$:/config/codemirror-6/showTrailingWhitespace"),
+
+		// plugin toggles
+		colorPicker: boolConfig(wiki, "$:/config/codemirror-6/colorPicker"),
+		imagePreview: boolConfig(wiki, "$:/config/codemirror-6/imagePreview") && body,
+		wordCount: boolConfig(wiki, "$:/config/codemirror-6/wordCount") && body
 	};
 };
 

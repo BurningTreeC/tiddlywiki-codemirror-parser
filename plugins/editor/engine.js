@@ -288,8 +288,9 @@ function buildPluginContext(options, engine, overrideType) {
 			context.tiddlerTitle = widget.getAttribute("tiddler");
 		}
 		
-		if (context.tiddlerTitle && $tw.wiki) {
-			var tiddler = $tw.wiki.getTiddler(context.tiddlerTitle);
+		var wiki = widget.wiki;
+		if (context.tiddlerTitle && wiki) {
+			var tiddler = wiki.getTiddler(context.tiddlerTitle);
 			if (tiddler) {
 				context.tiddlerFields = tiddler.fields;
 				context.tiddlerType = tiddler.fields.type || "";
@@ -543,7 +544,8 @@ function CodeMirrorEngine(options) {
 	}
 
 	// Core: Spellcheck (with compartment for dynamic toggle)
-	var spellcheckEnabled = $tw.wiki.getTiddlerText("$:/config/codemirror-6/spellcheck") === "yes";
+	var wiki = this.widget && this.widget.wiki;
+	var spellcheckEnabled = wiki && wiki.getTiddlerText("$:/config/codemirror-6/spellcheck") === "yes";
 	if (this._compartments.spellcheck) {
 		extensions.push(
 			this._compartments.spellcheck.of(
@@ -568,25 +570,9 @@ function CodeMirrorEngine(options) {
 		extensions.push(this._compartments.bracketMatching.of(bracketMatching()));
 	}
 
-	// Core: Close brackets (with compartment for dynamic toggle)
-	// Include curly/typographic quotes and German-style quotes in addition to defaults
-	var closeBrackets = (core.autocomplete || {}).closeBrackets;
-	var closeBracketsKeymap = (core.autocomplete || {}).closeBracketsKeymap;
-	var closeBracketsConfig = {
-		// Standard: () [] {} '' ""
-		// Curly quotes: "" ''
-		// German quotes: „" ‚'
-		brackets: ["(", "[", "{", "'", '"', "\u201c\u201d", "\u2018\u2019", "\u201e\u201d", "\u201a\u2019"]
-	};
-	if (closeBrackets && this._compartments.closeBrackets) {
-		extensions.push(this._compartments.closeBrackets.of(closeBrackets(closeBracketsConfig)));
-		if (closeBracketsKeymap && cmKeymap) {
-			extensions.push(cmKeymap.of(closeBracketsKeymap));
-		}
-	}
-
 	// Custom: Auto-close triple braces {{{ → {{{  }}}
 	// This handles TiddlyWiki filtered transclusion syntax
+	// MUST be before closeBrackets so it gets first chance to handle {
 	if (EditorView.inputHandler) {
 		extensions.push(EditorView.inputHandler.of(function(view, from, to, text) {
 			// Only handle single { insertion
@@ -626,6 +612,24 @@ function CodeMirrorEngine(options) {
 		}));
 	}
 
+	// Core: Close brackets (with compartment for dynamic toggle)
+	// Include curly/typographic quotes and German-style quotes in addition to defaults
+	var closeBrackets = (core.autocomplete || {}).closeBrackets;
+	var closeBracketsKeymap = (core.autocomplete || {}).closeBracketsKeymap;
+	var closeBracketsConfig = {
+		// Each entry is a 2-char string: opening + closing bracket
+		// Standard: () [] {} '' "" ``
+		// Curly quotes: "" ''
+		// German quotes: „" ‚'
+		brackets: ["()", "[]", "{}", "''", '""', "``", "\u201c\u201d", "\u2018\u2019", "\u201e\u201d", "\u201a\u2019"]
+	};
+	if (closeBrackets && this._compartments.closeBrackets) {
+		extensions.push(this._compartments.closeBrackets.of(closeBrackets(closeBracketsConfig)));
+		if (closeBracketsKeymap && cmKeymap) {
+			extensions.push(cmKeymap.of(closeBracketsKeymap));
+		}
+	}
+
 	// Core: Indent unit (with compartment for dynamic config)
 	var indentUnit = (core.language || {}).indentUnit;
 	if (indentUnit && this._compartments.indentUnit) {
@@ -639,7 +643,7 @@ function CodeMirrorEngine(options) {
 
 	// Core: Multi-cursor support (with compartment for dynamic toggle)
 	// Get initial setting from config
-	var multiCursorEnabled = $tw.wiki.getTiddlerText("$:/config/codemirror-6/multiCursor", "yes") === "yes";
+	var multiCursorEnabled = wiki && wiki.getTiddlerText("$:/config/codemirror-6/multiCursor", "yes") === "yes";
 	var multiCursorExtensions = [];
 	if (multiCursorEnabled && EditorState.allowMultipleSelections) {
 		multiCursorExtensions.push(EditorState.allowMultipleSelections.of(true));
@@ -728,7 +732,7 @@ function CodeMirrorEngine(options) {
 	extensions.push(this._compartments.multiCursor.of(multiCursorExtensions));
 
 	// Core: Trailing whitespace highlighting (with compartment for dynamic toggle)
-	var trailingWhitespaceEnabled = $tw.wiki.getTiddlerText("$:/config/codemirror-6/showTrailingWhitespace", "no") === "yes";
+	var trailingWhitespaceEnabled = wiki && wiki.getTiddlerText("$:/config/codemirror-6/showTrailingWhitespace", "no") === "yes";
 	var trailingWhitespaceExtensions = [];
 	var highlightTrailingWhitespace = (core.view || {}).highlightTrailingWhitespace;
 	if (trailingWhitespaceEnabled && highlightTrailingWhitespace) {
@@ -788,7 +792,7 @@ function CodeMirrorEngine(options) {
 
 	// Core: Keymap compartment (for vim/emacs dynamic switching)
 	// Get initial keymap from config and load extensions from matching plugin
-	var initialKeymapId = $tw.wiki.getTiddlerText("$:/config/codemirror-6/keymap", "default");
+	var initialKeymapId = wiki && wiki.getTiddlerText("$:/config/codemirror-6/keymap", "default") || "default";
 	var initialKeymapExtensions = [];
 	if (initialKeymapId !== "default" && this._keymapPlugins[initialKeymapId]) {
 		var keymapPlugin = this._keymapPlugins[initialKeymapId];
@@ -1011,10 +1015,12 @@ function CodeMirrorEngine(options) {
 	// ========================================================================
 	// Extend API from Active Plugins
 	// ========================================================================
-	
+
+	var registeredEventPlugins = {};
+
 	for (var k = 0; k < this._activePlugins.length; k++) {
 		var apiPlugin = this._activePlugins[k];
-		
+
 		try {
 			if (isFunction(apiPlugin.extendAPI)) {
 				var apiMethods = apiPlugin.extendAPI(this, context);
@@ -1028,7 +1034,7 @@ function CodeMirrorEngine(options) {
 					}
 				}
 			}
-			
+
 			if (isFunction(apiPlugin.registerEvents)) {
 				var eventHandlers = apiPlugin.registerEvents(this, context);
 				if (isObject(eventHandlers)) {
@@ -1038,9 +1044,41 @@ function CodeMirrorEngine(options) {
 						}
 					}
 				}
+				registeredEventPlugins[apiPlugin.name] = true;
 			}
 		} catch (e) {
 			console.error("Error extending API from plugin '" + apiPlugin.name + "':", e);
+		}
+	}
+
+	// ========================================================================
+	// Register Events for Inactive Plugins with Compartments
+	// ========================================================================
+	// Plugins with compartments need their event handlers registered even when
+	// inactive, so they can respond to settingsChanged and be toggled on/off
+
+	var allPlugins = discoverPlugins();
+	for (var m = 0; m < allPlugins.length; m++) {
+		var inactivePlugin = allPlugins[m];
+
+		// Skip if already registered events (was active)
+		if (registeredEventPlugins[inactivePlugin.name]) continue;
+
+		// Only register events for plugins that have compartments (toggleable plugins)
+		if (isFunction(inactivePlugin.registerCompartments) && isFunction(inactivePlugin.registerEvents)) {
+			try {
+				var inactiveEventHandlers = inactivePlugin.registerEvents(this, context);
+				if (isObject(inactiveEventHandlers)) {
+					for (var inactiveEventName in inactiveEventHandlers) {
+						if (inactiveEventHandlers.hasOwnProperty(inactiveEventName) && isFunction(inactiveEventHandlers[inactiveEventName])) {
+							this.on(inactiveEventName, inactiveEventHandlers[inactiveEventName]);
+						}
+					}
+				}
+				console.log("CM6: Registered events for inactive toggleable plugin '" + inactivePlugin.name + "'");
+			} catch (e) {
+				console.error("Error registering events for inactive plugin '" + inactivePlugin.name + "':", e);
+			}
 		}
 	}
 
@@ -1168,7 +1206,8 @@ CodeMirrorEngine.prototype._handleSettingsChanged = function(settings) {
 	var closeBrackets = (core.autocomplete || {}).closeBrackets;
 	if (closeBrackets && this._compartments.closeBrackets) {
 		var cbConfig = {
-			brackets: ["(", "[", "{", "'", '"', "\u201c\u201d", "\u2018\u2019", "\u201e\u201d", "\u201a\u2019"]
+			// Each entry is a 2-char string: opening + closing bracket
+			brackets: ["()", "[]", "{}", "''", '""', "``", "\u201c\u201d", "\u2018\u2019", "\u201e\u201d", "\u201a\u2019"]
 		};
 		var cbContent = settings.closeBrackets ? closeBrackets(cbConfig) : [];
 		effects.push(this._compartments.closeBrackets.reconfigure(cbContent));

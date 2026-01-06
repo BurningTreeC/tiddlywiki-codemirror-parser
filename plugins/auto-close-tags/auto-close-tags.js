@@ -32,7 +32,8 @@ exports.plugin = {
 
   // Load if autoCloseTags option is enabled
   condition: function(context) {
-    var enabled = $tw.wiki.getTiddlerText("$:/config/codemirror-6/autoCloseTags") !== "no";
+    var wiki = context.options && context.options.widget && context.options.widget.wiki;
+    var enabled = wiki && wiki.getTiddlerText("$:/config/codemirror-6/autoCloseTags") !== "no";
     return enabled;
   },
 

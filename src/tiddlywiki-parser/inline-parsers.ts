@@ -83,7 +83,14 @@ export const InlineCode: InlineParser = {
       end++
     }
 
-    return -1
+    // No closing backtick found - parse as unclosed inline code to end of text
+    const children: Element[] = [
+      cx.elt(Type.InlineCodeMark, pos, pos + 1),
+    ]
+    if (cx.end > pos + 1) {
+      children.push(cx.elt(Type.CodeText, pos + 1, cx.end))
+    }
+    return cx.addElement(cx.elt(Type.InlineCode, pos, cx.end, children))
   }
 }
 
@@ -116,7 +123,7 @@ export const Underline: InlineParser = {
 
 export const Strikethrough: InlineParser = {
   name: "Strikethrough",
-  parse: createDelimiterParser({ charCode: Ch.Tilde, delimType: StrikethroughDelim, rejectOddRuns: true })
+  parse: createDelimiterParser({ charCode: Ch.Tilde, delimType: StrikethroughDelim })
 }
 
 export const Superscript: InlineParser = {
@@ -550,11 +557,28 @@ function parseFilterExpression(cx: InlineContext, filterContent: string, offset:
           stepChildren.push(cx.elt(Type.FilterOperand, offset + operandStart, offset + pos))
           if (pos < len && filterContent[pos] === ']') pos++
         } else if (operandCh === '<') {
-          // Variable: <varname>
+          // Variable: <varname> or <__param__>
           pos++
           const operandStart = pos
           while (pos < len && filterContent[pos] !== '>') pos++
-          stepChildren.push(cx.elt(Type.FilterVariable, offset + operandStart, offset + pos))
+          const varContent = filterContent.slice(operandStart, pos)
+          // Always create SubstitutedParam for __param__ pattern for proper syntax highlighting
+          // (linter can validate if param is actually defined)
+          const substitutedMatch = /^__([^_]+)__$/.exec(varContent)
+          if (substitutedMatch) {
+            const paramName = substitutedMatch[1]
+            const varStart = offset + operandStart - 1  // Include <
+            const varEnd = offset + pos + 1  // Include >
+            const innerStart = offset + operandStart
+            const nameChildren: Element[] = [
+              cx.elt(Type.SubstitutedParamMark, innerStart, innerStart + 2),  // __
+              cx.elt(Type.SubstitutedParamName, innerStart + 2, innerStart + 2 + paramName.length),
+              cx.elt(Type.SubstitutedParamMark, innerStart + 2 + paramName.length, offset + pos),  // __
+            ]
+            stepChildren.push(cx.elt(Type.SubstitutedParam, varStart, varEnd, nameChildren))
+          } else {
+            stepChildren.push(cx.elt(Type.FilterVariable, offset + operandStart, offset + pos))
+          }
           if (pos < len) pos++
         } else if (operandCh === '{') {
           // Text reference: {textref}
@@ -699,6 +723,8 @@ export const MacroCall: InlineParser = {
   name: "MacroCall",
   parse(cx: InlineContext, next: number, pos: number): number {
     if (next !== Ch.LessThan || cx.char(pos + 1) !== Ch.LessThan) return -1
+    // Don't parse <<< as a macro (it's block quote syntax)
+    if (cx.char(pos + 2) === Ch.LessThan) return -1
 
     const text = cx.slice(pos, cx.end)
 
@@ -734,9 +760,9 @@ export const MacroCall: InlineParser = {
       } else {
         closePos = lineEnd
       }
-      // Must have at least a name
+      // Must have at least a name (stop at whitespace, newline, or >)
       let nameEnd = 2
-      while (nameEnd < closePos && !/[\s\n]/.test(text[nameEnd])) nameEnd++
+      while (nameEnd < closePos && !/[\s\n>]/.test(text[nameEnd])) nameEnd++
       if (nameEnd === 2) return -1  // No name found
     }
 
@@ -745,16 +771,32 @@ export const MacroCall: InlineParser = {
     // Sanity check: end must be greater than pos and within document bounds
     if (end <= pos || end > cx.end) return -1
 
-    // Parse macro name
+    // Parse macro name (stop at whitespace or >)
     let nameEnd = 2
-    while (nameEnd < closePos && !/\s/.test(text[nameEnd])) nameEnd++
+    while (nameEnd < closePos && !/[\s>]/.test(text[nameEnd])) nameEnd++
     const name = text.slice(2, nameEnd)
     if (!name) return -1
 
     const children: Element[] = [
       cx.elt(Type.MacroCallMark, pos, pos + 2),
-      cx.elt(Type.MacroName, pos + 2, pos + 2 + name.length),
     ]
+
+    // Check if name is a substituted parameter: __param__
+    // Always create SubstitutedParam for proper syntax highlighting
+    // (linter can validate if param is actually defined)
+    const substitutedMatch = /^__([^_]+)__$/.exec(name)
+    if (substitutedMatch) {
+      const paramName = substitutedMatch[1]
+      const nameStart = pos + 2
+      const nameChildren: Element[] = [
+        cx.elt(Type.SubstitutedParamMark, nameStart, nameStart + 2),  // __
+        cx.elt(Type.SubstitutedParamName, nameStart + 2, nameStart + 2 + paramName.length),
+        cx.elt(Type.SubstitutedParamMark, nameStart + 2 + paramName.length, nameStart + name.length),  // __
+      ]
+      children.push(cx.elt(Type.SubstitutedParam, nameStart, nameStart + name.length, nameChildren))
+    } else {
+      children.push(cx.elt(Type.MacroName, pos + 2, pos + 2 + name.length))
+    }
 
     // Parse parameters - only if we have valid range
     if (nameEnd < closePos) {
@@ -1159,7 +1201,7 @@ function parseInlineAttributes(cx: InlineContext, attrString: string, offset: nu
 // Widget Parser (<$widget>content</$widget> or <$widget/>)
 // ============================================================================
 
-const widgetStartRe = /^<(\$[a-zA-Z0-9\-\.]+)/
+const widgetStartRe = /^<(\$[a-zA-Z0-9\-\.]*)/
 
 export const Widget: InlineParser = {
   name: "Widget",
@@ -1176,7 +1218,21 @@ export const Widget: InlineParser = {
 
     // Find the proper end of the tag (handling > inside attribute values)
     const tagResult = findTagEnd(text.slice(afterName))
-    if (!tagResult) return -1
+
+    // Handle incomplete tag (no closing >)
+    if (!tagResult) {
+      // For incomplete tags, parse what we have up to end of available text
+      const attrString = text.slice(afterName)
+      const children: Element[] = [
+        cx.elt(Type.TagMark, pos, pos + 1), // <
+        cx.elt(Type.WidgetName, pos + 1, pos + 1 + name.length),
+      ]
+      if (attrString.trim()) {
+        const attrElements = parseInlineAttributes(cx, attrString, pos + afterName)
+        children.push(...attrElements)
+      }
+      return cx.addElement(cx.elt(Type.InlineWidget, pos, cx.end, children))
+    }
 
     const openTagEnd = pos + afterName + tagResult.end
     const attrString = text.slice(afterName, afterName + tagResult.end - (tagResult.selfClose ? 2 : 1))
@@ -1256,7 +1312,21 @@ export const HTMLTag: InlineParser = {
 
     // Find the proper end of the tag (handling > inside attribute values)
     const tagResult = findTagEnd(text.slice(afterName))
-    if (!tagResult) return -1
+
+    // Handle incomplete tag (no closing >)
+    if (!tagResult) {
+      // For incomplete tags, parse what we have up to end of available text
+      const attrString = text.slice(afterName)
+      const children: Element[] = [
+        cx.elt(Type.TagMark, pos, pos + 1), // <
+        cx.elt(Type.TagName, pos + 1, pos + 1 + name.length),
+      ]
+      if (attrString.trim()) {
+        const attrElements = parseInlineAttributes(cx, attrString, pos + afterName)
+        children.push(...attrElements)
+      }
+      return cx.addElement(cx.elt(Type.HTMLTag, pos, cx.end, children))
+    }
 
     const openTagEnd = pos + afterName + tagResult.end
     const attrString = text.slice(afterName, afterName + tagResult.end - (tagResult.selfClose ? 2 : 1))
@@ -1582,10 +1652,10 @@ export const ConditionalSyntax: InlineParser = {
 // ============================================================================
 
 export const DefaultInlineParsers: InlineParser[] = [
+  InlineCode,
   ConditionalSyntax,  // Must come early to catch <%
   Escape,
   Entity,
-  InlineCode,
   Bold,
   Italic,
   Underline,

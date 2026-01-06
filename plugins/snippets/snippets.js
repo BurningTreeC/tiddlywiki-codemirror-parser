@@ -49,18 +49,20 @@ function convertTemplate(template) {
 
 /**
  * Load user-defined snippets from tagged tiddlers
+ * @param {object} wiki - The wiki object (defaults to $tw.wiki)
  */
-function loadUserSnippets() {
+function loadUserSnippets(wiki) {
 	var now = Date.now();
 	if (_snippetCache && (now - _cacheTime) < CACHE_TTL) {
 		return _snippetCache;
 	}
 
+	wiki = wiki || $tw.wiki;
 	var snippets = [];
-	var tiddlers = $tw.wiki.getTiddlersWithTag(SNIPPET_TAG);
+	var tiddlers = wiki.getTiddlersWithTag(SNIPPET_TAG);
 
 	tiddlers.forEach(function(title) {
-		var tiddler = $tw.wiki.getTiddler(title);
+		var tiddler = wiki.getTiddler(title);
 		if (!tiddler) return;
 
 		var fields = tiddler.fields;
@@ -256,7 +258,8 @@ exports.plugin = {
 
 	// Check if enabled in config
 	condition: function(context) {
-		var enabled = $tw.wiki.getTiddlerText("$:/config/codemirror-6/snippets", "yes");
+		var wiki = context.options && context.options.widget && context.options.widget.wiki;
+		var enabled = wiki && wiki.getTiddlerText("$:/config/codemirror-6/snippets", "yes");
 		return enabled === "yes";
 	},
 

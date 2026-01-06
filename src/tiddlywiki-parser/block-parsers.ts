@@ -71,7 +71,7 @@ export const HorizontalRule: BlockParser = {
 // Fenced Code Block (```)
 // ============================================================================
 
-const codeStartRe = /^```(\w*)\s*$/
+const codeStartRe = /^```(\S*)/
 const codeEndRe = /^```\s*$/
 
 export const FencedCode: BlockParser = {
@@ -106,12 +106,15 @@ export const FencedCode: BlockParser = {
       codeContent += cx.line.text
     }
 
-    if (!foundEnd && codeContent) {
-      // Use prevLineEnd() to correctly handle documents without trailing newline
-      children.push(elt(Type.CodeText, codeStart, cx.prevLineEnd()))
+    if (!foundEnd) {
+      // Unclosed code block - include all remaining content as code
+      const codeEnd = cx.prevLineEnd()
+      if (codeEnd > codeStart) {
+        children.push(elt(Type.CodeText, codeStart, codeEnd))
+      }
     }
 
-    const end = foundEnd ? cx.lineStart + cx.line.text.length : cx.lineStart
+    const end = foundEnd ? cx.lineStart + cx.line.text.length : cx.prevLineEnd()
     cx.addElement(elt(Type.FencedCode, start, end, children))
     return true
   }
@@ -157,11 +160,14 @@ export const TypedBlock: BlockParser = {
     }
 
     if (!foundEnd) {
-      // Use prevLineEnd() to correctly handle documents without trailing newline
-      children.push(elt(contentType, contentStart, cx.prevLineEnd()))
+      // Unclosed typed block - include all remaining content
+      const contentEnd = cx.prevLineEnd()
+      if (contentEnd > contentStart) {
+        children.push(elt(contentType, contentStart, contentEnd))
+      }
     }
 
-    const end = foundEnd ? cx.lineStart + cx.line.text.length : cx.lineStart
+    const end = foundEnd ? cx.lineStart + cx.line.text.length : cx.prevLineEnd()
     cx.addElement(elt(Type.TypedBlock, start, end, children))
     return true
   }
@@ -759,8 +765,24 @@ export const MacroCallBlock: BlockParser = {
 
     const children: Element[] = [
       elt(Type.MacroCallMark, start, start + 2),
-      elt(Type.MacroName, start + 2, start + 2 + name.length),
     ]
+
+    // Check if name is a substituted parameter: __param__
+    // Always create SubstitutedParam for proper syntax highlighting
+    // (linter can validate if param is actually defined)
+    const substitutedMatch = /^__([^_]+)__$/.exec(name)
+    if (substitutedMatch) {
+      const paramName = substitutedMatch[1]
+      const nameStart = start + 2
+      const nameChildren: Element[] = [
+        elt(Type.SubstitutedParamMark, nameStart, nameStart + 2),  // __
+        elt(Type.SubstitutedParamName, nameStart + 2, nameStart + 2 + paramName.length),
+        elt(Type.SubstitutedParamMark, nameStart + 2 + paramName.length, nameStart + name.length),  // __
+      ]
+      children.push(elt(Type.SubstitutedParam, nameStart, nameStart + name.length, nameChildren))
+    } else {
+      children.push(elt(Type.MacroName, start + 2, start + 2 + name.length))
+    }
 
     // Parse parameters - everything between name and >>
     const paramsStr = allContent.slice(nameEnd, closeIdx)
@@ -977,11 +999,25 @@ function parseAttributes(attrString: string, offset: number, isWidget: boolean):
       valueEnd = pos
       valueType = Type.AttributeMacro
       // Create child elements for macro
+      const macroName = attrString.slice(macroContentStart, macroNameEnd)
       const valueChildren: Element[] = [
         elt(Type.MacroCallMark, offset + openMarkStart, offset + openMarkStart + 2),
-        elt(Type.MacroName, offset + macroContentStart, offset + macroNameEnd),
-        elt(Type.MacroCallMark, offset + closeMarkStart, offset + valueEnd)
       ]
+      // Check if name is a substituted parameter: __param__
+      const attrSubstitutedMatch = /^__([^_]+)__$/.exec(macroName)
+      if (attrSubstitutedMatch) {
+        const paramName = attrSubstitutedMatch[1]
+        const nameStart = offset + macroContentStart
+        const nameChildren: Element[] = [
+          elt(Type.SubstitutedParamMark, nameStart, nameStart + 2),
+          elt(Type.SubstitutedParamName, nameStart + 2, nameStart + 2 + paramName.length),
+          elt(Type.SubstitutedParamMark, nameStart + 2 + paramName.length, offset + macroNameEnd),
+        ]
+        valueChildren.push(elt(Type.SubstitutedParam, nameStart, offset + macroNameEnd, nameChildren))
+      } else {
+        valueChildren.push(elt(Type.MacroName, offset + macroContentStart, offset + macroNameEnd))
+      }
+      valueChildren.push(elt(Type.MacroCallMark, offset + closeMarkStart, offset + valueEnd))
       const attrChildren: Element[] = [
         elt(Type.AttributeName, offset + nameStart, offset + nameEnd),
         elt(valueType, offset + valueStart, offset + valueEnd, valueChildren)
@@ -1727,12 +1763,12 @@ export const ConditionalBlock: BlockParser = {
 }
 
 export const DefaultBlockParsers: BlockParser[] = [
+  FencedCode,
+  TypedBlock,
   ConditionalBlock,  // <%if%> ... <%endif%>
   StyledBlock,  // Multi-line @@...@@
   Heading,
   HorizontalRule,
-  FencedCode,
-  TypedBlock,
   HardLineBreaks,  // """ ... """
   MultiLineBlockQuote,
   List,

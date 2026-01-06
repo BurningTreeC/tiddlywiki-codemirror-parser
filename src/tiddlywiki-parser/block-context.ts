@@ -63,6 +63,24 @@ export class BlockContext implements PartialParse {
 
   stoppedAt: number | null = null
 
+  // Track macro/procedure/function parameters for __param__ validation
+  private _macroParams: Set<string> | null = null
+
+  /** Set the current macro parameters (for __param__ validation) */
+  setMacroParams(params: string[] | null) {
+    this._macroParams = params ? new Set(params) : null
+  }
+
+  /** Check if a name is a valid macro parameter */
+  isValidMacroParam(name: string): boolean {
+    return this._macroParams !== null && this._macroParams.has(name)
+  }
+
+  /** Check if we're inside a macro definition with parameters */
+  get hasMacroParams(): boolean {
+    return this._macroParams !== null
+  }
+
   /** Whether we've reached the end of the document */
   get atEnd(): boolean { return this._atEnd }
 
