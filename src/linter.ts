@@ -413,6 +413,7 @@ function lintParameters(view: EditorView): Diagnostic[] {
         // Don't descend into this node again (we handle it manually)
         return false
       }
+      return
     },
   })
 
