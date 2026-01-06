@@ -6,6 +6,12 @@ module-type: startup
 Register TiddlyWiki language with CodeMirror 6 core for code block highlighting.
 Provides TiddlyWiki-specific completion callbacks for tiddlers, macros, widgets, etc.
 
+NAMING CONVENTION: All language startup modules MUST use names matching "cm6-lang-*"
+(e.g., "cm6-lang-javascript", "cm6-lang-css"). This module dynamically discovers
+all cm6-lang-* modules and adds them as dependencies, ensuring they load first.
+This is required so code.getLanguages() returns all available languages for
+nested code highlighting in fenced code blocks (```css, ```javascript, etc.).
+
 \*/
 /*jslint node: true, browser: true */
 /*global $tw: false */

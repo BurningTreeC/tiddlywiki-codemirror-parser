@@ -35,10 +35,19 @@
     "test": "echo \"No tests yet\" && exit 0"
   },
   "dependencies": {
+    "@codemirror/lang-cpp": "^6.0.3",
+    "@codemirror/lang-go": "^6.0.1",
+    "@codemirror/lang-java": "^6.0.2",
+    "@codemirror/lang-lezer": "^6.0.2",
+    "@codemirror/lang-php": "^6.0.2",
+    "@codemirror/lang-rust": "^6.0.2",
+    "@codemirror/lang-sass": "^6.0.2",
+    "@codemirror/lang-wast": "^6.0.2",
     "@codemirror/language-data": "^6.5.2",
     "@codemirror/search": "^6.5.11",
     "@lezer/common": "^1.2.1",
-    "@lezer/highlight": "^1.2.0"
+    "@lezer/highlight": "^1.2.0",
+    "codemirror-lang-latex": "^0.2.0"
   },
   "peerDependencies": {
     "@codemirror/autocomplete": "^6.0.0",

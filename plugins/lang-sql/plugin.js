@@ -18,6 +18,21 @@ var SQL_TYPES = [
 	"text/x-sql"
 ];
 
+var TAGS_CONFIG_TIDDLER = "$:/config/codemirror-6/lang-sql/tags";
+var hasConfiguredTag = require("$:/plugins/BurningTreeC/tiddlywiki-codemirror/utils.js").hasConfiguredTag;
+
+// Map config values to dialect objects
+var DIALECTS = {
+	"StandardSQL": langSql.StandardSQL,
+	"MySQL": langSql.MySQL,
+	"MariaSQL": langSql.MariaSQL,
+	"PostgreSQL": langSql.PostgreSQL,
+	"SQLite": langSql.SQLite,
+	"MSSQL": langSql.MSSQL,
+	"PLSQL": langSql.PLSQL,
+	"Cassandra": langSql.Cassandra
+};
+
 exports.plugin = {
 	name: "lang-sql",
 	description: "SQL syntax highlighting",
@@ -35,12 +50,24 @@ exports.plugin = {
 	},
 
 	condition: function(context) {
+		// Tag-based override takes precedence
+		if (hasConfiguredTag(context, TAGS_CONFIG_TIDDLER)) {
+			return true;
+		}
+		// Fall back to content type check
 		var type = context.tiddlerType;
 		return SQL_TYPES.indexOf(type) !== -1;
 	},
 
+	getDialect: function(context) {
+		var wiki = context.widget && context.widget.wiki;
+		var dialectName = wiki && wiki.getTiddlerText("$:/config/codemirror-6/sql-dialect", "StandardSQL");
+		return DIALECTS[dialectName] || langSql.StandardSQL;
+	},
+
 	getCompartmentContent: function(context) {
-		return [langSql.sql()];
+		var dialect = this.getDialect(context);
+		return [langSql.sql({ dialect: dialect })];
 	},
 
 	getExtensions: function(context) {
@@ -49,5 +76,24 @@ exports.plugin = {
 			return [compartments.sqlLanguage.of(this.getCompartmentContent(context))];
 		}
 		return this.getCompartmentContent(context);
+	},
+
+	// Register event handlers with closure access to engine and context
+	registerEvents: function(engine, context) {
+		var self = this;
+
+		return {
+			settingsChanged: function(settings) {
+				if (engine._destroyed) return;
+
+				var compartments = engine._compartments;
+				if (compartments.sqlLanguage && engine.view) {
+					var newContent = self.getCompartmentContent(context);
+					engine.view.dispatch({
+						effects: compartments.sqlLanguage.reconfigure(newContent)
+					});
+				}
+			}
+		};
 	}
 };

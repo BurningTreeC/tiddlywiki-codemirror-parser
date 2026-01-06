@@ -271,6 +271,12 @@ function emojiCompletions(context) {
   var match = context.matchBefore(/:[a-zA-Z0-9_+-]*$/);
   if (!match) return null;
 
+  // Don't trigger after URL protocols (mailto:, tel:, http:, https:, ftp:, file:, data:, javascript:, geo:)
+  var textBefore = context.state.sliceDoc(Math.max(0, match.from - 15), match.from);
+  if (/(?:^|[\s\[({<])(?:mailto|tel|https?|ftp|file|data|javascript|geo)$/i.test(textBefore)) {
+    return null;
+  }
+
   // Extract query (without the colon)
   var query = match.text.slice(1);
 

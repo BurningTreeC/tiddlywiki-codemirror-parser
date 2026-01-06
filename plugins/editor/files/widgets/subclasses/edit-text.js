@@ -791,6 +791,11 @@ exports.prototype.refresh = function (changedTiddlers) {
 		}
 	}
 
+	// Check for tag changes on the edited tiddler (for tag-based language switching)
+	if (this.editTitle && changedTiddlers[this.editTitle] && this.engine) {
+		this.engine.refreshLanguageConditions();
+	}
+
 	// Notify registered plugins of refresh
 	pluginRegistry.callHook("onRefresh", this, changedTiddlers);
 

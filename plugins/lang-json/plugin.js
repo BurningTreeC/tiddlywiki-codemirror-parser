@@ -12,15 +12,26 @@ JSON language support for CodeMirror 6
 
 var langJson = require("$:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/lang-json/lang-json.js");
 
+// Try to load lint library (may not be available if lint plugin not installed)
+var lintLib = null;
+try {
+	lintLib = require("$:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/lint/codemirror-lint.js");
+} catch (e) {
+	// Lint library not available
+}
+
 // Content types that activate this plugin
 var JSON_TYPES = [
 	"application/json",
 	"text/json"
 ];
 
+var TAGS_CONFIG_TIDDLER = "$:/config/codemirror-6/lang-json/tags";
+var hasConfiguredTag = require("$:/plugins/BurningTreeC/tiddlywiki-codemirror/utils.js").hasConfiguredTag;
+
 exports.plugin = {
 	name: "lang-json",
-	description: "JSON syntax highlighting",
+	description: "JSON syntax highlighting and linting",
 	priority: 50,
 
 	init: function(cm6Core) {
@@ -35,12 +46,27 @@ exports.plugin = {
 	},
 
 	condition: function(context) {
+		// Tag-based override takes precedence
+		if (hasConfiguredTag(context, TAGS_CONFIG_TIDDLER)) {
+			return true;
+		}
+		// Fall back to content type check
 		var type = context.tiddlerType;
 		return JSON_TYPES.indexOf(type) !== -1;
 	},
 
 	getCompartmentContent: function(context) {
-		return [langJson.json()];
+		var extensions = [langJson.json()];
+
+		// Add JSON linting if lint library is available
+		if (lintLib && lintLib.linter && langJson.jsonParseLinter) {
+			extensions.push(lintLib.linter(langJson.jsonParseLinter()));
+			if (lintLib.lintGutter) {
+				extensions.push(lintLib.lintGutter());
+			}
+		}
+
+		return extensions;
 	},
 
 	getExtensions: function(context) {

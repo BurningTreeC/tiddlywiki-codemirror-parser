@@ -36,6 +36,9 @@ var TSX_TYPES = [
 
 var ALL_TYPES = JS_TYPES.concat(TS_TYPES, JSX_TYPES, TSX_TYPES);
 
+var TAGS_CONFIG_TIDDLER = "$:/config/codemirror-6/lang-javascript/tags";
+var hasConfiguredTag = require("$:/plugins/BurningTreeC/tiddlywiki-codemirror/utils.js").hasConfiguredTag;
+
 exports.plugin = {
 	name: "lang-javascript",
 	description: "JavaScript/TypeScript syntax highlighting",
@@ -53,6 +56,11 @@ exports.plugin = {
 	},
 
 	condition: function(context) {
+		// Tag-based override takes precedence
+		if (hasConfiguredTag(context, TAGS_CONFIG_TIDDLER)) {
+			return true;
+		}
+		// Fall back to content type check
 		var type = context.tiddlerType;
 		return ALL_TYPES.indexOf(type) !== -1;
 	},

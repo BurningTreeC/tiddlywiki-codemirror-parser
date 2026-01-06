@@ -5,6 +5,11 @@ module-type: startup
 
 Register YAML language with CodeMirror 6 core.
 
+NAMING CONVENTION: The startup module name MUST follow the pattern "cm6-lang-*"
+(e.g., "cm6-lang-yaml"). This allows the TiddlyWiki language module to
+dynamically discover and depend on all language modules, ensuring they are
+loaded before TiddlyWiki so nested code highlighting works in code blocks.
+
 \*/
 /*jslint node: true, browser: true */
 /*global $tw: false */

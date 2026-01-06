@@ -1,13 +1,8 @@
 title: $:/plugins/BurningTreeC/tiddlywiki-codemirror/ui/Buttons/spellcheck
 tags: $:/tags/EditorToolbar
 caption: {{$:/plugins/BurningTreeC/tiddlywiki-codemirror/icons/spellcheck}} Spellcheck
-description: Toggle spellcheck
+description: Toggle spellcheck and select language
 icon: $:/plugins/BurningTreeC/tiddlywiki-codemirror/icons/spellcheck
 condition: [<targetTiddler>has[title]]
+dropdown: $:/plugins/BurningTreeC/tiddlywiki-codemirror/ui/Spellcheck/Dropdown
 button-classes: cm6-toolbar-btn-spellcheck
-
-<%if [{$:/config/codemirror-6/spellcheck}match[yes]] %>
-<$action-setfield $tiddler="$:/config/codemirror-6/spellcheck" text="no"/>
-<%else%>
-<$action-setfield $tiddler="$:/config/codemirror-6/spellcheck" text="yes"/>
-<%endif%>

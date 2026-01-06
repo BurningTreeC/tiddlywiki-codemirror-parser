@@ -543,13 +543,30 @@ function CodeMirrorEngine(options) {
 		extensions.push(EditorView.contentAttributes.of({ tabindex: String(tabIndex) }));
 	}
 
+	// Core: Placeholder text (shown when editor is empty)
+	var placeholderFn = (core.view || {}).placeholder;
+	if (placeholderFn && this.options.placeholder) {
+		extensions.push(placeholderFn(this.options.placeholder));
+	}
+
 	// Core: Spellcheck (with compartment for dynamic toggle)
+	// Note: Browser spellcheck requires both spellcheck="true" AND a lang attribute
+	// to know which dictionary to use. Without lang, most browsers won't underline words.
 	var wiki = this.widget && this.widget.wiki;
 	var spellcheckEnabled = wiki && wiki.getTiddlerText("$:/config/codemirror-6/spellcheck") === "yes";
+	// Get language from spellcheck config, default to "en"
+	var spellcheckLang = (wiki && wiki.getTiddlerText("$:/config/codemirror-6/spellcheck-lang")) || "en";
 	if (this._compartments.spellcheck) {
 		extensions.push(
 			this._compartments.spellcheck.of(
-				EditorView.contentAttributes.of({ spellcheck: spellcheckEnabled ? "true" : "false" })
+				spellcheckEnabled
+					? EditorView.contentAttributes.of({
+						spellcheck: "true",
+						lang: spellcheckLang,
+						autocorrect: "on",
+						autocapitalize: "on"
+					})
+					: EditorView.contentAttributes.of({ spellcheck: "false" })
 			)
 		);
 	}
@@ -1365,11 +1382,23 @@ CodeMirrorEngine.prototype._handleSettingsChanged = function(settings) {
 	// Spellcheck toggle
 	if (settings.spellcheck !== undefined && this._compartments.spellcheck) {
 		var EditorView = core.view.EditorView;
-		// Always set the attribute (true or false) rather than removing it
-		var spellcheckValue = settings.spellcheck ? "true" : "false";
-		effects.push(this._compartments.spellcheck.reconfigure(
-			EditorView.contentAttributes.of({ spellcheck: spellcheckValue })
-		));
+		var wiki = this.widget && this.widget.wiki;
+		if (settings.spellcheck) {
+			// Get language from spellcheck config, default to "en"
+			var spellcheckLang = (wiki && wiki.getTiddlerText("$:/config/codemirror-6/spellcheck-lang")) || "en";
+			effects.push(this._compartments.spellcheck.reconfigure(
+				EditorView.contentAttributes.of({
+					spellcheck: "true",
+					lang: spellcheckLang,
+					autocorrect: "on",
+					autocapitalize: "on"
+				})
+			));
+		} else {
+			effects.push(this._compartments.spellcheck.reconfigure(
+				EditorView.contentAttributes.of({ spellcheck: "false" })
+			));
+		}
 	}
 
 	// completeAnyWord toggle (no compartment needed, just update the flag)
@@ -1557,6 +1586,102 @@ CodeMirrorEngine.prototype.setType = function(newType) {
  */
 CodeMirrorEngine.prototype.getType = function() {
 	return this._currentType;
+};
+
+/**
+ * Refresh language plugins based on current tiddler state (tags, fields)
+ * Call this when the tiddler being edited has changed (e.g., tags added/removed)
+ */
+CodeMirrorEngine.prototype.refreshLanguageConditions = function() {
+	if (this._destroyed) return;
+
+	// Re-read tiddler fields from wiki
+	var widget = this.options && this.options.widget;
+	var wiki = widget && widget.wiki;
+	var tiddlerTitle = this._pluginContext && this._pluginContext.tiddlerTitle;
+
+	if (!wiki || !tiddlerTitle) return;
+
+	var tiddler = wiki.getTiddler(tiddlerTitle);
+	if (!tiddler) return;
+
+	// Check if tags have actually changed
+	var oldTags = this._pluginContext.tiddlerFields && this._pluginContext.tiddlerFields.tags;
+	var newTags = tiddler.fields.tags;
+
+	// Convert to comparable strings
+	var oldTagsStr = isArray(oldTags) ? oldTags.slice().sort().join(",") : "";
+	var newTagsStr = isArray(newTags) ? newTags.slice().sort().join(",") : "";
+
+	if (oldTagsStr === newTagsStr) {
+		return; // No tag change
+	}
+
+	console.log("CM6: Tags changed from [" + oldTagsStr + "] to [" + newTagsStr + "]");
+
+	// Update context with new tiddler fields
+	this._pluginContext.tiddlerFields = tiddler.fields;
+
+	// Re-evaluate all conditional plugins
+	var effects = [];
+	var context = this._pluginContext;
+
+	for (var i = 0; i < this._conditionalPlugins.length; i++) {
+		var plugin = this._conditionalPlugins[i];
+		var wasActive = this._activePlugins.indexOf(plugin) >= 0;
+		var shouldBeActive = false;
+
+		try {
+			shouldBeActive = plugin.condition(context);
+		} catch (e) {
+			console.error("Error evaluating condition for plugin '" + plugin.name + "':", e);
+		}
+
+		if (wasActive !== shouldBeActive) {
+			var compartmentName = this._findPluginCompartment(plugin);
+
+			if (compartmentName && this._compartments[compartmentName]) {
+				var newContent = [];
+
+				if (shouldBeActive) {
+					if (isFunction(plugin.getCompartmentContent)) {
+						try {
+							newContent = plugin.getCompartmentContent(context) || [];
+							if (!isArray(newContent)) newContent = [newContent];
+						} catch (e) {
+							console.error("Error getting compartment content from plugin '" + plugin.name + "':", e);
+						}
+					} else if (isFunction(plugin.getExtensions)) {
+						try {
+							newContent = plugin.getExtensions(context) || [];
+							if (!isArray(newContent)) newContent = [newContent];
+						} catch (e) {
+							console.error("Error getting extensions from plugin '" + plugin.name + "':", e);
+						}
+					}
+				}
+
+				effects.push(
+					this._compartments[compartmentName].reconfigure(newContent)
+				);
+
+				console.log("CM6: Tag change - reconfigured '" + compartmentName + "' (active: " + shouldBeActive + ")");
+			}
+
+			// Update active plugins list
+			if (shouldBeActive && !wasActive) {
+				this._activePlugins.push(plugin);
+			} else if (!shouldBeActive && wasActive) {
+				var idx = this._activePlugins.indexOf(plugin);
+				if (idx >= 0) this._activePlugins.splice(idx, 1);
+			}
+		}
+	}
+
+	if (effects.length > 0) {
+		this.view.dispatch({ effects: effects });
+		this._triggerEvent("languageChanged", { reason: "tags" });
+	}
 };
 
 CodeMirrorEngine.prototype.focus = function() {

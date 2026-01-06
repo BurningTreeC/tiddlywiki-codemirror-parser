@@ -19,6 +19,9 @@ var XML_TYPES = [
 	"image/svg+xml"
 ];
 
+var TAGS_CONFIG_TIDDLER = "$:/config/codemirror-6/lang-xml/tags";
+var hasConfiguredTag = require("$:/plugins/BurningTreeC/tiddlywiki-codemirror/utils.js").hasConfiguredTag;
+
 exports.plugin = {
 	name: "lang-xml",
 	description: "XML syntax highlighting",
@@ -36,6 +39,11 @@ exports.plugin = {
 	},
 
 	condition: function(context) {
+		// Tag-based override takes precedence
+		if (hasConfiguredTag(context, TAGS_CONFIG_TIDDLER)) {
+			return true;
+		}
+		// Fall back to content type check
 		var type = context.tiddlerType;
 		return XML_TYPES.indexOf(type) !== -1;
 	},

@@ -1,0 +1,2623 @@
+title: $:/plugins/BurningTreeC/tiddlywiki-codemirror/TestSyntax
+tags: test
+
+\whitespace trim
+
+\define simpleInlineMacro() This is inline macro content
+
+\define macroWithParams(param1, param2:"default value")
+This is the macro body.
+Parameter 1: $param1$
+Parameter 2: $param2$
+\end
+
+\define multiParamMacro(a, b, c, d:"def", e:"another default")
+Many parameters: $a$, $b$, $c$, $d$, $e$
+Combined: $a$$b$$c$
+\end
+
+\define nestedMacro(outer)
+Outer value: $outer$
+Inner call: <<simpleInlineMacro>>
+\end
+
+\define macroWithWidgets(title)
+<$link to="$title$">Link to $title$</$link>
+\end
+
+\define macroWithFilter(tag)
+<$list filter="[tag[$tag$]]" variable="item">
+* <<item>>
+</$list>
+\end
+
+\define htmlMacro(content, class:"default-class")
+<div class="$class$">
+$content$
+</div>
+\end
+
+\procedure simpleProc()
+Simple procedure body content
+\end
+
+\procedure procWithParam(input)
+<$let processed={{{ [<input>uppercase[]] }}}>
+Result: <<processed>>
+</$let>
+\end
+
+\procedure procWithDefaults(a:"alpha", b:"beta", c:"gamma")
+Values: <<a>>, <<b>>, <<c>>
+\end
+
+\procedure procWithWidgets(tiddler)
+<$list filter="[<tiddler>tags[]]" variable="tag">
+<$text text=<<tag>>/>
+</$list>
+\end
+
+\procedure procMultiLine(x, y)
+<$let sum={{{ [<x>add<y>] }}}>
+<$let product={{{ [<x>multiply<y>] }}}>
+Sum: <<sum>>
+Product: <<product>>
+</$let>
+</$let>
+\end
+
+\function simpleFunc() [all[tiddlers]count[]]
+
+\function funcWithParams(a, b) [<a>] [<b>] +[join[ ]]
+
+\function calculate(x, y) [<x>add<y>multiply[2]]
+
+\function filterFunc(tag) [tag<tag>sort[title]first[5]]
+
+\function complexFunc(input, default:"fallback")
+[<input>!is[blank]then<input>else<default>]
+\end
+
+\widget $my.custom.widget(content:"Default content", class:"widget-class")
+<div class=<<class>>>
+<$slot $name="header">Default Header</$slot>
+<div class="widget-body">
+<<content>>
+<$slot $name="body"/>
+</div>
+<$slot $name="footer">Default Footer</$slot>
+</div>
+\end
+
+\widget $test.simple()
+<span class="test-widget">Simple Widget</span>
+\end
+
+\widget $test.parameterized(label:"Click me", action:"tm-notify")
+<$button message=<<action>>><<label>></$button>
+\end
+
+\widget $namespace.sub.widget(value)
+<$text text=<<value>>/>
+\end
+
+\parameters (defaultTitle:"Untitled", showDetails:"yes", maxItems:10)
+
+\import [[$:/core/macros/tag-picker]] [[$:/core/macros/tabs]]
+
+\rules except wikilink
+
+\rules only html emphasis
+
+\rules
+
+! TiddlyWiki Parser Comprehensive Syntax Test
+
+This tiddler tests ALL parser rules for the CodeMirror 6 TiddlyWiki language mode.
+
+---
+
+!! Headings
+
+! Heading Level 1
+!! Heading Level 2
+!!! Heading Level 3
+!!!! Heading Level 4
+!!!!! Heading Level 5
+!!!!!! Heading Level 6
+
+! Heading with ''bold'' and //italic// and `code`
+!! Heading with [[WikiLink]] and {{transclusion}}
+!!! Heading with <<simpleInlineMacro>> and <$text text="widget"/>
+!!!! Heading with ~~strikethrough~~ and __underline__
+!!!!! Heading with ^^superscript^^ and ,,subscript,,
+!!!!!! Heading with multiple [[Link One]] [[Link Two]] links
+
+! Heading ending with punctuation!
+!! Heading with numbers 123 and symbols @#$
+!!! Heading with `code` at the end
+
+---
+
+!! Text Formatting
+
+!!! Basic Formatting
+This is ''bold text'' in a sentence.
+This is //italic text// in a sentence.
+This is __underlined text__ in a sentence.
+This is ~~strikethrough text~~ in a sentence.
+This is ^^superscript^^ in a sentence.
+This is ,,subscript,, in a sentence.
+This is `inline code` in a sentence.
+
+!!! Nested Formatting
+This is ''bold with //italic// inside''.
+This is //italic with ''bold'' inside//.
+This is ''bold with __underline__ inside''.
+This is __underline with ~~strikethrough~~ inside__.
+This is ''//bold italic//'' together.
+This is //''italic bold''// together.
+This is ''__bold underline__'' together.
+This is ~~//strikethrough italic//~~ together.
+This is ''//~~bold italic strikethrough~~//'' all three.
+This is ^^super with ''bold'' inside^^ works.
+This is ,,sub with //italic// inside,, works.
+
+!!! Deep Nesting
+''Bold with //italic with __underline with ~~strike with `code`~~__//''.
+//Italic ''bold __underline ~~strike~~__''//.
+
+!!! Formatting at Boundaries
+''bold at start'' of line.
+End of line is ''bold''
+''entire line is bold''
+//italic at start// of line.
+End of line is //italic//
+//entire line is italic//
+__underline at start__ of line.
+~~strikethrough at start~~ of line.
+
+!!! Edge Cases for Formatting
+Single 'apostrophe' should not be bold.
+Double ''apostrophes'' are bold.
+Three '''apostrophes''' test.
+Four ''''apostrophes'''' test.
+//italic with space before closing //
+''bold with space before closing ''
+// italic at start//
+''bold''immediate text after
+//italic//immediate text after
+Text''bold''text without spaces.
+Text//italic//text without spaces.
+''bold'' ''another bold'' multiple on line.
+//italic// //another italic// multiple on line.
+
+!!! Unclosed Formatting (graceful handling)
+Unclosed ''bold without closing
+Unclosed //italic without closing
+Unclosed __underline without closing
+Unclosed ~~strikethrough without closing
+Unclosed ^^superscript without closing
+Unclosed ,,subscript without closing
+
+!!! Code Formatting
+Inline `code with spaces` works.
+`code at start` of line.
+End with `code`
+Multiple `code` blocks `in one` line `here`.
+`code with ''bold'' inside` should show as code only.
+`code with special <chars> & "quotes"`
+Empty `` backticks.
+`code with
+newline` should not work across lines.
+Unclosed `code without closing
+
+!!! Mixed Formatting with Links
+''Bold with [[WikiLink]] inside''.
+//Italic with {{transclusion}} inside//.
+__Underline with <<simpleInlineMacro>> inside__.
+''//Bold italic with [[Link|Target]]//''.
+
+---
+
+!! Links
+
+!!! WikiLinks
+Simple [[WikiLink]]
+WikiLink with [[display text|Target Tiddler]]
+WikiLink with [[special characters: test!@#$%|Target]]
+WikiLink with [[pipe | in display|Target]]
+[[Link at start]] of line.
+End with [[link]]
+Multiple [[link one]] and [[link two]] in line.
+[[Link]]immediate text after.
+Text[[link]]text without spaces.
+[[Link with ''bold'' in display|Target]]
+[[Very long tiddler name that spans many characters]]
+
+!!! Soft Links (angle bracket syntax)
+<$link to="Target">Soft link text</$link>
+[[Hard link]] vs <$link to="Target">soft link</$link>
+
+!!! External Links
+[ext[https://example.com]]
+[ext[Example Site|https://example.com]]
+[ext[https://example.com/path?query=value&other=123]]
+[ext[Link with spaces in text|https://example.com]]
+[ext[https://example.com/path/to/page.html#anchor]]
+[ext[FTP Link|ftp://files.example.com]]
+[ext[mailto:test@example.com]]
+
+!!! Image Links
+[img[https://example.com/image.png]]
+[img[Alt text|https://example.com/image.png]]
+[img width=100 [https://example.com/image.png]]
+[img width=100 height=50 [https://example.com/image.png]]
+[img width=100 class="img-class" [Alt text|https://example.com/image.png]]
+[img[$:/core/images/done]]
+[img[My Image|$:/images/myimage]]
+[img width={{!!width}} [image.png]]
+[img class=<<imageClass>> [image.png]]
+[img tooltip="Image tooltip" [image.png]]
+
+!!! CamelCase Links
+This is a CamelCaseLink in text.
+AnotherCamelCase and YetAnother in same line.
+~NotALink because of tilde escape.
+lowercase is not a link.
+ALLCAPS is not a link.
+CamelCaseWith123Numbers still works.
+CamelCaseAtEnd
+ABCDef is CamelCase.
+AbCdEf is CamelCase.
+A1B2C3 is not CamelCase (numbers break it).
+CamelCase, with punctuation after.
+CamelCase. with period after.
+(CamelCase) in parentheses.
+
+!!! System Links
+$:/core/ui/PageTemplate
+$:/plugins/tiddlywiki/codemirror
+$:/config/something
+$:/state/mystate
+$:/temp/volatile
+$:/language/Buttons/Save
+Direct system link: $:/core/modules/startup.js in text.
+Multiple: $:/one and $:/two in same line.
+$:/core/ui/PageTemplate, with comma after
+($:/core/ui/PageTemplate) in parentheses
+
+!!! URL Auto-Links
+Visit https://example.com for more info.
+Also http://old-style.com works.
+https://example.com/path?query=1&other=2#anchor in context.
+Check http://localhost:8080/path for local.
+Secure https://secure.example.com/api/v1/users works.
+https://example.com. with period after.
+https://example.com, with comma after.
+(https://example.com) in parentheses.
+Multiple https://one.com and https://two.com links.
+
+---
+
+!! Transclusions
+
+!!! Simple Transclusions
+{{MyTiddler}}
+{{$:/core/ui/PageTemplate}}
+{{Tiddler with spaces}}
+{{Tiddler-with-dashes}}
+{{tiddler_with_underscores}}
+{{123NumericStart}}
+{{}}
+
+!!! Field Transclusions
+{{MyTiddler!!title}}
+{{MyTiddler!!text}}
+{{MyTiddler!!custom-field}}
+{{MyTiddler!!field_underscore}}
+{{!!title}}
+{{!!text}}
+{{!!custom-field}}
+{{$:/config/setting!!value}}
+
+!!! Index Transclusions
+{{MyDataTiddler##key}}
+{{MyDataTiddler##key with spaces}}
+{{MyDataTiddler##key/path/nested}}
+{{##index}}
+{{$:/config/data##setting}}
+
+!!! Combined Field and Index
+{{MyTiddler!!field##index}}
+
+!!! Filtered Transclusions
+{{{ [tag[test]] }}}
+{{{ [all[tiddlers]sort[title]] }}}
+{{{ [tag[journal]!sort[created]limit[5]] }}}
+{{{ [[MyTiddler]get[title]] }}}
+{{{ [all[shadows]prefix[$:/core]] }}}
+{{{ [tag[test]] +[first[]] }}}
+{{{ }}}
+
+!!! Filtered Transclusion with Template
+{{{ [tag[test]] ||$:/core/ui/ListItemTemplate}}}
+{{{ [all[current]links[]] ||TemplateTitle}}}
+{{{ [tag[journal]] ||$:/templates/journal |$:/templates/empty}}}
+
+!!! Transclusions in Context
+Text before {{tiddler}} text after.
+''Bold {{transclusion}} bold''.
+[[Link with {{dynamic}}|{{target}}]]
+
+---
+
+!! Macros
+
+!!! Simple Macro Calls
+<<now>>
+<<currentTiddler>>
+<<qualify>>
+<<simpleInlineMacro>>
+
+!!! Macros with Parameters
+<<now "YYYY-MM-DD">>
+<<now "DDth MMM YYYY">>
+<<qualify "suffix">>
+<<macroWithParams "value1" "value2">>
+<<macroWithParams param1:"value one" param2:"value two">>
+<<macroWithParams "positional" param2:"named">>
+
+!!! Macros with Various Parameter Styles
+<<macro "quoted positional">>
+<<macro 'single quoted'>>
+<<macro [[bracketed]]>>
+<<macro unquoted>>
+<<macro param:value>>
+<<macro param:"quoted value">>
+<<macro param:'single quoted value'>>
+<<macro param:[[bracketed value]]>>
+<<macro param:"""triple quoted value""">>
+
+!!! Multi-line Macro Calls
+<<macroWithParams
+    param1:"multi
+    line value"
+    param2:"another"
+>>
+
+<<multiParamMacro
+    a:"first"
+    b:"second"
+    c:"third"
+    d:"fourth"
+    e:"fifth"
+>>
+
+!!! Nested Macros
+<<nestedMacro "outer value">>
+<<macroWithWidgets "TestTiddler">>
+<<macroWithFilter "journal">>
+
+!!! Macro Variable References
+<$text text=<<currentTiddler>>/>
+<$link to=<<qualify "link">>>Qualified Link</$link>
+
+!!! Built-in Macros
+<<list-links "[tag[test]]">>
+<<tabs "[tag[tabs]]" default:"First">>
+<<toc-selective-expandable "[tag[toc]]">>
+<<tag "mytag">>
+<<timeline "[tag[journal]]">>
+
+---
+
+!! Widgets
+
+!!! Text Widget
+<$text text="Hello World"/>
+<$text text={{!!title}}/>
+<$text text=<<currentTiddler>>/>
+<$text text={{{ [all[current]get[title]] }}}/>
+
+!!! List Widget
+<$list filter="[tag[test]]"/>
+<$list filter="[tag[test]]">
+    <$text text=<<currentTiddler>>/>
+</$list>
+
+<$list filter="[all[tiddlers]limit[10]]" variable="item">
+    <$link to=<<item>>><$text text=<<item>>/></$link>
+</$list>
+
+<$list filter="[tag[test]]" emptyMessage="No items found">
+    Content for each item
+</$list>
+
+<$list filter="[tag[test]]" variable="item" counter="idx">
+    <<idx>>: <<item>>
+</$list>
+
+!!! Let and Vars Widgets
+<$let myVar="some value" another="more">
+    <$text text=<<myVar>>/>
+    <$text text=<<another>>/>
+</$let>
+
+<$vars greeting="Hello" name="World" punctuation="!">
+    <<greeting>> <<name>><<punctuation>>
+</$vars>
+
+!!! Set Widget
+<$set name="myVariable" value="test value">
+    Content with <<myVariable>>
+</$set>
+
+<$set name="filtered" filter="[tag[test]first[]]">
+    First tagged: <<filtered>>
+</$set>
+
+<$set name="selected" select="2" filter="[tag[test]]">
+    Second item: <<selected>>
+</$set>
+
+<$set name="emptyOk" value="" emptyValue="(none)">
+    Value: <<emptyOk>>
+</$set>
+
+!!! Reveal Widget
+<$reveal type="match" state="$:/state/show" text="yes">
+    This is revealed content
+</$reveal>
+
+<$reveal type="nomatch" state="$:/state/show" text="yes">
+    This shows when not matching
+</$reveal>
+
+<$reveal type="popup" state="$:/state/popup">
+    Popup content
+</$reveal>
+
+<$reveal tag="div" type="match" state="$:/state/tab" text="one" animate="yes">
+    Tab one content with animation
+</$reveal>
+
+!!! Button Widget
+<$button message="tm-notify" param="$:/Notification">
+    Click me
+</$button>
+
+<$button set="$:/state/toggle" setTo="yes">
+    Set State
+</$button>
+
+<$button actions="<$action-setfield $tiddler='Test' field='value'/>">
+    With actions
+</$button>
+
+<$button class="tc-btn-invisible" tooltip="Button tooltip">
+    Styled button
+</$button>
+
+<$button to="TargetTiddler">
+    Navigate button
+</$button>
+
+!!! Link Widget
+<$link to="TargetTiddler">Link Text</$link>
+<$link to={{!!target}}>Dynamic Link</$link>
+<$link to=<<myMacro>>>Macro Link</$link>
+<$link to={{{ [tag[x]first[]] }}}>Filter Link</$link>
+<$link/>
+
+!!! Transclude Widget
+<$transclude tiddler="SomeTiddler"/>
+<$transclude tiddler="SomeTiddler" field="description"/>
+<$transclude tiddler="SomeTiddler" index="key"/>
+<$transclude tiddler={{!!reference}}/>
+<$transclude tiddler="Template" mode="block"/>
+
+<$transclude tiddler="SlotTemplate">
+    <$fill $name="header">Custom Header</$fill>
+    <$fill $name="body">Custom Body</$fill>
+</$transclude>
+
+!!! View Widget
+<$view field="title"/>
+<$view tiddler="Test" field="title"/>
+<$view field="created" format="date" template="YYYY-MM-DD"/>
+<$view field="modified" format="relativedate"/>
+<$view field="tags" format="links"/>
+
+!!! Edit Widgets
+<$edit-text tiddler="Test" field="description" placeholder="Enter description"/>
+<$edit-text tag="textarea" class="tc-edit-texteditor" minHeight="100px"/>
+<$edit-text field="text" focusPopup="$:/state/popup"/>
+<$edit-bitmap tiddler="$:/temp/drawing" width="400" height="300"/>
+
+!!! Action Widgets
+<$action-setfield $tiddler="Test" $field="myfield" $value="myvalue"/>
+<$action-setfield $tiddler="Test" myfield="direct syntax"/>
+<$action-deletefield $tiddler="Test" $field="obsolete"/>
+<$action-deletefield $tiddler="Test" field1 field2 field3/>
+<$action-deletetiddler $tiddler="TempTiddler"/>
+<$action-deletetiddler $filter="[prefix[$:/temp/]]"/>
+<$action-navigate $to="TargetTiddler"/>
+<$action-navigate $to="Target" $scroll="yes"/>
+<$action-sendmessage $message="tm-notify" $param="$:/Notification"/>
+<$action-sendmessage $message="tm-open-window" template="$:/core/ui/PageTemplate"/>
+<$action-createtiddler $basetitle="New Tiddler" tags="test" text="Content"/>
+<$action-createtiddler $basetitle="New" $template="$:/templates/new"/>
+<$action-confirm $message="Are you sure?">
+    <$action-deletetiddler $tiddler="Important"/>
+</$action-confirm>
+<$action-log message="Debug message" value=<<variable>>/>
+<$action-popup $state="$:/state/popup" $coords="(100,200,300,400)"/>
+<$action-listops $tiddler="Test" $field="list" $subfilter="[[new item]]"/>
+
+!!! Checkbox Widget
+<$checkbox tiddler="Test" field="done" checked="yes" unchecked="no"> Done</$checkbox>
+<$checkbox tiddler="Test" field="done" checked="yes" unchecked="no" default="no"> With default</$checkbox>
+<$checkbox tag="completed"> Has tag</$checkbox>
+<$checkbox listField="mylist" checked="item"> In list</$checkbox>
+<$checkbox filter="[all[current]has[field]]" checked="yes"> Filter checkbox</$checkbox>
+
+!!! Radio Widget
+<$radio tiddler="Test" field="choice" value="option1"> Option 1</$radio>
+<$radio tiddler="Test" field="choice" value="option2"> Option 2</$radio>
+<$radio tiddler="Test" field="choice" value="option3" class="custom-radio"> Option 3</$radio>
+
+!!! Select Widget
+<$select tiddler="Test" field="selection">
+    <option value="">--Select--</option>
+    <option value="a">Option A</option>
+    <option value="b">Option B</option>
+    <option value="c">Option C</option>
+</$select>
+
+<$select tiddler="Test" field="selection" default="b">
+    <$list filter="[tag[options]]">
+        <option value=<<currentTiddler>>><$view field="title"/></option>
+    </$list>
+</$select>
+
+!!! Range Widget
+<$range tiddler="Test" field="volume" min="0" max="100" default="50"/>
+<$range tiddler="Test" field="value" min="0" max="1" increment="0.1"/>
+
+!!! Draggable and Droppable
+<$draggable tiddler="MyTiddler">
+    Drag me
+</$draggable>
+
+<$draggable filter="[tag[draggable]]">
+    Drag multiple
+</$draggable>
+
+<$droppable actions="<$action-listops $tiddler='Target' $field='list' $subfilter='[<actionTiddler>]'/>">
+    Drop here
+</$droppable>
+
+<$droppable tag="div" class="drop-zone" enable={{{ [<dragTiddler>tag[allowed]] }}}>
+    Conditional drop zone
+</$droppable>
+
+!!! Import and Export
+<$importvariables filter="[[$:/core/macros/tag-picker]]">
+    <<tag-picker>>
+</$importvariables>
+
+<$importvariables filter="[all[shadows+tiddlers]tag[$:/tags/Macro]]">
+    Content with imported macros
+</$importvariables>
+
+!!! Keyboard Widget
+<$keyboard key="ctrl+S" actions="<$action-sendmessage $message='tm-save-wiki'/>">
+    <$edit-text field="text"/>
+</$keyboard>
+
+<$keyboard key="escape" actions="<$action-setfield $tiddler='$:/state/edit' text='no'/>">
+    <$keyboard key="ctrl+enter" actions="<$action-sendmessage $message='tm-save-tiddler'/>">
+        Nested keyboard handlers
+    </$keyboard>
+</$keyboard>
+
+!!! Parameters Widget
+<$parameters who="World" greeting="Hello">
+    <<greeting>> <<who>>!
+</$parameters>
+
+<$parameters title={{!!title}} count={{{ [all[current]tags[]count[]] }}}>
+    Title: <<title>>, Tag count: <<count>>
+</$parameters>
+
+!!! Fill and Slot Widgets
+<$slot $name="header">Default Header</$slot>
+<$slot $name="body">Default Body</$slot>
+<$slot $name="footer"/>
+
+<$fill $name="header">
+    Custom Header Content
+</$fill>
+
+!!! Genesis Widget
+<$genesis $type="element" $tag="div" class="dynamic">
+    Dynamic element creation
+</$genesis>
+
+<$genesis $type="widget" $tag="$button" message="tm-notify">
+    Dynamic widget
+</$genesis>
+
+<$genesis $type="element" $tag=<<elementTag>> class={{{ [<class>addprefix[tc-]] }}}>
+    Computed genesis
+</$genesis>
+
+!!! Qualify Widget
+<$qualify title="base">
+    Qualified: <<qualify>>
+</$qualify>
+
+!!! Messagecatcher Widget
+<$messagecatcher $tm-notify="<$action-log message='Notification received'/>">
+    Content that can send messages
+</$messagecatcher>
+
+<$messagecatcher $tm-navigate="<$action-log destination={{$:/HistoryList!!current-tiddler}}/>">
+    Navigation catcher
+</$messagecatcher>
+
+!!! Eventcatcher Widget
+<$eventcatcher click="<$action-log message='Clicked'/>">
+    <div>Click anywhere here</div>
+</$eventcatcher>
+
+<$eventcatcher dblclick="<$action-log message='Double clicked'/>" selector=".clickable">
+    <div class="clickable">Double click me</div>
+    <div>Not clickable</div>
+</$eventcatcher>
+
+!!! Wikify Widget
+<$wikify name="rendered" text="''Bold'' and //italic//">
+    <<rendered>>
+</$wikify>
+
+<$wikify name="html" text={{!!text}} output="html">
+    <$text text=<<html>>/>
+</$wikify>
+
+!!! Macrocall Widget
+<$macrocall $name="now" format="YYYY-MM-DD"/>
+<$macrocall $name="tabs" tabsList="[tag[tabs]]" default="First"/>
+<$macrocall $name="macroWithParams" param1="value1" param2="value2"/>
+
+!!! Count Widget
+<$count filter="[tag[test]]"/>
+<$count filter="[all[tiddlers]!is[system]]"/>
+
+!!! Image Widget
+<$image source="$:/core/images/done"/>
+<$image source="$:/core/images/done" width="32" height="32"/>
+<$image source={{!!image}} class="tiddler-image"/>
+
+!!! Codeblock Widget
+<$codeblock code="function test() { return true; }" language="javascript"/>
+<$codeblock code={{!!code}} language={{!!code-language}}/>
+
+!!! Self-Closing vs Container Widgets
+<$text text="self-closing"/>
+<$text text="container">ignored content</$text>
+<$list filter="[limit[1]]"/>
+<$list filter="[limit[1]]">template content</$list>
+<$transclude/>
+<$transclude>fill content</$transclude>
+
+!!! Namespaced Widgets
+<$my.custom.widget param="value"/>
+<$namespace.sub.widget>content</$namespace.sub.widget>
+<$plugin.widgetname attr="test">
+    Nested content
+</$plugin.widgetname>
+<$test.simple/>
+<$test.parameterized label="Custom Label" action="tm-close-tiddler"/>
+
+---
+
+!! HTML Elements
+
+!!! Basic HTML
+<div>Simple div</div>
+<span>Inline span</span>
+<p>Paragraph element</p>
+<section>Section element</section>
+<article>Article element</article>
+
+!!! HTML with Attributes
+<div class="my-class">With class</div>
+<div id="my-id" class="class1 class2">Multiple attributes</div>
+<div style="color: red; font-size: 16px;">Inline styles</div>
+<a href="https://example.com" target="_blank">External link</a>
+<a href="#section" title="Go to section">Internal anchor</a>
+<input type="text" name="field" value="default" placeholder="Enter text"/>
+<img src="image.png" alt="Description" width="100" height="100"/>
+
+!!! HTML with TiddlyWiki Attributes
+<div class={{!!class-field}}>Transclusion attribute</div>
+<div class=<<myMacro>>>Macro attribute</div>
+<div class={{{ [all[current]get[class]] }}}>Filter attribute</div>
+<div data-tiddler=`$(currentTiddler)$`>Substitution attribute</div>
+<a href={{!!url}}>Dynamic href</a>
+<img src=<<imageSource>> alt={{!!alt-text}}/>
+
+!!! Nested HTML
+<div class="outer">
+    <div class="inner">
+        <span>Deeply nested</span>
+        <p>With paragraph</p>
+    </div>
+    <div class="sibling">
+        Sibling content
+    </div>
+</div>
+
+!!! Self-Closing HTML (void elements)
+<br/>
+<br>
+<hr/>
+<hr>
+<img src="image.png"/>
+<img src="image.png">
+<input type="text"/>
+<input type="text">
+<meta charset="utf-8"/>
+<link rel="stylesheet" href="style.css"/>
+<area shape="rect" coords="0,0,100,100"/>
+<base href="https://example.com/"/>
+<col span="2"/>
+<embed src="video.mp4"/>
+<source src="audio.mp3"/>
+<track src="subtitles.vtt"/>
+<wbr/>
+
+!!! HTML5 Semantic Elements
+<article>
+    <header>
+        <h1>Article Title</h1>
+        <p>By Author</p>
+    </header>
+    <section>
+        <h2>Section Heading</h2>
+        <p>Content section</p>
+    </section>
+    <aside>
+        Related content
+    </aside>
+    <footer>
+        <p>Article Footer</p>
+    </footer>
+</article>
+
+<nav>
+    <ul>
+        <li><a href="#section1">Section 1</a></li>
+        <li><a href="#section2">Section 2</a></li>
+    </ul>
+</nav>
+
+<figure>
+    <img src="image.png" alt="Figure image"/>
+    <figcaption>Figure caption text</figcaption>
+</figure>
+
+<details>
+    <summary>Click to expand</summary>
+    Hidden content here
+</details>
+
+<dialog open>
+    Dialog content
+</dialog>
+
+!!! Form Elements
+<form action="/submit" method="post">
+    <fieldset>
+        <legend>Personal Information</legend>
+        <label for="name">Name:</label>
+        <input type="text" id="name" name="name"/>
+        <label for="email">Email:</label>
+        <input type="email" id="email" name="email"/>
+    </fieldset>
+    <textarea name="message" rows="4" cols="50">Default text</textarea>
+    <select name="option">
+        <optgroup label="Group 1">
+            <option value="1">Option 1</option>
+            <option value="2">Option 2</option>
+        </optgroup>
+    </select>
+    <button type="submit">Submit</button>
+</form>
+
+!!! Table Elements
+<table>
+    <caption>Table Caption</caption>
+    <colgroup>
+        <col span="2" style="background: lightblue;"/>
+        <col style="background: lightyellow;"/>
+    </colgroup>
+    <thead>
+        <tr>
+            <th>Header 1</th>
+            <th>Header 2</th>
+            <th>Header 3</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>Cell 1</td>
+            <td>Cell 2</td>
+            <td>Cell 3</td>
+        </tr>
+    </tbody>
+    <tfoot>
+        <tr>
+            <td colspan="3">Footer</td>
+        </tr>
+    </tfoot>
+</table>
+
+!!! Media Elements
+<video controls width="320" height="240">
+    <source src="video.mp4" type="video/mp4"/>
+    <source src="video.webm" type="video/webm"/>
+    Your browser does not support video.
+</video>
+
+<audio controls>
+    <source src="audio.mp3" type="audio/mpeg"/>
+    <source src="audio.ogg" type="audio/ogg"/>
+    Your browser does not support audio.
+</audio>
+
+<picture>
+    <source media="(min-width: 800px)" srcset="large.jpg"/>
+    <source media="(min-width: 400px)" srcset="medium.jpg"/>
+    <img src="small.jpg" alt="Responsive image"/>
+</picture>
+
+<canvas id="myCanvas" width="200" height="100">
+    Canvas not supported
+</canvas>
+
+!!! SVG Elements
+<svg width="100" height="100" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="50" cy="50" r="40" fill="red" stroke="black" stroke-width="2"/>
+    <rect x="10" y="10" width="30" height="30" fill="blue"/>
+    <line x1="0" y1="0" x2="100" y2="100" stroke="green"/>
+    <polyline points="0,40 40,40 40,80 80,80 80,120" fill="none" stroke="purple"/>
+    <polygon points="50,5 100,100 0,100" fill="yellow"/>
+    <ellipse cx="50" cy="50" rx="40" ry="20" fill="orange"/>
+    <path d="M10 10 H 90 V 90 H 10 Z" fill="none" stroke="black"/>
+    <text x="10" y="50" font-size="20">SVG Text</text>
+    <g transform="translate(10,10)">
+        <circle cx="20" cy="20" r="10" fill="pink"/>
+    </g>
+</svg>
+
+!!! Deprecated/Uncommon Elements
+<abbr title="Hypertext Markup Language">HTML</abbr>
+<address>Contact info</address>
+<b>Bold text</b>
+<bdi>Bidirectional isolation</bdi>
+<bdo dir="rtl">Right to left</bdo>
+<cite>Citation</cite>
+<code>Code element</code>
+<data value="123">One hundred twenty three</data>
+<dfn>Definition</dfn>
+<em>Emphasis</em>
+<i>Italic</i>
+<kbd>Keyboard input</kbd>
+<mark>Marked/highlighted</mark>
+<meter value="0.7">70%</meter>
+<output>Output</output>
+<progress value="50" max="100">50%</progress>
+<q>Inline quote</q>
+<rp>(</rp>
+<rt>Ruby text</rt>
+<ruby>Ruby<rp>(</rp><rt>annotation</rt><rp>)</rp></ruby>
+<s>Strikethrough</s>
+<samp>Sample output</samp>
+<small>Small text</small>
+<strong>Strong importance</strong>
+<sub>Subscript</sub>
+<sup>Superscript</sup>
+<time datetime="2024-01-01">January 1, 2024</time>
+<u>Underline</u>
+<var>Variable</var>
+
+---
+
+!! Lists
+
+!!! Bullet Lists
+* Item one
+* Item two
+* Item three
+
+* Nested list
+** Second level
+*** Third level
+**** Fourth level
+***** Fifth level
+
+* Item with ''bold'' and //italic//
+* Item with [[WikiLink]]
+* Item with <<simpleInlineMacro>>
+* Item with {{transclusion}}
+* Item with `code`
+* Item with <$text text="widget"/>
+
+!!! Numbered Lists
+# First item
+# Second item
+# Third item
+
+# Nested numbered
+## Second level
+### Third level
+#### Fourth level
+
+# Item with formatting
+## ''Bold'' item
+## //Italic// item
+## [[Link]] item
+
+!!! Definition Lists
+; Term One
+: Definition of term one
+; Term Two
+: Definition of term two
+: Another definition for term two
+; Term Three
+
+; ''Bold Term''
+: Definition with [[link]] and <<simpleInlineMacro>>
+
+; Term with `code`
+: Definition with {{transclusion}}
+
+; Multi-word term
+: Multi-line definition that
+: continues on next line
+
+!!! Mixed Lists
+* Bullet item
+*# Numbered under bullet
+*#* Bullet under that
+*#*# Number under that
+# Numbered item
+#* Bullet under numbered
+#** Deeper bullet
+#**# Numbered under deep bullet
+
+!!! Complex Mixed Lists
+* First bullet
+*; Term in bullet
+*: Definition in bullet
+*# Numbered in bullet
+*#; Term in numbered in bullet
+# First numbered
+#* Bullet in numbered
+#*; Term in bullet in numbered
+#; Term in numbered
+#: Definition in numbered
+
+!!! Block Quote Lists
+> Quoted line one
+> Quoted line two
+> Quoted with ''formatting''
+
+> Multi-level quote
+>> Deeper quote
+>>> Even deeper
+>>>> Fourth level
+
+> Quote with list
+>* Bullet in quote
+>* Another bullet
+># Numbered in quote
+
+!!! Lists with Block Content
+* Item with
+
+  continuation paragraph
+
+* Item with code block
+  ```
+  code here
+  ```
+
+* Item with widget
+  <$list filter="[limit[1]]">
+      List widget inside list item
+  </$list>
+
+---
+
+!! Block Quotes
+
+!!! Simple Block Quote
+<<<
+This is a block quote.
+<<<
+
+!!! Multi-line Block Quote
+<<<
+This is a multi-line block quote.
+
+It can contain multiple paragraphs.
+
+And ''formatted'' //text// and [[links]].
+<<<
+
+!!! Block Quote with Class
+<<<.tc-big-quote
+This quote has a class applied.
+<<<
+
+<<<.warning
+Warning block quote.
+<<<
+
+<<<.note.important
+Multiple classes on block quote.
+<<<
+
+!!! Block Quote with Citation
+<<<
+The only way to do great work is to love what you do.
+<<< Steve Jobs
+
+<<<
+Another quote with citation.
+<<< //From: [[Source Document]]//
+
+!!! Block Quote with Class and Citation
+<<<.important
+This is an important quote with both class and citation.
+<<< Attribution here
+
+!!! Nested Block Content
+<<<
+! Heading inside quote
+
+This is a paragraph inside the quote.
+
+* List inside quote
+* Another item
+** Nested item
+
+| Table | Inside |
+| Quote | Block |
+
+```javascript
+// Code block inside quote
+function inQuote() {}
+```
+<<<
+
+!!! Block Quote with Widgets
+<<<
+<$list filter="[tag[quote-content]]">
+    <$transclude/>
+</$list>
+<<<
+
+---
+
+!! Tables
+
+!!! Simple Table
+|Cell 1|Cell 2|Cell 3|
+|Cell 4|Cell 5|Cell 6|
+|Cell 7|Cell 8|Cell 9|
+
+!!! Table with Header Column
+|!Header 1|!Header 2|!Header 3|
+|Data 1|Data 2|Data 3|
+|Data 4|Data 5|Data 6|
+
+!!! Table with Header Row (h suffix)
+|Header A|Header B|Header C|h
+|Data 1|Data 2|Data 3|
+|Data 4|Data 5|Data 6|
+
+!!! Table with Footer Row (f suffix)
+|Data 1|Data 2|Data 3|
+|Data 4|Data 5|Data 6|
+|Footer A|Footer B|Footer C|f
+
+!!! Table with Caption (c suffix)
+|This is the table caption|c
+|!Col 1|!Col 2|
+|A|B|
+|C|D|
+
+!!! Table with Classes (k suffix)
+|myclass anotherclass|k
+|!Header|!Header|
+|Cell|Cell|
+
+!!! Table with All Suffixes
+|sortable searchable|k
+|My Table Caption|c
+|!Name|!Value|!Description|h
+|Alpha|100|First item|
+|Beta|200|Second item|
+|Gamma|300|Third item|
+|Total|600|Sum of values|f
+
+!!! Table with Mixed Content
+|!Feature|!Description|!Example|
+|''Bold''|Bold text|`''text''`|
+|//Italic//|Italic text|`//text//`|
+|[[Link]]|Wiki link|`[[text]]`|
+|<<now>>|Macro|`<<now>>`|
+|{{!!title}}|Transclusion|`{{ref}}`|
+|`code`|Inline code|<code>`code`</code>|
+|<$text text="widget"/>|Widget|`<$text/>`|
+
+!!! Table with Widgets
+|!Action|!Button|
+|Save|<$button>Save</$button>|
+|Delete|<$button class="tc-btn-invisible">Delete</$button>|
+|Edit|<$link to={{!!title}}>Edit</$link>|
+|View|<$transclude tiddler="Preview"/>|
+
+!!! Table with Cell Merging
+|>|>|!Merged Header (3 cols)|
+|!Col 1|!Col 2|!Col 3|
+|A1|A2|A3|
+|>|B1-B2 merged|B3|
+|C1|>|C2-C3 merged|
+|>|>|All three merged|
+
+!!! Table with Vertical Merge
+|!Col 1|!Col 2|!Col 3|
+|~|A2|A3|
+|B1|~|B3|
+|C1|C2|~|
+
+!!! Table with Alignment
+|!Left|!Center|!Right|
+|left aligned|centered text|right aligned|
+| left padded | center padded | right padded |
+|<<now>>|{{!!title}}|[[Link]]|
+
+!!! Complex Table Example
+|complex-table zebra-stripe sortable|k
+|Complex Table with Multiple Features|c
+|>|>|>|!Section 1|h
+|!ID|!Name|!Status|!Actions|h
+|001|Alpha|Active|<$button>Edit</$button>|
+|002|Beta|Pending|<$button>Edit</$button>|
+|>|>|>|!Section 2|
+|003|Gamma|Inactive|<$button>Edit</$button>|
+|004|Delta|Active|<$button>Edit</$button>|
+|>|Total: 4 items|>|<$count filter="[tag[item]]"/> tagged|f
+
+---
+
+!! Code Blocks
+
+!!! Simple Fenced Code Block
+```
+Plain code block
+Multiple lines
+  With indentation
+    More indentation
+```
+
+!!! Code Block with Languages
+```javascript
+// JavaScript
+function hello(name) {
+    console.log(`Hello, ${name}!`);
+    return { greeting: "Hello", name };
+}
+
+class MyClass {
+    constructor() {
+        this.value = 42;
+    }
+
+    async fetchData() {
+        const response = await fetch('/api/data');
+        return response.json();
+    }
+}
+
+const arrow = (x, y) => x + y;
+```
+
+```typescript
+// TypeScript
+interface User {
+    id: number;
+    name: string;
+    email?: string;
+}
+
+type Status = 'active' | 'inactive' | 'pending';
+
+class UserService<T extends User> {
+    private users: T[] = [];
+
+    async getUser(id: number): Promise<T | undefined> {
+        return this.users.find(u => u.id === id);
+    }
+}
+```
+
+```css
+/* CSS */
+.my-class {
+    color: red;
+    font-size: 16px;
+    background: linear-gradient(to right, #ff0000, #00ff00);
+}
+
+@media (max-width: 768px) {
+    .responsive {
+        display: flex;
+        flex-direction: column;
+    }
+}
+
+:root {
+    --primary-color: #3498db;
+    --secondary-color: #2ecc71;
+}
+```
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Page</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <nav id="main-nav" class="navbar">
+            <a href="/">Home</a>
+        </nav>
+    </header>
+    <main>
+        <article>
+            <h1>Article Title</h1>
+            <p>Content here.</p>
+        </article>
+    </main>
+    <script src="app.js"></script>
+</body>
+</html>
+```
+
+```python
+# Python
+import asyncio
+from typing import List, Optional, Dict
+
+class DataProcessor:
+    def __init__(self, config: Dict[str, any]):
+        self.config = config
+        self._cache: Dict[str, any] = {}
+
+    async def process(self, items: List[str]) -> Optional[str]:
+        """Process a list of items asynchronously."""
+        results = []
+        for item in items:
+            result = await self._process_item(item)
+            results.append(result)
+        return '\n'.join(results) if results else None
+
+    @staticmethod
+    def validate(data: str) -> bool:
+        return len(data) > 0 and data.isalnum()
+
+# Lambda and comprehensions
+squared = lambda x: x ** 2
+evens = [x for x in range(10) if x % 2 == 0]
+mapping = {k: v for k, v in zip('abc', [1, 2, 3])}
+```
+
+```json
+{
+    "name": "test-project",
+    "version": "1.0.0",
+    "description": "A test project",
+    "main": "index.js",
+    "scripts": {
+        "start": "node index.js",
+        "test": "jest",
+        "build": "webpack"
+    },
+    "dependencies": {
+        "express": "^4.18.0",
+        "lodash": "^4.17.21"
+    },
+    "nested": {
+        "array": [1, 2, 3],
+        "object": {
+            "key": "value",
+            "boolean": true,
+            "null": null
+        }
+    }
+}
+```
+
+```sql
+-- SQL
+SELECT
+    u.id,
+    u.name,
+    u.email,
+    COUNT(o.id) AS order_count,
+    SUM(o.total) AS total_spent
+FROM users u
+LEFT JOIN orders o ON u.id = o.user_id
+WHERE u.active = true
+    AND u.created_at >= '2024-01-01'
+GROUP BY u.id, u.name, u.email
+HAVING COUNT(o.id) > 0
+ORDER BY total_spent DESC
+LIMIT 10;
+
+CREATE TABLE products (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    price DECIMAL(10, 2) DEFAULT 0.00,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+INSERT INTO products (name, price) VALUES
+    ('Widget', 19.99),
+    ('Gadget', 29.99);
+```
+
+```yaml
+# YAML
+name: CI Pipeline
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [16.x, 18.x, 20.x]
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+      - run: npm ci
+      - run: npm test
+
+    env:
+      DATABASE_URL: postgres://localhost/test
+      API_KEY: ${{ secrets.API_KEY }}
+```
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>com.example</groupId>
+    <artifactId>my-app</artifactId>
+    <version>1.0-SNAPSHOT</version>
+
+    <dependencies>
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <version>4.13.2</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <source>11</source>
+                    <target>11</target>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>
+```
+
+```markdown
+# Markdown Example
+
+This is a **bold** and *italic* text.
+
+## Lists
+
+- Item 1
+- Item 2
+  - Nested item
+
+1. First
+2. Second
+
+## Code
+
+Inline `code` and block:
+
+    indented code block
+
+## Links
+
+[Link text](https://example.com)
+![Alt text](image.png)
+
+## Blockquote
+
+> This is a quote
+> Multiple lines
+
+## Table
+
+| Header 1 | Header 2 |
+|----------|----------|
+| Cell 1   | Cell 2   |
+```
+
+```bash
+#!/bin/bash
+# Bash script
+
+set -euo pipefail
+
+readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly LOG_FILE="/var/log/script.log"
+
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG_FILE"
+}
+
+main() {
+    local name="${1:-World}"
+
+    log "Starting script..."
+
+    for i in {1..5}; do
+        echo "Iteration $i"
+    done
+
+    if [[ -f "$SCRIPT_DIR/config.sh" ]]; then
+        source "$SCRIPT_DIR/config.sh"
+    fi
+
+    log "Done!"
+}
+
+main "$@"
+```
+
+!!! Code Block with TiddlyWiki Syntax
+```tiddlywiki
+! Heading
+
+This is ''bold'' and //italic// text.
+
+* Bullet list
+* Another item
+
+<<myMacro param:"value">>
+
+<$list filter="[tag[test]]">
+    <$text text=<<currentTiddler>>/>
+</$list>
+
+{{TranscludedTiddler}}
+{{!!field}}
+
+[[WikiLink|Target]]
+[ext[https://example.com]]
+```
+
+!!! Inline Code Variations
+The `function()` call returns `null`.
+Use `npm install` to install dependencies.
+Variable `<<myVar>>` contains the value.
+Code with special chars: `<div class="test">`.
+Backtick in code: `code with \` backtick`.
+Multiple `code` `spans` `on` `one` `line`.
+`code at start` and `code at end`
+Text`code`text without spaces.
+
+---
+
+!! Typed Blocks
+
+!!! JavaScript Typed Block
+$$.js
+// This is application/javascript content
+export function myFunction(param) {
+    const result = param * 2;
+    return result;
+}
+
+class MyClass {
+    constructor() {
+        this.value = 0;
+    }
+}
+$$
+
+!!! CSS Typed Block
+$$.css
+/* This is text/css content */
+.my-selector {
+    property: value;
+    color: #ff0000;
+}
+
+@keyframes fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+$$
+
+!!! HTML Typed Block
+$$.html
+<!-- This is text/html content -->
+<div class="container">
+    <header>
+        <h1>Title</h1>
+    </header>
+    <main>
+        <p>HTML content paragraph.</p>
+    </main>
+</div>
+$$
+
+!!! SVG Typed Block
+$$.svg
+<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100">
+    <circle cx="50" cy="50" r="40" fill="blue" stroke="black" stroke-width="2"/>
+    <text x="50" y="55" text-anchor="middle" fill="white">SVG</text>
+</svg>
+$$
+
+!!! TypeScript Typed Block
+$$.ts
+interface Config {
+    name: string;
+    value: number;
+    optional?: boolean;
+}
+
+const config: Config = {
+    name: "test",
+    value: 42
+};
+
+function process<T>(input: T): T {
+    return input;
+}
+$$
+
+!!! JSON Typed Block
+$$.json
+{
+    "typed": "block",
+    "supports": ["json", "syntax"],
+    "highlighting": true
+}
+$$
+
+!!! Python Typed Block
+$$.py
+def factorial(n: int) -> int:
+    """Calculate factorial recursively."""
+    if n <= 1:
+        return 1
+    return n * factorial(n - 1)
+
+class Calculator:
+    def __init__(self):
+        self.result = 0
+
+    def add(self, x: int) -> 'Calculator':
+        self.result += x
+        return self
+$$
+
+!!! Custom Type Typed Block
+$$application/x-custom
+Custom content type data here.
+This could be any MIME type.
+$$
+
+$$text/plain
+Plain text typed block.
+No special highlighting.
+$$
+
+---
+
+!! Horizontal Rules
+
+---
+
+Simple horizontal rule above.
+
+---
+
+Multiple rules with content between:
+
+Some text here.
+
+---
+
+More text here.
+
+---
+
+Even more text.
+
+---
+
+Rule variations (all should render the same):
+
+---
+
+----
+
+-----
+
+------
+
+---
+
+!! Dashes
+
+!!! En-dash and Em-dash
+This is an en-dash -- between words.
+This is an em-dash --- in a sentence.
+Date range: 2020--2024
+Numeric range: pages 10--20
+He said---rather loudly---that he disagreed.
+Multiple---dashes---in---one---sentence.
+Dash at end of line--
+--Dash at start of line
+Word--word (en-dash between words)
+Word---word (em-dash between words)
+
+---
+
+!! Entities
+
+!!! Common HTML Entities
+Ampersand: &amp;
+Less than: &lt;
+Greater than: &gt;
+Quote: &quot;
+Apostrophe: &apos;
+Non-breaking space: between&nbsp;words
+
+!!! Named Entities - Symbols
+Copyright: &copy;
+Registered: &reg;
+Trademark: &trade;
+Degree: 100&deg;C
+Plus-minus: &plusmn;5
+Micro: &micro;second
+
+!!! Named Entities - Currency
+Euro: &euro;100
+Pound: &pound;50
+Yen: &yen;1000
+Cent: &cent;99
+
+!!! Named Entities - Arrows
+Right: &rarr;
+Left: &larr;
+Up: &uarr;
+Down: &darr;
+Left-right: &harr;
+Double right: &rArr;
+Double left: &lArr;
+
+!!! Named Entities - Math
+Times: 5&times;3
+Divide: 10&divide;2
+Not equal: &ne;
+Less or equal: &le;
+Greater or equal: &ge;
+Infinity: &infin;
+Square root: &radic;
+Sum: &sum;
+Product: &prod;
+Integral: &int;
+
+!!! Named Entities - Greek
+Alpha: &alpha;
+Beta: &beta;
+Gamma: &gamma;
+Delta: &delta;
+Pi: &pi;
+Omega: &omega;
+Sigma: &sigma;
+Theta: &theta;
+Lambda: &lambda;
+
+!!! Named Entities - Typography
+Bullet: &bull;
+Ellipsis: &hellip;
+En dash: &ndash;
+Em dash: &mdash;
+Left quote: &lsquo;
+Right quote: &rsquo;
+Left double quote: &ldquo;
+Right double quote: &rdquo;
+
+!!! Numeric Entities
+Decimal: &#65; (A)
+Decimal: &#169; (copyright)
+Decimal: &#8364; (euro)
+Hex: &#x41; (A)
+Hex: &#xA9; (copyright)
+Hex: &#x20AC; (euro)
+
+!!! Entities in Context
+Use &lt;tag&gt; for HTML tags.
+Price: &euro;19.99 &plusmn; &euro;2.00
+Result: 5 &times; 3 = 15 &rarr; done
+Formula: &alpha; + &beta; = &gamma;
+
+---
+
+!! Escapes
+
+!!! Tilde Escapes (CamelCase)
+~NotAWikiLink (escaped CamelCase)
+~CamelCaseEscaped (escaped)
+~AnotherOne and ~YetAnother (multiple)
+Text with ~EscapedLink in middle.
+
+!!! Backslash Escapes
+\* Not a list item (escaped asterisk)
+\# Not a numbered item (escaped hash)
+\! Not a heading (escaped exclamation)
+\| Not a table | delimiter
+\<< Not a macro (escaped angle brackets)
+\[[ Not a link (escaped brackets)
+\{{ Not a transclusion (escaped braces)
+\` Not code (escaped backtick)
+\\Backslash at start
+End with backslash: text\\
+Double backslash: \\\\
+Triple backslash: \\\\\\
+
+!!! Escapes in Context
+List of items: \* item1, \* item2, \* item3
+Not numbered: \#1, \#2, \#3
+Not heading: \! important note
+Table chars: \| one \| two \| three \|
+
+---
+
+!! Comments
+
+!!! HTML Comments
+<!-- This is an HTML comment -->
+
+<!--
+Multi-line
+HTML comment
+with several lines
+-->
+
+Text before <!-- inline comment --> text after.
+
+<!-- Comment with special chars: <>&"' -->
+
+<!--
+Comment containing TiddlyWiki syntax:
+''bold'' //italic// [[link]] <<macro>>
+None of this should be parsed
+-->
+
+!!! Comments at Various Positions
+<!-- Comment at start -->
+Middle text with <!-- inline --> comment.
+Text ending with comment <!-- here -->
+
+---
+
+!! Pragmas (Additional Examples)
+
+Using the pragmas defined at the top:
+
+!!! Macro Usage
+<<simpleInlineMacro>>
+<<macroWithParams "first" "second">>
+<<macroWithParams param1:"named first" param2:"named second">>
+<<multiParamMacro a:"A" b:"B" c:"C" d:"D" e:"E">>
+<<nestedMacro "outer value">>
+<<macroWithWidgets "TestTiddler">>
+<<macroWithFilter "journal">>
+<<htmlMacro "Content here" class:"custom-class">>
+
+!!! Procedure Usage
+<<simpleProc>>
+<<procWithParam "input value">>
+<<procWithDefaults>>
+<<procWithDefaults a:"custom alpha">>
+<<procWithWidgets "MyTiddler">>
+<<procMultiLine x:"5" y:"3">>
+
+!!! Function Usage
+<$text text={{{ [function[simpleFunc]] }}}/>
+<$text text={{{ [function[funcWithParams],$param1$,$param2$] }}}/>
+<$text text={{{ [[10]function[calculate],[5]] }}}/>
+<$text text={{{ [tag[test]function[filterFunc]] }}}/>
+<$text text={{{ [function[complexFunc],,fallback value] }}}/>
+
+!!! Widget Usage
+<$my.custom.widget content="Custom content" class="special-class">
+    <$fill $name="header">Custom Header</$fill>
+    <$fill $name="body">Custom Body Content</$fill>
+    <$fill $name="footer">Custom Footer</$fill>
+</$my.custom.widget>
+
+<$test.simple/>
+<$test.parameterized label="Custom" action="tm-close-tiddler"/>
+<$namespace.sub.widget value="Test Value"/>
+
+---
+
+!! Conditional Syntax
+
+!!! Basic If
+<%if [all[current]has[description]] %>
+This tiddler has a description field.
+<%endif%>
+
+!!! If-Else
+<%if [all[current]tag[important]] %>
+This is an important tiddler.
+<%else%>
+This is a regular tiddler.
+<%endif%>
+
+!!! If-Elseif-Else
+<%if [all[current]tag[critical]] %>
+CRITICAL
+<%elseif [all[current]tag[warning]] %>
+WARNING
+<%elseif [all[current]tag[info]] %>
+INFO
+<%else%>
+NORMAL
+<%endif%>
+
+!!! Nested Conditionals
+<%if [all[current]has[status]] %>
+Status field exists.
+<%if [all[current]get[status]match[active]] %>
+Status is active.
+<%elseif [all[current]get[status]match[pending]] %>
+Status is pending.
+<%else%>
+Status is: {{!!status}}
+<%endif%>
+<%else%>
+No status field.
+<%endif%>
+
+!!! Conditional with Complex Filters
+<%if [all[current]tags[]count[]compare:number:gt[5]] %>
+This tiddler has more than 5 tags.
+<%endif%>
+
+<%if [all[current]get[text]length[]compare:number:gt[1000]] %>
+This tiddler has more than 1000 characters.
+<%endif%>
+
+!!! Conditional with Widgets Inside
+<%if [all[current]has[list]] %>
+<$list filter="[all[current]get[list]enlist-input[]]" variable="item">
+* <<item>>
+</$list>
+<%endif%>
+
+---
+
+!! Highlighting/Styled Text
+
+!!! Basic Highlight
+@@This is highlighted text@@
+
+!!! Highlight with Single Class
+@@.warning This has warning class@@
+@@.error This has error class@@
+@@.note This has note class@@
+@@.info This has info class@@
+
+!!! Highlight with Multiple Classes
+@@.error.important Multiple classes@@
+@@.class1.class2.class3 Many classes@@
+@@.tc-big.tc-highlight TiddlyWiki classes@@
+
+!!! Highlight with Inline Styles
+@@color:red;This is red text@@
+@@background-color:yellow;Yellow background@@
+@@font-weight:bold;Bold text@@
+@@font-size:1.5em;Larger text@@
+@@font-style:italic;Italic text@@
+@@text-decoration:underline;Underlined text@@
+@@background-color:yellow;color:red;font-weight:bold;Multiple styles@@
+
+!!! Combined Class and Style
+@@.myclass color:red;font-size:larger;Class and inline styles@@
+@@.warning.important background:yellow;color:darkred;Combined@@
+
+!!! Highlight with Nested Content
+@@.note
+This is a note with ''bold'' and //italic// text.
+And a [[link]] and <<simpleInlineMacro>> too.
+@@
+
+@@.code-example
+```javascript
+// Code block inside highlight
+function example() {}
+```
+@@
+
+!!! Multi-line Highlight
+@@.multiline
+First line of highlighted content.
+
+Second paragraph with ''formatting''.
+
+* List inside highlight
+* Another item
+
+| Table | Inside |
+| Highlight | Block |
+@@
+
+---
+
+!! Filter Expressions
+
+!!! Basic Filters in Transclusions
+{{{ [tag[test]] }}}
+{{{ [all[tiddlers]] }}}
+{{{ [all[shadows]] }}}
+{{{ [all[tiddlers+shadows]] }}}
+{{{ [all[current]] }}}
+{{{ [all[orphans]] }}}
+{{{ [all[missing]] }}}
+
+!!! Filter Operators
+{{{ [has[description]] }}}
+{{{ [!has[description]] }}}
+{{{ [is[system]] }}}
+{{{ [!is[system]] }}}
+{{{ [is[shadow]] }}}
+{{{ [is[tiddler]] }}}
+{{{ [is[missing]] }}}
+{{{ [is[orphan]] }}}
+{{{ [is[current]] }}}
+
+!!! String Operators
+{{{ [prefix[$:/]] }}}
+{{{ [suffix[.tid]] }}}
+{{{ [contains[search]] }}}
+{{{ [search[query]] }}}
+{{{ [search:title[query]] }}}
+{{{ [search:title,text[query]] }}}
+{{{ [regexp[pattern]] }}}
+{{{ [regexp:flags[pattern]] }}}
+
+!!! Comparison Operators
+{{{ [field:priority[high]] }}}
+{{{ [field:count>10] }}}
+{{{ [field:count<100] }}}
+{{{ [field:count>=50] }}}
+{{{ [field:count<=50] }}}
+{{{ [compare:number:gt[5]] }}}
+{{{ [compare:string:lt[z]] }}}
+{{{ [compare:date:gt[20240101]] }}}
+
+!!! List and Tag Operators
+{{{ [tag[test]] }}}
+{{{ [tags[]] }}}
+{{{ [tagging[]] }}}
+{{{ [list[Contents]] }}}
+{{{ [listed[]] }}}
+{{{ [links[]] }}}
+{{{ [backlinks[]] }}}
+
+!!! Sorting and Limiting
+{{{ [sort[title]] }}}
+{{{ [!sort[title]] }}}
+{{{ [sortcs[title]] }}}
+{{{ [nsort[priority]] }}}
+{{{ [sort:number[count]] }}}
+{{{ [sort:date[modified]] }}}
+{{{ [first[]] }}}
+{{{ [first[5]] }}}
+{{{ [last[]] }}}
+{{{ [last[10]] }}}
+{{{ [limit[20]] }}}
+{{{ [nth[3]] }}}
+{{{ [rest[]] }}}
+{{{ [rest[5]] }}}
+
+!!! Transformation Operators
+{{{ [get[title]] }}}
+{{{ [get[description]] }}}
+{{{ [addprefix[prefix-]] }}}
+{{{ [addsuffix[-suffix]] }}}
+{{{ [removeprefix[$:/]] }}}
+{{{ [removesuffix[.tid]] }}}
+{{{ [split[ ]] }}}
+{{{ [join[, ]] }}}
+{{{ [trim[]] }}}
+{{{ [lowercase[]] }}}
+{{{ [uppercase[]] }}}
+{{{ [titlecase[]] }}}
+{{{ [sentencecase[]] }}}
+
+!!! Math Operators
+{{{ [add[5]] }}}
+{{{ [subtract[3]] }}}
+{{{ [multiply[2]] }}}
+{{{ [divide[4]] }}}
+{{{ [negate[]] }}}
+{{{ [abs[]] }}}
+{{{ [ceil[]] }}}
+{{{ [floor[]] }}}
+{{{ [round[]] }}}
+{{{ [min[0]] }}}
+{{{ [max[100]] }}}
+{{{ [sum[]] }}}
+{{{ [average[]] }}}
+{{{ [count[]] }}}
+
+!!! Date Operators
+{{{ [format:date[YYYY-MM-DD]] }}}
+{{{ [format:date[DDth MMM YYYY]] }}}
+{{{ [now[YYYY-MM-DD]] }}}
+{{{ [days[]] }}}
+
+!!! String Generation
+{{{ [range[1,10]] }}}
+{{{ [range[0,100,10]] }}}
+{{{ [[alphabet]splitregexp[]] }}}
+
+!!! Filter Run Prefixes
+{{{ +[sort[title]] }}}
+{{{ -[tag[exclude]] }}}
+{{{ ~[tag[fallback]] }}}
+{{{ =[unique[]] }}}
+{{{ :filter[has[field]] }}}
+{{{ :map[get[title]] }}}
+{{{ :reduce[add<accumulator>] }}}
+{{{ :intersection[tag[common]] }}}
+{{{ :sort[title] }}}
+{{{ :sort:number[priority] }}}
+{{{ :cascade[get[template]] }}}
+
+!!! Complex Filter Examples
+{{{ [tag[test]] [tag[example]] +[unique[]] }}}
+{{{ [all[tiddlers]!is[system]sort[title]first[10]] }}}
+{{{ [tag[journal]!sort[created]limit[5]] }}}
+{{{ [all[current]links[]sort[title]] :filter[!is[system]] }}}
+{{{ [all[tiddlers]search:title[query]] :map[get[description]] }}}
+{{{ [[tag]tagging[]] :reduce[[<accumulator>addsuffix[, ]addsuffix<currentTiddler>]] }}}
+
+!!! Variable References in Filters
+{{{ [<currentTiddler>links[]] }}}
+{{{ [tag<myTag>] }}}
+{{{ [prefix<configPrefix>] }}}
+{{{ [all[current]get<fieldName>] }}}
+{{{ [<input>search<query>] }}}
+
+!!! Text References in Filters
+{{{ [{Config!!setting}] }}}
+{{{ [tag{Tags!!default}] }}}
+{{{ [prefix{$:/config/prefix}] }}}
+
+!!! Macro References in Filters
+{{{ [prefix<<configPrefix>>] }}}
+{{{ [tag<<currentTag>>] }}}
+{{{ [title<<qualify "title">>] }}}
+
+---
+
+!! Attributes in Widgets (Extended)
+
+!!! String Attributes
+<$widget attr="string value"/>
+<$widget attr='single quotes'/>
+<$widget attr="with ""escaped"" quotes"/>
+<$widget attr='with ''escaped'' single'/>
+<$widget attr="multi
+line
+value"/>
+<$widget attr="""triple
+quoted
+value"""/>
+
+!!! Indirect Attributes (Transclusion)
+<$widget attr={{tiddler}}/>
+<$widget attr={{tiddler!!field}}/>
+<$widget attr={{!!field}}/>
+<$widget attr={{tiddler##index}}/>
+<$widget attr={{##index}}/>
+<$widget attr={{tiddler!!field##index}}/>
+<$widget attr={{$:/config/setting}}/>
+
+!!! Macro Attributes
+<$widget attr=<<myMacro>>/>
+<$widget attr=<<myMacro "param">>/>
+<$widget attr=<<myMacro param:"value">>/>
+<$widget attr=<<now "YYYY-MM-DD">>/>
+<$widget attr=<<qualify "suffix">>/>
+
+!!! Filter Attributes
+<$widget attr={{{ [tag[test]first[]] }}}/>
+<$widget attr={{{ [all[current]get[field]] }}}/>
+<$widget attr={{{ [<variable>] }}}/>
+<$widget attr={{{ [[literal]] }}}/>
+<$widget attr={{{ [tag[test]] [tag[other]] +[first[]] }}}/>
+
+!!! Substituted Attributes
+<$widget attr=`prefix-$(variable)$-suffix`/>
+<$widget attr=`${ [tag[test]count[]] }$ items`/>
+<$widget attr=`Value is: $(value)$`/>
+<$widget attr=`${ [<input>uppercase[]] }$`/>
+<$widget attr=```
+Multi-line
+substituted $(var)$
+value with ${ [filter[]] }$
+```/>
+
+!!! Boolean Attributes
+<$widget boolattr/>
+<$widget disabled/>
+<$widget checked/>
+<$widget selected/>
+<$widget readonly/>
+<$widget required/>
+<$widget multiple/>
+
+!!! Mixed Attributes on Single Widget
+<$list
+    filter="[tag[test]]"
+    variable="item"
+    counter="idx"
+    template={{$:/templates/list}}
+    emptyMessage=<<noItemsMessage>>
+    storyview={{{ [[$:/config/storyview]get[text]] }}}
+    class=`tc-list-item-$(idx)$`
+/>
+
+---
+
+!! Variable Substitution (Extended)
+
+!!! Basic Substitution
+\define greeting(name) Hello, $name$!
+<<greeting "World">>
+<<greeting name:"TiddlyWiki">>
+
+!!! Multiple Parameters
+\define format(a, b, c) [$a$] ($b$) {$c$}
+<<format "first" "second" "third">>
+
+!!! Substitution in Different Contexts
+<$let myVar="TiddlyWiki" version="5.3.0">
+
+String: `Welcome to $(myVar)$ $(version)$!`
+
+Filter result: `${ [tag[test]count[]] }$ items`
+
+Combined: `$(myVar)$ has ${ [all[tiddlers]count[]] }$ tiddlers`
+
+</$let>
+
+!!! Substitution in Actions
+<$vars target="TargetTiddler" field="myfield" value="newvalue">
+    <$action-setfield $tiddler=`$(target)$` `$(field)$`=`$(value)$`/>
+</$vars>
+
+!!! Nested Substitution
+<$let outer="OUTER" inner="INNER">
+    `$(outer)$ contains $(inner)$`
+    `${ [[$(outer)$]addsuffix[-]addsuffix<inner>] }$`
+</$let>
+
+---
+
+!! Placeholder Parameters (Extended)
+
+!!! All Parameter Styles
+\define allStyles(a, b:"default", c, d:"another default")
+Required a: $a$
+Optional b: $b$
+Required c: $c$
+Optional d: $d$
+All: $a$ $b$ $c$ $d$
+\end
+
+<<allStyles "A" "B" "C" "D">>
+<<allStyles a:"A" c:"C">>
+
+!!! Parameters in Different Positions
+\define mixed(first, second:"2nd", third, fourth:"4th", fifth)
+$first$, $second$, $third$, $fourth$, $fifth$
+\end
+
+!!! Parameters with Special Characters
+\define special(text)
+Text with "quotes" and $text$ param.
+Text with 'apostrophes' and $text$.
+Text with <brackets> and $text$.
+\end
+
+---
+
+!! Edge Cases and Special Situations
+
+!!! Empty Elements
+[[]]
+{{}}
+<<>>
+{{{  }}}
+```
+```
+@@@@
+
+!!! Unclosed Elements (Graceful Handling)
+[[unclosed link
+{{unclosed transclusion
+<<unclosed macro
+<$unclosed widget
+```unclosed code
+<%if [test]%>unclosed conditional
+<<<unclosed blockquote
+@@unclosed highlight
+
+!!! Deeply Nested Structures
+<$list filter="[limit[1]]">
+    <$let var="value">
+        <$vars x="1" y="2">
+            <div class="outer">
+                <span class="inner">
+                    ''Bold with //italic with __underline with ~~strike with `code` and [[link]]~~__//''.
+                </span>
+            </div>
+        </$vars>
+    </$let>
+</$list>
+
+!!! Mixed Block and Inline
+Some text <$text text="inline widget"/> more text.
+
+<$list filter="[limit[1]]">inline list content</$list> after list.
+
+A paragraph with
+a soft line break inside.
+
+Two blank lines below:
+
+
+Back to content.
+
+!!! Special Characters in Text
+Angle brackets: < and >
+Ampersand: &
+Quotes: " and '
+Pipes: | | | (not a table, no newlines)
+Asterisks: * not a list (not at line start)
+Hash: # not numbered (not at line start)
+Exclamation: ! not a heading (not at line start)
+Backticks: ` not code ` (unpaired in some contexts)
+Brackets: [ ] { } ( )
+Backslash: \
+Tilde: ~
+
+!!! Unicode Content
+日本語テキスト (Japanese)
+中文文本 (Chinese)
+한국어 (Korean)
+العربية (Arabic)
+עברית (Hebrew)
+Ελληνικά (Greek)
+Русский текст (Russian)
+Emoji: 🎉 🚀 ✨ 🌟 💻 📝 ✅ ❌ ⚠️ ℹ️
+
+!!! Very Long Lines
+This is a very long line that goes on and on and on with lots of text and ''formatting'' and //more formatting// and [[links]] and {{transclusions}} and <<simpleInlineMacro>> and <$text text="widgets"/> and more content to really test how the parser handles extremely long lines with many different elements all mixed together in one continuous line without any breaks whatsoever continuing further and further.
+
+!!! Multiple Consecutive Elements Without Spaces
+[[link1]][[link2]][[link3]]
+''bold1''''bold2''''bold3''
+//italic1////italic2////italic3//
+`code1``code2``code3`
+<<simpleInlineMacro>><<simpleInlineMacro>>
+{{ref1}}{{ref2}}{{ref3}}
+
+!!! Whitespace Sensitivity
+    Indented paragraph (4 spaces)
+		Tab indented paragraph
+No indent paragraph
+
+* List with    multiple   spaces   between   words
+*    List item with leading spaces in content
+*	List item with tab
+
+|  Cell with spaces  |  Another cell  |
+|	Tab in cell	|	More tabs	|
+
+---
+
+!! Complete Widget Examples
+
+!!! Todo List Example
+<$list filter="[tag[todo]!has[done]sort[priority]]" variable="todo">
+    <div class="todo-item">
+        <$checkbox tiddler=<<todo>> tag="done">
+            <$link to=<<todo>>>
+                <$view tiddler=<<todo>> field="title"/>
+            </$link>
+        </$checkbox>
+        <$list filter="[<todo>has[due]]">
+            <span class="due-date">
+                Due: <$view tiddler=<<todo>> field="due" format="date" template="YYYY-MM-DD"/>
+            </span>
+        </$list>
+    </div>
+</$list>
+
+!!! Tab Interface Example
+<$vars state="$:/state/mytabs" default="tab1">
+    <div class="tc-tab-buttons">
+        <$button set=<<state>> setTo="tab1" class={{{ [<state>get[text]match[tab1]then[tc-tab-selected]else[]] }}}>
+            Tab 1
+        </$button>
+        <$button set=<<state>> setTo="tab2" class={{{ [<state>get[text]match[tab2]then[tc-tab-selected]else[]] }}}>
+            Tab 2
+        </$button>
+        <$button set=<<state>> setTo="tab3" class={{{ [<state>get[text]match[tab3]then[tc-tab-selected]else[]] }}}>
+            Tab 3
+        </$button>
+    </div>
+    <div class="tc-tab-content">
+        <$reveal state=<<state>> type="match" text="tab1" default="tab1" animate="yes">
+            <div class="tc-tab-panel">
+                Content for tab 1 with ''formatting'' and [[links]].
+            </div>
+        </$reveal>
+        <$reveal state=<<state>> type="match" text="tab2" animate="yes">
+            <div class="tc-tab-panel">
+                Content for tab 2 with <<simpleInlineMacro>>.
+            </div>
+        </$reveal>
+        <$reveal state=<<state>> type="match" text="tab3" animate="yes">
+            <div class="tc-tab-panel">
+                Content for tab 3 with {{!!title}}.
+            </div>
+        </$reveal>
+    </div>
+</$vars>
+
+!!! Search Interface Example
+<$edit-text tiddler="$:/temp/search" field="text" placeholder="Search tiddlers..." class="tc-search-input" focusPopup="$:/state/search-popup"/>
+
+<$reveal state="$:/temp/search!!text" type="nomatch" text="">
+    <div class="search-results">
+        <$list filter="[all[tiddlers]!is[system]search:title,text{$:/temp/search}sort[title]limit[20]]" emptyMessage="No results found">
+            <div class="search-result">
+                <$link>
+                    <strong><$view field="title"/></strong>
+                </$link>
+                <$list filter="[all[current]has[description]]">
+                    <div class="result-description">
+                        <$view field="description"/>
+                    </div>
+                </$list>
+                <div class="result-snippet">
+                    <$view field="text" format="plainwikified"/>
+                </div>
+            </div>
+        </$list>
+    </div>
+</$reveal>
+
+!!! Data Table with Actions
+<$vars tableTiddler="$:/temp/table-data">
+    <table class="tc-data-table">
+        <thead>
+            <tr>
+                <th>Title</th>
+                <th>Tags</th>
+                <th>Modified</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            <$list filter="[tag[data]sort[title]]" variable="item">
+                <tr>
+                    <td><$link to=<<item>>><$view tiddler=<<item>> field="title"/></$link></td>
+                    <td>
+                        <$list filter="[<item>tags[]limit[3]]" variable="tag">
+                            <$macrocall $name="tag" tag=<<tag>>/>
+                        </$list>
+                    </td>
+                    <td><$view tiddler=<<item>> field="modified" format="relativedate"/></td>
+                    <td>
+                        <$button class="tc-btn-invisible" tooltip="Edit">
+                            <$action-sendmessage $message="tm-edit-tiddler" $param=<<item>>/>
+                            Edit
+                        </$button>
+                        <$button class="tc-btn-invisible tc-btn-danger" tooltip="Delete">
+                            <$action-confirm $message="Delete this tiddler?">
+                                <$action-deletetiddler $tiddler=<<item>>/>
+                            </$action-confirm>
+                            Delete
+                        </$button>
+                    </td>
+                </tr>
+            </$list>
+        </tbody>
+    </table>
+</$vars>
+
+!!! Form with Validation
+<$let formTiddler="$:/temp/form" errorTiddler="$:/temp/form-errors">
+    <div class="tc-form">
+        <div class="tc-form-field">
+            <label for="name">Name (required):</label>
+            <$edit-text tiddler=<<formTiddler>> field="name" placeholder="Enter name" class="tc-input"/>
+            <$list filter="[<formTiddler>get[name]is[blank]]">
+                <span class="tc-error">Name is required</span>
+            </$list>
+        </div>
+
+        <div class="tc-form-field">
+            <label for="email">Email:</label>
+            <$edit-text tiddler=<<formTiddler>> field="email" placeholder="email@example.com" class="tc-input"/>
+        </div>
+
+        <div class="tc-form-field">
+            <label for="type">Type:</label>
+            <$select tiddler=<<formTiddler>> field="type" default="option1">
+                <option value="">-- Select --</option>
+                <option value="option1">Option 1</option>
+                <option value="option2">Option 2</option>
+                <option value="option3">Option 3</option>
+            </$select>
+        </div>
+
+        <div class="tc-form-actions">
+            <$button class="tc-btn-primary">
+                <$list filter="[<formTiddler>get[name]!is[blank]]" variable="ignore">
+                    <$action-createtiddler
+                        $basetitle={{{ [<formTiddler>get[name]] }}}
+                        email={{{ [<formTiddler>get[email]] }}}
+                        type={{{ [<formTiddler>get[type]] }}}
+                        tags="submitted"
+                    />
+                    <$action-setfield $tiddler=<<formTiddler>> name="" email="" type=""/>
+                </$list>
+                Submit
+            </$button>
+            <$button class="tc-btn-secondary">
+                <$action-setfield $tiddler=<<formTiddler>> name="" email="" type=""/>
+                Reset
+            </$button>
+        </div>
+    </div>
+</$let>
+
+---
+
+!! Summary
+
+This comprehensive test covers:
+
+!!! Pragma Types
+* `\define` - macro definitions (inline and multi-line)
+* `\procedure` - procedure definitions
+* `\function` - function definitions
+* `\widget` - custom widget definitions
+* `\parameters` - default parameters
+* `\import` - importing macros
+* `\rules` - parser rule control
+* `\whitespace` - whitespace handling
+
+!!! Block Elements
+* Headings (all 6 levels with formatting)
+* Lists (bullet, numbered, definition, mixed, quoted)
+* Block quotes (with classes, citations, nested content)
+* Tables (all features including merging, captions, classes)
+* Code blocks (all languages)
+* Typed blocks
+* Horizontal rules
+
+!!! Inline Elements
+* Text formatting (bold, italic, underline, strikethrough, super/subscript, code)
+* Links (wiki, external, image, CamelCase, system, auto-URL)
+* Transclusions (simple, field, index, filtered, with template)
+* Macros (simple, parameterized, nested)
+* Entities and escapes
+* Dashes
+* Highlighting/styled text
+
+!!! Widgets
+* All common widgets with various attribute types
+* Self-closing vs container
+* Namespaced widgets
+* Action widgets
+* Slot and fill widgets
+
+!!! HTML
+* All common elements
+* HTML5 semantic elements
+* SVG
+* Form elements
+* Self-closing/void elements
+
+!!! Conditionals
+* `<%if%>`, `<%else%>`, `<%elseif%>`, `<%endif%>`
+* Nested conditionals
+
+!!! Filters
+* All operator categories
+* Run prefixes
+* Variable, text, and macro references
+
+!!! Attributes
+* String (regular and triple-quoted)
+* Indirect (transclusion)
+* Macro
+* Filter
+* Substituted
+* Boolean
+
+!!! Edge Cases
+* Empty elements
+* Unclosed elements
+* Deep nesting
+* Unicode
+* Special characters
+* Long lines
+* Whitespace sensitivity
+
+---
+
+//End of comprehensive parser test file.//

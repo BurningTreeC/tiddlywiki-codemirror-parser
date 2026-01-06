@@ -17,13 +17,13 @@ You know how when you write code or notes, it's nice when things are colorful an
 
 This is the main plugin that everything else builds on. It gives you:
 
-* '''Syntax Highlighting''' - Different parts of your text get different colors, making it easier to read
-* '''Auto-completion''' - Start typing and it suggests what you might want to write (like autocomplete on your phone!)
-* '''Bracket Matching''' - When you click on a bracket `(` or `[`, it shows you where the matching one is
-* '''Auto-close Brackets''' - Type `(` and it automatically adds `)` for you
-* '''Multiple Cursors''' - Hold Ctrl and click to type in multiple places at once (super cool!)
-* '''Undo/Redo''' - Made a mistake? Ctrl+Z to undo, Ctrl+Y to redo
-* '''Search & Replace''' - Find text and replace it with something else
+* ''Syntax Highlighting'' - Different parts of your text get different colors, making it easier to read
+* ''Auto-completion'' - Start typing and it suggests what you might want to write (like autocomplete on your phone!)
+* ''Bracket Matching'' - When you click on a bracket `(` or `[`, it shows you where the matching one is
+* ''Auto-close Brackets'' - Type `(` and it automatically adds `)` for you
+* ''Multiple Cursors'' - Hold Ctrl and click to type in multiple places at once (super cool!)
+* ''Undo/Redo'' - Made a mistake? Ctrl+Z to undo, Ctrl+Y to redo
+* ''Search & Replace'' - Find text and replace it with something else
 
 ---
 
@@ -38,17 +38,19 @@ The most important one! It understands TiddlyWiki's special syntax:
 * Headings, lists, tables
 * Widgets like `<$list>` and `<$button>`
 * Macros like `<<myMacro>>`
+* Filters like `[tag[example]]`
+* Typed blocks with syntax highlighting (`$$$.js`, `$$$.css`, etc.)
 
 !!! Other Languages
-* '''CSS''' - For styling (colors, fonts, layouts)
-* '''HTML''' - For web page structure
-* '''JavaScript''' - The programming language of the web
-* '''JSON''' - For data (like settings files)
-* '''Markdown''' - Another way to format text
-* '''Python''' - A popular programming language
-* '''SQL''' - For database queries
-* '''XML''' - For structured data
-* '''YAML''' - For configuration files
+* ''CSS'' - For styling (colors, fonts, layouts)
+* ''HTML'' - For web page structure
+* ''JavaScript'' - The programming language of the web
+* ''JSON'' - For data (like settings files)
+* ''Markdown'' - Another way to format text
+* ''Python'' - A popular programming language
+* ''SQL'' - For database queries
+* ''XML'' - For structured data
+* ''YAML'' - For configuration files
 
 ---
 
@@ -59,23 +61,23 @@ Themes change how the editor looks - the colors, the style, everything! Pick one
 !!! Available Themes
 
 | !Theme | !What it looks like |
-| '''Ayu''' | Clean and modern (Dark, Mirage, Light) |
-| '''Catppuccin''' | Soft pastel colors (Latte, Frappe, Macchiato, Mocha) |
-| '''Dracula''' | Purple vampire vibes (Dark, Light) |
-| '''Everforest''' | Calm green forest colors |
-| '''Flexoki''' | Warm and readable |
-| '''GitHub''' | Like GitHub's code view (Light, Dark, Dimmed) |
-| '''Gruvbox''' | Retro warm colors |
-| '''Kanagawa''' | Japanese ink painting inspired |
-| '''Material''' | Google's Material Design style |
-| '''Monokai''' | Classic programmer favorite |
-| '''Nord''' | Cool arctic blue colors |
-| '''One''' | Atom editor's popular theme |
-| '''Palenight''' | Elegant purple and blue |
-| '''Rose Pine''' | Soft and dreamy |
-| '''Solarized''' | Easy on the eyes, scientifically designed |
-| '''Tokyo Night''' | Neon city vibes |
-| '''Zenburn''' | Low contrast, relaxing |
+| ''Ayu'' | Clean and modern (Dark, Mirage, Light) |
+| ''Catppuccin'' | Soft pastel colors (Latte, Frappe, Macchiato, Mocha) |
+| ''Dracula'' | Purple vampire vibes (Dark, Light) |
+| ''Everforest'' | Calm green forest colors |
+| ''Flexoki'' | Warm and readable |
+| ''GitHub'' | Like GitHub's code view (Light, Dark, Dimmed) |
+| ''Gruvbox'' | Retro warm colors |
+| ''Kanagawa'' | Japanese ink painting inspired |
+| ''Material'' | Google's Material Design style |
+| ''Monokai'' | Classic programmer favorite |
+| ''Nord'' | Cool arctic blue colors |
+| ''One'' | Atom editor's popular theme |
+| ''Palenight'' | Elegant purple and blue |
+| ''Rose Pine'' | Soft and dreamy |
+| ''Solarized'' | Easy on the eyes, scientifically designed |
+| ''Tokyo Night'' | Neon city vibes |
+| ''Zenburn'' | Low contrast, relaxing |
 
 ---
 
@@ -108,7 +110,10 @@ Create shortcuts for text you type often. For example, make "hw" expand into "He
 Finds potential problems in your code, like:
 * Forgetting to close a widget (`<$list>` without `</$list>`)
 * Unclosed brackets or links
+* Undefined macros, procedures, or variables
+* Unknown widgets or filter operators
 * Shows little warning marks so you can fix issues
+* Click on warnings for quick-fix suggestions!
 
 !!! Image Preview
 When you write `[img[picture.png]]`, you'll see a preview of the image right there in the editor!
@@ -124,6 +129,9 @@ Distraction-free writing! Hides everything except your text so you can focus. Fe
 * Clean, centered writing area
 * Typewriter mode (keeps your line in the middle of the screen)
 * Can hide everything except what you're typing
+
+!!! Plugin Combiner
+Bundles multiple CodeMirror 6 plugins into a single combined plugin. Great for distributing a pre-configured setup or creating a minimal installation package. Just select the plugins you want and export!
 
 ---
 
@@ -145,10 +153,10 @@ This plugin gives you 10 different looks for the toolbar buttons (the buttons ab
 
 !! How to Use These Plugins
 
-# '''Install the main editor plugin''' - This is required for everything else
-# '''Pick a theme''' - Choose colors you like
-# '''Add language plugins''' - If you write code, add the languages you use
-# '''Add feature plugins''' - Pick the extra features you want
+# ''Install the main editor plugin'' - This is required for everything else
+# ''Pick a theme'' - Choose colors you like
+# ''Add language plugins'' - If you write code, add the languages you use
+# ''Add feature plugins'' - Pick the extra features you want
 
 !! Settings
 
@@ -167,14 +175,20 @@ Here are some handy shortcuts that work in the editor:
 | `Ctrl+B` | Bold text |
 | `Ctrl+I` | Italic text |
 | `Ctrl+Z` | Undo |
-| `Ctrl+Y` | Redo |
+| `Ctrl+Y` or `Ctrl+Shift+Z` | Redo |
 | `Ctrl+F` | Find text |
 | `Ctrl+H` | Find and replace |
 | `Ctrl+/` | Toggle comment |
+| `Ctrl+Space` | Trigger autocomplete |
 | `Tab` | Indent (or accept autocomplete) |
 | `Shift+Tab` | Unindent |
 | `Ctrl+Click` | Add another cursor |
 | `Ctrl+D` | Select next occurrence |
+| `Alt+ArrowUp/Down` | Move line up/down |
+| `Ctrl+Shift+K` | Delete line |
+| `Ctrl+Enter` | Insert line below |
+| `Ctrl+Shift+Enter` | Insert line above |
+| `Ctrl+[` / `Ctrl+]` | Indent less/more |
 | `Escape` | Close autocomplete/dialogs |
 
 ---

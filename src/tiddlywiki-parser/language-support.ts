@@ -1143,6 +1143,8 @@ function widgetAttributeCompletion(
           changes,
           selection: { anchor: cursorPos }
         })
+        // Trigger value completion after inserting the attribute
+        setTimeout(() => startCompletion(view), 0)
       }
     }))
 
@@ -2081,6 +2083,8 @@ function tiddlerCompletion(getTiddlerTitles?: () => string[], getImageTiddlerTit
     }
     // Match [img[ or [img ...attrs[ for images (source is inside the last [)
     const imageMatch = /\[img(?:\s+[^\[]*)?\[[^\]|]*$/.exec(textBefore)
+    // Match [ext[ for external links (NOT a filter operand)
+    const extLinkMatch = /\[ext\[[^\]|]*$/.exec(textBefore)
     // Match [operator[ or ]operator[ or }operator[ or >operator[ for filter operand (tiddler title)
     const filterOperandMatch = /[\[\]}>][\w\-:!]*\[[^\]]*$/.exec(textBefore)
     // Match [{ or [operator{ or ]operator{ or }operator{ or >operator{ for text references inside filters
@@ -2101,12 +2105,15 @@ function tiddlerCompletion(getTiddlerTitles?: () => string[], getImageTiddlerTit
       /<\$\w+[^>]*\bfilter\s*=\s*(?:"[^"]*|'[^']*|"""[^"]*)$/.test(textBefore)
     )
 
-    // Prioritize imageMatch (always treat [img[ as image link, not filter operand)
+    // Prioritize imageMatch and extLinkMatch (always treat [img[ and [ext[ as links, not filter operands)
     // For other cases in filter context, prioritize filterOperandMatch over linkMatch
     let match: RegExpExecArray | null
     if (imageMatch) {
       // [img[ is always an image link
       match = imageMatch
+    } else if (extLinkMatch) {
+      // [ext[ is always an external link - no tiddler completion needed (it's for URLs)
+      return null
     } else if (inFilterContext && linkMatch && filterOperandMatch) {
       // Inside filter: [[ is a literal title operand, not a wikilink
       match = filterOperandMatch
@@ -2119,6 +2126,7 @@ function tiddlerCompletion(getTiddlerTitles?: () => string[], getImageTiddlerTit
     const tree = syntaxTree(state).resolveInner(pos, -1)
     let node = tree
     let inImageLink = false
+    let inExtLink = false
     while (node && !node.type.isTop) {
       // Don't complete inside code blocks or comments
       if (node.name === "FencedCode" || node.name === "CodeBlock" ||
@@ -2129,7 +2137,16 @@ function tiddlerCompletion(getTiddlerTitles?: () => string[], getImageTiddlerTit
       if (node.name === "ImageLink" || node.name === "ImageSource") {
         inImageLink = true
       }
+      // Check if we're inside an external link
+      if (node.name === "ExternalLink" || node.name === "URLLink") {
+        inExtLink = true
+      }
       node = node.parent!
+    }
+
+    // If syntax tree says we're in an external link, no tiddler completion
+    if (inExtLink) {
+      return null
     }
 
     // If syntax tree says we're in an image link, force imageMatch
@@ -3371,8 +3388,8 @@ function filterOperandValueCompletion(
 // ============================================================================
 
 const conditionalKeywords = [
-  { label: "if", detail: "Conditional if", insert: "if [] %>", outdent: false },
-  { label: "elseif", detail: "Conditional else-if", insert: "elseif [] %>", outdent: true },
+  { label: "if", detail: "Conditional if", insert: " if [] %>", outdent: false },
+  { label: "elseif", detail: "Conditional else-if", insert: " elseif [] %>", outdent: true },
   { label: "else", detail: "Conditional else", insert: " else %>", outdent: true },
   { label: "endif", detail: "End conditional", insert: " endif %>", outdent: true },
 ]
@@ -3394,64 +3411,68 @@ function conditionalCompletion(context: CompletionContext): CompletionResult | n
 
   const whitespace = match[1]
   const partial = match[2]
-  // Replace from after <% (including any whitespace typed)
-  const from = pos - whitespace.length - partial.length
-  const patternLen = whitespace.length + partial.length
+  const hasWhitespace = whitespace.length > 0
+  // Only replace the partial keyword, not the whitespace
+  const from = pos - partial.length
+  const patternLen = partial.length
 
   // Calculate the position of <% on the line
   const openMarkPos = textBefore.lastIndexOf('<%')
 
-  const options: Completion[] = conditionalKeywords.map(kw => ({
-    label: kw.label,
-    type: "keyword",
-    detail: kw.detail,
-    apply: (view, _completion, from, to) => {
-      const insert = kw.insert
+  const options: Completion[] = conditionalKeywords.map(kw => {
+    // If whitespace already present, don't add leading space from insert
+    const insert = hasWhitespace ? kw.insert.trimStart() : kw.insert
 
-      // For outdenting keywords (else, elseif, endif), remove one level of indentation
-      // Note: outdenting only works for single cursor (complex line manipulation)
-      if (kw.outdent && openMarkPos > 0 && view.state.selection.ranges.length === 1) {
-        const unit = getIndentUnit(view.state)
-        const leadingWhitespace = textBefore.slice(0, openMarkPos)
+    return {
+      label: kw.label,
+      type: "keyword",
+      detail: kw.detail,
+      apply: (view, _completion, from, to) => {
+        // For outdenting keywords (else, elseif, endif), remove one level of indentation
+        // Note: outdenting only works for single cursor (complex line manipulation)
+        if (kw.outdent && openMarkPos > 0 && view.state.selection.ranges.length === 1) {
+          const unit = getIndentUnit(view.state)
+          const leadingWhitespace = textBefore.slice(0, openMarkPos)
 
-        // Calculate new indentation (one level less)
-        let currentIndent = 0
-        for (const ch of leadingWhitespace) {
-          if (ch === ' ') currentIndent++
-          else if (ch === '\t') currentIndent += unit
+          // Calculate new indentation (one level less)
+          let currentIndent = 0
+          for (const ch of leadingWhitespace) {
+            if (ch === ' ') currentIndent++
+            else if (ch === '\t') currentIndent += unit
+          }
+          const newIndent = Math.max(0, currentIndent - unit)
+          const newWhitespace = ' '.repeat(newIndent)
+
+          // Replace from start of line (use original insert with space for consistent formatting)
+          const fullInsert = newWhitespace + '<%' + kw.insert
+          const cursorOffset = (kw.label === "elseif")
+            ? fullInsert.indexOf('[') + 1
+            : fullInsert.length
+
+          view.dispatch({
+            changes: { from: line.from, to, insert: fullInsert },
+            selection: { anchor: line.from + cursorOffset }
+          })
+        } else {
+          // Normal insert (for "if" or when not indented, or multi-cursor)
+          const cursorOffset = (kw.label === "if" || kw.label === "elseif")
+            ? insert.indexOf('[') + 1
+            : insert.length
+          const changes = buildMultiSelectionChanges(view, from, to, insert, patternLen)
+          view.dispatch({
+            changes,
+            selection: { anchor: from + cursorOffset }
+          })
         }
-        const newIndent = Math.max(0, currentIndent - unit)
-        const newWhitespace = ' '.repeat(newIndent)
-
-        // Replace from start of line
-        const fullInsert = newWhitespace + '<%' + insert
-        const cursorOffset = (kw.label === "elseif")
-          ? fullInsert.indexOf('[') + 1
-          : fullInsert.length
-
-        view.dispatch({
-          changes: { from: line.from, to, insert: fullInsert },
-          selection: { anchor: line.from + cursorOffset }
-        })
-      } else {
-        // Normal insert (for "if" or when not indented, or multi-cursor)
-        const cursorOffset = (kw.label === "if" || kw.label === "elseif")
-          ? insert.indexOf('[') + 1
-          : insert.length
-        const changes = buildMultiSelectionChanges(view, from, to, insert, patternLen)
-        view.dispatch({
-          changes,
-          selection: { anchor: from + cursorOffset }
-        })
       }
     }
-  }))
+  })
 
   return {
     from,
     to: pos,
     options,
-    validFor: /^\s*\w*$/
+    validFor: /^\w*$/
   }
 }
 

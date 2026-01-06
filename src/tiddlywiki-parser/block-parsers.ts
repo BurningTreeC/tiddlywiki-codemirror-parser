@@ -741,7 +741,38 @@ export const MacroCallBlock: BlockParser = {
     let allContent = line.text
     let endPos = cx.lineStart + line.text.length
 
+    // Helper to build macro children with name element
+    const buildNameElement = (children: Element[]) => {
+      // Check if name is a substituted parameter: __param__
+      const substitutedMatch = /^__([^_]+)__$/.exec(name)
+      if (substitutedMatch) {
+        const paramName = substitutedMatch[1]
+        const nameStart = start + 2
+        const nameChildren: Element[] = [
+          elt(Type.SubstitutedParamMark, nameStart, nameStart + 2),  // __
+          elt(Type.SubstitutedParamName, nameStart + 2, nameStart + 2 + paramName.length),
+          elt(Type.SubstitutedParamMark, nameStart + 2 + paramName.length, nameStart + name.length),  // __
+        ]
+        children.push(elt(Type.SubstitutedParam, nameStart, nameStart + name.length, nameChildren))
+      } else {
+        children.push(elt(Type.MacroName, start + 2, start + 2 + name.length))
+      }
+    }
+
     if (closeIdx === -1) {
+      // Check if line is just <<name (with optional whitespace after)
+      // In this case, treat as incomplete macro immediately (don't look at subsequent lines)
+      const afterName = line.text.slice(nameEnd).trim()
+      if (!afterName) {
+        // Incomplete macro on a single line: <<name
+        const children: Element[] = [
+          elt(Type.MacroCallMark, start, start + 2),
+        ]
+        buildNameElement(children)
+        cx.addElement(elt(Type.MacroCallBlock, start, endPos, children))
+        return true
+      }
+
       // Multi-line macro: accumulate lines until we find >>
       while (cx.nextLine()) {
         const currentLine = cx.line.text
@@ -756,8 +787,24 @@ export const MacroCallBlock: BlockParser = {
         }
       }
 
-      // If still no closing >>, this is an incomplete macro - don't parse as block
-      if (closeIdx === -1) return false
+      // If still no closing >>, this is an incomplete multi-line macro
+      if (closeIdx === -1) {
+        // Parse as incomplete macro with whatever content we have
+        const children: Element[] = [
+          elt(Type.MacroCallMark, start, start + 2),
+        ]
+        buildNameElement(children)
+
+        // Parse parameters - everything after name
+        const paramsStr = allContent.slice(nameEnd)
+        if (paramsStr.trim()) {
+          const paramElements = parseMacroParams(paramsStr, start + nameEnd)
+          children.push(...paramElements)
+        }
+
+        cx.addElement(elt(Type.MacroCallBlock, start, endPos, children))
+        return true
+      }
     } else {
       // Single-line macro: check rest of line is empty
       if (line.text.slice(closeIdx + 2).trim()) return false
@@ -767,22 +814,7 @@ export const MacroCallBlock: BlockParser = {
       elt(Type.MacroCallMark, start, start + 2),
     ]
 
-    // Check if name is a substituted parameter: __param__
-    // Always create SubstitutedParam for proper syntax highlighting
-    // (linter can validate if param is actually defined)
-    const substitutedMatch = /^__([^_]+)__$/.exec(name)
-    if (substitutedMatch) {
-      const paramName = substitutedMatch[1]
-      const nameStart = start + 2
-      const nameChildren: Element[] = [
-        elt(Type.SubstitutedParamMark, nameStart, nameStart + 2),  // __
-        elt(Type.SubstitutedParamName, nameStart + 2, nameStart + 2 + paramName.length),
-        elt(Type.SubstitutedParamMark, nameStart + 2 + paramName.length, nameStart + name.length),  // __
-      ]
-      children.push(elt(Type.SubstitutedParam, nameStart, nameStart + name.length, nameChildren))
-    } else {
-      children.push(elt(Type.MacroName, start + 2, start + 2 + name.length))
-    }
+    buildNameElement(children)
 
     // Parse parameters - everything between name and >>
     const paramsStr = allContent.slice(nameEnd, closeIdx)
@@ -1580,8 +1612,8 @@ export const StyledBlock: BlockParser = {
 // Conditional Block (<%if%> <%elseif%> <%else%> <%endif%>)
 // ============================================================================
 
-const conditionalIfRe = /^\s*<%if\s+(.+?)\s*%>/
-const conditionalElseifRe = /^\s*<%elseif\s+(.+?)\s*%>/
+const conditionalIfRe = /^\s*<%\s*if\s+(.+?)\s*%>/
+const conditionalElseifRe = /^\s*<%\s*elseif\s+(.+?)\s*%>/
 const conditionalElseRe = /^\s*<%\s*else\s*%>/
 const conditionalEndifRe = /^\s*<%\s*endif\s*%>/
 
@@ -1595,10 +1627,11 @@ export const ConditionalBlock: BlockParser = {
     const filter = ifMatch[1]
     const children: Element[] = []
 
-    // Parse opening <%if [filter] %>
+    // Parse opening <%if [filter] %> or <% if [filter] %>
     const openMarkStart = start + line.text.indexOf('<%')
+    const ifKeywordStart = start + line.text.indexOf('if')
     children.push(elt(Type.ConditionalMark, openMarkStart, openMarkStart + 2))  // <%
-    children.push(elt(Type.ConditionalKeyword, openMarkStart + 2, openMarkStart + 4))  // if
+    children.push(elt(Type.ConditionalKeyword, ifKeywordStart, ifKeywordStart + 2))  // if
 
     // Parse the filter expression
     const filterStart = start + line.text.indexOf(filter)
@@ -1695,12 +1728,13 @@ export const ConditionalBlock: BlockParser = {
           }
         }
 
-        // Parse <%elseif [filter] %>
+        // Parse <%elseif [filter] %> or <% elseif [filter] %>
         const elseifMatch = conditionalElseifRe.exec(lineText)
         if (elseifMatch) {
           const elseifStart = currentPos + lineText.indexOf('<%')
+          const elseifKeywordStart = currentPos + lineText.indexOf('elseif')
           children.push(elt(Type.ConditionalMark, elseifStart, elseifStart + 2))
-          children.push(elt(Type.ConditionalKeyword, elseifStart + 2, elseifStart + 8))  // elseif
+          children.push(elt(Type.ConditionalKeyword, elseifKeywordStart, elseifKeywordStart + 6))  // elseif
 
           const elseifFilter = elseifMatch[1]
           const elseifFilterStart = currentPos + lineText.indexOf(elseifFilter)

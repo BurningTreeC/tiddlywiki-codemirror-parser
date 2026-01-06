@@ -1,0 +1,56 @@
+title: Announcement: CodeMirror 6 Editor v0.0.16
+tags: announcement
+
+# CodeMirror 6 Editor for TiddlyWiki - Version 0.0.16 Released
+
+I'm happy to announce version **0.0.16** of the CodeMirror 6 Editor plugin for TiddlyWiki!
+
+This release includes several bug fixes, new features, and comprehensive documentation updates.
+
+## Bug Fixes
+
+- **Enter Key on Empty Lists** - Pressing Enter on an empty list line now always removes the list marker, working consistently for bullet, numbered, and mixed lists.
+
+- **Auto-Close Tags in Attributes** - Fixed an issue where typing `<$text text="<$set>">` would incorrectly insert `</$text>` when closing the inner widget. The editor now correctly detects when you're inside attribute values.
+
+- **Color Picker List Detection** - The color picker no longer shows color swatches for `#hexcolor` values that are actually numbered list markers (when preceded only by whitespace).
+
+- **Incomplete Block-Level Macros** - `<<macro` on its own line now highlights correctly as an incomplete macro, giving visual feedback while you're typing.
+
+## New Features
+
+- **Typed Block Syntax Highlighting** - Code blocks with file extensions like `$$$.js`, `$$$.css`, `$$$.ts`, `$$$.py` now use appropriate language highlighting. Supports common extensions including `.js`, `.mjs`, `.ts`, `.tsx`, `.css`, `.html`, `.json`, `.md`, `.py`, `.sql`, `.xml`, `.yaml`, and more.
+
+- **Filter Run Prefix Completion** - Filter run prefixes like `:filter`, `:map`, `:reduce` now autocomplete to `:filter[]` with the cursor positioned inside the brackets.
+
+## Linting Improvements
+
+- **Built-in Variables** - The linter now recognizes TiddlyWiki's built-in variables (`currentTiddler`, `storyTiddler`, `transclusion`) and no longer flags them as undefined.
+
+- **Updated Lint Messages** - More accurate messaging: "possibly undefined variable / macro / procedure / function" instead of just "possibly undefined macro".
+
+## UI Improvements
+
+- **Toolbar Icon Sizing** - Fixed toolbar button icons not fitting properly in various toolbar styles.
+
+## Documentation
+
+- Added readme files to 12 plugins that were missing documentation
+- **Comprehensive README.md** - Complete rewrite with full feature list, configuration options, keyboard shortcuts reference, developer guide, and build instructions
+
+---
+
+## Links
+
+- **GitHub Repository**: https://github.com/BurningTreeC/tiddlywiki-codemirror
+- **Demo/Download**: https://burningtreec.github.io/tiddlywiki-codemirror/
+
+## Installation
+
+Drag and drop the plugin files from the demo site into your TiddlyWiki, or install from the plugin library.
+
+---
+
+As always, feedback, bug reports, and feature requests are welcome! Feel free to open issues on GitHub or reply to this thread.
+
+Happy writing!

@@ -18,6 +18,9 @@ var MARKDOWN_TYPES = [
 	"text/markdown"
 ];
 
+var TAGS_CONFIG_TIDDLER = "$:/config/codemirror-6/lang-markdown/tags";
+var hasConfiguredTag = require("$:/plugins/BurningTreeC/tiddlywiki-codemirror/utils.js").hasConfiguredTag;
+
 exports.plugin = {
 	name: "lang-markdown",
 	description: "Markdown syntax highlighting",
@@ -35,6 +38,11 @@ exports.plugin = {
 	},
 
 	condition: function(context) {
+		// Tag-based override takes precedence
+		if (hasConfiguredTag(context, TAGS_CONFIG_TIDDLER)) {
+			return true;
+		}
+		// Fall back to content type check
 		var type = context.tiddlerType;
 		return MARKDOWN_TYPES.indexOf(type) !== -1;
 	},

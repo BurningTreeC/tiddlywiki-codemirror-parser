@@ -15,6 +15,72 @@ var vimModule = require("$:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/k
 
 var ESCAPE_CONSUMED_TIDDLER = "$:/temp/codemirror-6/vim-escape-consumed";
 
+// Map from EditorView to context
+var viewToContext = new WeakMap();
+
+// Helper to get context from CodeMirror vim adapter
+function getContextFromCM(cm) {
+  if (cm && cm.cm6) {
+    return viewToContext.get(cm.cm6);
+  }
+  return null;
+}
+
+// Define custom ex commands for TiddlyWiki integration
+if (vimModule && vimModule.Vim) {
+  // :w - save tiddler without closing (persist draft to original tiddler)
+  vimModule.Vim.defineEx("write", "w", function(cm, params) {
+    var context = getContextFromCM(cm);
+    var widget = context && context.options && context.options.widget;
+    if (widget && widget.wiki) {
+      var draftTitle = widget.editTitle;
+      var draftTiddler = widget.wiki.getTiddler(draftTitle);
+      if (draftTiddler && draftTiddler.fields["draft.of"]) {
+        var originalTitle = draftTiddler.fields["draft.of"];
+        // Copy draft fields to original, excluding draft-specific fields
+        var newFields = {};
+        for (var field in draftTiddler.fields) {
+          if (field !== "draft.of" && field !== "draft.title") {
+            newFields[field] = draftTiddler.fields[field];
+          }
+        }
+        // Restore original title
+        newFields.title = originalTitle;
+        // Save to original tiddler
+        widget.wiki.addTiddler(new $tw.Tiddler(newFields));
+      }
+    }
+  });
+
+  // :wq - save and close tiddler
+  vimModule.Vim.defineEx("wq", "wq", function(cm, params) {
+    var context = getContextFromCM(cm);
+    var widget = context && context.options && context.options.widget;
+    if (widget) {
+      var draftTitle = widget.editTitle;
+      widget.dispatchEvent({
+        type: "tm-save-tiddler",
+        param: draftTitle,
+        tiddlerTitle: draftTitle
+      });
+    }
+  });
+
+  // :q - close/cancel tiddler (discard changes)
+  vimModule.Vim.defineEx("quit", "q", function(cm, params) {
+    var context = getContextFromCM(cm);
+    var widget = context && context.options && context.options.widget;
+    if (widget) {
+      var draftTitle = widget.editTitle;
+      widget.dispatchEvent({
+        type: "tm-cancel-tiddler",
+        param: draftTitle,
+        tiddlerTitle: draftTitle
+      });
+    }
+  });
+}
+
 // Register hook to prevent tiddler cancel when vim consumed the Escape
 $tw.hooks.addHook("th-cancelling-tiddler", function(event) {
   var consumed = $tw.wiki.getTiddlerText(ESCAPE_CONSUMED_TIDDLER, "no");
@@ -48,8 +114,10 @@ exports.plugin = {
     var wiki = context.options && context.options.widget && context.options.widget.wiki || $tw.wiki;
     var ViewPlugin = this._core.view.ViewPlugin;
 
-    // ViewPlugin to intercept Escape before TiddlyWiki's keyboard widget
+    // ViewPlugin to store context and intercept Escape
     var vimHelper = ViewPlugin.define(function(view) {
+      // Store context in WeakMap for ex commands to access
+      viewToContext.set(view, context);
 
       // Capture phase handler - runs BEFORE TiddlyWiki processes the key
       var escapeCapture = function(event) {
@@ -80,6 +148,7 @@ exports.plugin = {
       return {
         destroy: function() {
           view.contentDOM.removeEventListener("keydown", escapeCapture, true);
+          viewToContext.delete(view);
         }
       };
     });

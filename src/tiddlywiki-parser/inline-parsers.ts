@@ -1559,21 +1559,36 @@ export const SystemLink: InlineParser = {
 // URL Auto-Link Parser (http://...)
 // ============================================================================
 
-const urlRe = /^https?:\/\/[^\s\[\]{}|<>]*/
+// URLs with :// (http, https, ftp, file)
+const urlWithSlashesRe = /^(?:https?|ftp|file):\/\/[^\s\[\]{}|<>]*/i
+// URLs without :// (mailto, tel, geo, data, javascript)
+const urlWithoutSlashesRe = /^(?:mailto|tel|geo|data|javascript):[^\s\[\]{}|<>]+/i
 
 export const URLAutoLink: InlineParser = {
   name: "URLAutoLink",
   parse(cx: InlineContext, next: number, pos: number): number {
-    if (next !== 104) return -1 // 'h'
+    // Check first character matches a supported protocol
+    // h=104 (http/https), f=102 (ftp/file), m=109 (mailto), t=116 (tel), g=103 (geo), d=100 (data), j=106 (javascript)
+    if (next !== 104 && next !== 102 && next !== 109 && next !== 116 && next !== 103 && next !== 100 && next !== 106) return -1
 
     const text = cx.slice(pos, cx.end)
-    const match = urlRe.exec(text)
+
+    // Try matching URL with :// first
+    let match = urlWithSlashesRe.exec(text)
+    let minLength = 8 // Must have more than just "https://"
+
+    if (!match) {
+      // Try matching URL without :// (mailto:, tel:, etc.)
+      match = urlWithoutSlashesRe.exec(text)
+      minLength = 7 // Must have more than just "mailto:"
+    }
+
     if (!match) return -1
 
     // Strip trailing punctuation
     let linkText = match[0]
     linkText = linkText.replace(trailingPunctRe, "")
-    if (linkText.length <= 8) return -1 // Must have more than just "https://"
+    if (linkText.length <= minLength) return -1
 
     return cx.addElement(cx.elt(Type.URLLink, pos, pos + linkText.length))
   }

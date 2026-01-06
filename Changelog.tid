@@ -3,12 +3,129 @@ tags:
 
 ! Changelog
 
+!! Version 0.0.17
+
+!!! New Language Plugins
+
+* ''9 New Languages'' - Extended language support for syntax highlighting
+** Lezer (grammar definition language)
+** WAST (WebAssembly Text format)
+** Rust
+** Sass/SCSS
+** Go
+** PHP
+** C++
+** Java
+** LaTeX
+
+!!! Linting Improvements
+
+* ''JSON Linting'' - Built-in JSON syntax validation using CodeMirror's `jsonParseLinter`
+** Highlights JSON syntax errors in real-time
+** Shows lint gutter markers for quick error identification
+
+!!! Bug Fixes
+
+* ''External Link Parsing'' - `[ext[url]]` now correctly distinguished from filter runs
+** Similar to `[img[`, prevents `[ext[` from being misinterpreted as a filter operand
+** Tiddler completion no longer triggers inside external links
+
+* ''URL Auto-Links'' - Extended protocol support for automatic URL highlighting
+** Now supports: `mailto:`, `tel:`, `ftp:`, `file:`, `geo:`, `data:`, `javascript:`
+** Previously only `http://` and `https://` were recognized
+
+* ''Emoji Picker'' - No longer triggers after URL protocols
+** Typing `mailto:na` no longer shows emoji completions for `:na`
+** Checks for common URL protocols before activating
+
+* ''Editor Placeholder'' - Placeholder text now displays when editor is empty
+** Uses CodeMirror 6's `placeholder()` extension
+** Shows the configured placeholder from `editPlaceholder` widget attribute
+
+!!! Improvements
+
+* ''Tag-Based Language Detection'' - Fixed tiddler list resolution in language tag configuration
+** `hasConfiguredTag` now uses `wiki.filterTiddlers()` instead of `parseStringArray()`
+** Properly resolves tiddler lists stored by the tag-picker widget
+
+!!! Infrastructure
+
+* ''Plugin Dependencies'' - All plugins now declare dependency on main editor plugin
+** Added `dependents` field to all plugin.info files
+
+* ''MIME Type Documentation'' - Added `$:/language/Docs/Types` tiddlers for all supported content types
+** Enables proper MIME type display in TiddlyWiki's content type picker
+
+* ''Naming Convention Documentation'' - Documented `cm6-lang-*` startup module naming convention
+** Allows TiddlyWiki language module to dynamically discover language dependencies
+
+---
+
+!! Version 0.0.16
+
+!!! Bug Fixes
+
+* ''Enter Key on Empty Lists'' - Always removes list marker when pressing Enter on empty list line
+** Simplified logic removes complex markdown-style "tight list" conditions
+** Works consistently for all list types (bullet, numbered, mixed)
+
+* ''Auto-Close Tags in Attributes'' - No longer inserts closing tags inside attribute values
+** Detects when cursor is inside `AttributeValue` or `AttributeString` nodes
+** Fixes issue with `<$text text="<$set>">` incorrectly inserting `</$text>`
+
+* ''Color Picker List Detection'' - Correctly identifies indented numbered lists
+** `#hexcolor` with only whitespace before it is treated as a list marker, not a color
+** Checks for whitespace between line start and `#`
+
+* ''Incomplete Block-Level Macros'' - `<<macro` on its own line now highlights correctly
+** Previously, incomplete macros at block level were not parsed/highlighted
+** Now shows opening mark `<<` and macro name with proper syntax highlighting
+** Multi-line incomplete macros also handled correctly
+
+!!! New Features
+
+* ''Typed Block Syntax Highlighting'' - Code blocks with file extensions now highlight correctly
+** `$$$.js`, `$$$.css`, `$$$.ts`, `$$$.py`, etc. now use appropriate language highlighting
+** Supports common file extensions: `.js`, `.mjs`, `.ts`, `.tsx`, `.css`, `.html`, `.json`, `.md`, `.py`, `.sql`, `.xml`, `.yaml`, `.yml`, and more
+
+* ''Filter Run Prefix Completion'' - Completes with closing bracket
+** `:filter`, `:map`, `:reduce`, etc. now complete to `:filter[]` with cursor inside brackets
+** Only adds closing bracket if not already present
+
+!!! Linting Improvements
+
+* ''Built-in Variables'' - Linter now recognizes TiddlyWiki built-in variables
+** `currentTiddler`, `storyTiddler`, `transclusion` no longer flagged as undefined
+
+* ''Updated Lint Message'' - More accurate undefined definition message
+** Changed from "possibly undefined macro" to "possibly undefined variable / macro / procedure / function"
+
+!!! UI Improvements
+
+* ''Toolbar Icon Sizing'' - Fixed toolbar button icons not fitting properly
+** Added flexbox styles and proper SVG sizing (`1em × 1em`)
+** Added `cm6-icon` class to all plugin icons for CSS specificity
+** Icons now use `fill: none` to work correctly with various toolbar styles
+
+!!! Documentation
+
+* ''Plugin Readmes'' - Added readme.tid to 12 plugins that were missing documentation
+** editor, emoji-picker, plugin-combiner, and all lang-* plugins now have readme files
+
+* ''Comprehensive README.md'' - Complete rewrite of project documentation
+** Full feature list, installation guide, configuration options
+** Complete keyboard shortcuts reference
+** Developer guide for creating plugins
+** Build instructions and project structure
+
+---
+
 !! Version 0.0.15
 
 !!! New Features
 
-* '''CSS Support in `<style>` Tags''' - CSS syntax highlighting and autocompletion inside `<style></style>` tags
-** Works like fenced code blocks (` ```css `) - switches to CSS parser for content
+* ''CSS Support in `<style>` Tags'' - CSS syntax highlighting and autocompletion inside `<style></style>` tags
+** Works like fenced code blocks - switches to CSS parser for content
 ** Requires lang-css plugin to be installed
 ** lang-tiddlywiki now loads after other language plugins to enable nested language support
 
@@ -18,14 +135,14 @@ tags:
 
 !!! New Features
 
-* '''Language Switcher''' - Temporarily switch editor language mode without changing tiddler type
+* ''Language Switcher'' - Temporarily switch editor language mode without changing tiddler type
 ** Toolbar dropdown button with all installed languages
 ** Keyboard shortcut `Ctrl+Alt+L` opens picker panel within editor
 ** Supports TiddlyWiki, Markdown, HTML, CSS, JavaScript, TypeScript, JSON, YAML, XML, Python, Plain Text
 ** Configurable persistence: session-only or save to `codemirror-type` field
 ** Config tiddler: `$:/config/codemirror-6/languageSwitcherPersist`
 
-* '''CodeMirror Keyboard Shortcuts''' - Support for editor-specific keyboard shortcuts
+* ''CodeMirror Keyboard Shortcuts'' - Support for editor-specific keyboard shortcuts
 ** New tag `$:/tags/KeyboardShortcut/CodeMirror` for registering shortcuts
 ** Shortcuts can use `((shortcut-name))` reference syntax
 ** `handleKeydownEvent` method checks and executes registered shortcuts
@@ -36,23 +153,23 @@ tags:
 
 !!! Improvements
 
-* '''Consistent Selection Highlighting''' - Selected text now has uniform appearance
+* ''Consistent Selection Highlighting'' - Selected text now has uniform appearance
 ** Selection background and text color applied consistently regardless of formatting
 ** Bold, italic, and other styled text no longer bleeds through selection
 ** Works for both primary and secondary (multi-cursor) selections
 
-* '''Cursor Styling''' - Improved cursor visibility
+* ''Cursor Styling'' - Improved cursor visibility
 ** Cursor now extends slightly above and below the text line
 ** Default blink rate changed to 530ms (matches Windows/VS Code standard)
 
-* '''Lucide Icons''' - Updated toolbar icons to use Lucide icon set
+* ''Lucide Icons'' - Updated toolbar icons to use Lucide icon set
 ** Undo: `undo-2`
 ** Redo: `redo-2`
 ** Show Trailing Whitespace: `pilcrow`
 ** Remove Trailing Whitespace: `eraser`
 ** Spellcheck: `spell-check-2`
 
-* '''License Files''' - Added MIT license to all plugins
+* ''License Files'' - Added MIT license to all plugins
 ** Main editor plugin includes Lucide Icons ISC license attribution
 
 ---
@@ -61,19 +178,19 @@ tags:
 
 !!! New Plugins
 
-* '''Image Preview Plugin''' - Inline preview of images in the editor
+* ''Image Preview Plugin'' - Inline preview of images in the editor
 ** Shows image previews after `[img[source]]` syntax
 ** Supports both tiddler images and external URLs
 ** Shows "[Image not found]" for missing tiddlers
 ** Config tiddler: `$:/config/codemirror-6/imagePreview`
 
-* '''Color Picker Plugin''' - Inline color swatches with click-to-edit
+* ''Color Picker Plugin'' - Inline color swatches with click-to-edit
 ** Displays color swatches next to hex colors (`#fff`, `#ff0000`)
 ** Supports `rgb()`, `rgba()`, `hsl()`, and `hsla()` colors
 ** Click swatch to open native color picker and update the color
 ** Config tiddler: `$:/config/codemirror-6/colorPicker`
 
-* '''Word Count Plugin''' - Live word, character, and line count display
+* ''Word Count Plugin'' - Live word, character, and line count display
 ** Shows counts in a panel below the editor
 ** Updates on document changes and selection changes
 ** When text is selected, shows "selected / total" counts
@@ -81,24 +198,24 @@ tags:
 
 !!! New Features
 
-* '''Complete Any Word''' - Configurable fallback word completion from document
+* ''Complete Any Word'' - Configurable fallback word completion from document
 ** Suggests words that appear elsewhere in the document when no other completions match
 ** Toggle on/off in ControlPanel (disabled by default)
 ** Config tiddler: `$:/config/codemirror-6/completeAnyWord`
 
 !!! Improvements
 
-* '''Multi-Cursor Toolbar Operations''' - Toolbar buttons now work with multiple selections
+* ''Multi-Cursor Toolbar Operations'' - Toolbar buttons now work with multiple selections
 ** Bold, italic, and other wrap-style operations apply to all cursors independently
 ** Proper toggle behavior: each selection checks for existing markers and adds/removes accordingly
 ** Fixes `tm-edit-text-operation` messages to pass prefix/suffix for multi-cursor support
 
-* '''Extended Close Brackets''' - Additional quote pairs for auto-closing
+* ''Extended Close Brackets'' - Additional quote pairs for auto-closing
 ** Curly/typographic quotes: `""` and `''`
 ** German-style quotes: `„"` and `‚'`
 ** All pairs work with the close brackets feature when enabled
 
-* '''Auto Close Tags Filter Context''' - No longer triggers inside filter expressions
+* ''Auto Close Tags Filter Context'' - No longer triggers inside filter expressions
 ** Uses syntax tree to detect `FilterExpression`, `FilterRun`, `FilteredTransclusion` contexts
 ** Prevents `<variable>` in filters like `[<myvar>]` from getting a closing tag
 
@@ -108,36 +225,36 @@ tags:
 
 !!! New Features
 
-* '''Undo/Redo Toolbar Buttons''' - Dedicated toolbar buttons for undo and redo
+* ''Undo/Redo Toolbar Buttons'' - Dedicated toolbar buttons for undo and redo
 ** Custom `tm-cm6-undo` and `tm-cm6-redo` messages for direct CodeMirror integration
 ** New icons for undo and redo actions
 
-* '''Trailing Whitespace Highlighting''' - Toggle to show trailing whitespace
+* ''Trailing Whitespace Highlighting'' - Toggle to show trailing whitespace
 ** New toolbar button to toggle visibility on/off
 ** Config tiddler `$:/config/codemirror-6/showTrailingWhitespace`
 ** Uses CodeMirror compartments for live toggling
 
-* '''Remove Trailing Whitespace''' - Toolbar button to clean up trailing whitespace
+* ''Remove Trailing Whitespace'' - Toolbar button to clean up trailing whitespace
 ** Removes trailing whitespace from all lines in a single operation
 ** Single undo step for the entire cleanup
 
-* '''Multi-line Macro Calls''' - Parser now supports macros spanning multiple lines
+* ''Multi-line Macro Calls'' - Parser now supports macros spanning multiple lines
 ** Macros like `<<tabs\n  param:"value"\n>>` are now properly parsed
 ** Parameters on separate lines are correctly highlighted
 
 !!! Lint Plugin Improvements
 
-* '''Orphan Closing Tag Detection''' - Detects closing tags without matching opening tags
+* ''Orphan Closing Tag Detection'' - Detects closing tags without matching opening tags
 ** Reports `</div>` or `</$widget>` that have no corresponding opening tag
 ** "Remove closing tag" quick-fix action
 ** Works for both HTML tags and widgets
 
-* '''Fixed HTMLBlock False Positives''' - Self-contained HTML blocks no longer reported as unclosed
+* ''Fixed HTMLBlock False Positives'' - Self-contained HTML blocks no longer reported as unclosed
 ** `<div>content</div>` on multiple lines correctly recognized as closed
 
 !!! Bug Fixes
 
-* '''Unclosed Code Block Parsing''' - Fixed last character being styled incorrectly
+* ''Unclosed Code Block Parsing'' - Fixed last character being styled incorrectly
 ** Documents without trailing newlines now handled correctly
 ** Uses `prevLineEnd()` instead of `lineStart - 1` for proper end position
 
@@ -147,7 +264,7 @@ tags:
 
 !!! New Features
 
-* '''Lint Plugin''' - TiddlyWiki-specific linting with live config updates
+* ''Lint Plugin'' - TiddlyWiki-specific linting with live config updates
 ** Unclosed widgets detection (e.g., `<$list>` without `</$list>`)
 ** Unclosed wikilinks (e.g., `[[link` without closing `]]`)
 ** Unclosed transclusions (e.g., `{{tiddler` without closing `}}`)
@@ -157,26 +274,26 @@ tags:
 ** Live updates: lint settings take effect immediately without reload
 ** Uses CodeMirror compartments for dynamic reconfiguration
 
-* '''Keymap Reference''' - New ControlPanel tab showing keyboard shortcuts
+* ''Keymap Reference'' - New ControlPanel tab showing keyboard shortcuts
 ** Displays shortcuts for current keymap (Default, Vim, Emacs)
 ** Tag-based system for extensibility (`$:/tags/CodeMirror/KeymapTable`)
 ** Separate KeymapTable tiddlers in each keymap plugin
 
-* '''Plugin Event System''' - New `dispatchPluginEvent` method on engine
+* ''Plugin Event System'' - New `dispatchPluginEvent` method on engine
 ** Allows engine to notify plugins of events (e.g., `onRefresh`)
 ** Plugins can respond to tiddler changes dynamically
 ** Used by lint plugin for live config updates
 
 !!! Improvements
 
-* '''Zen Mode Responsive Width'''
+* ''Zen Mode Responsive Width''
 ** 75% width on large screens (configurable via `$:/config/codemirror-6/zen-mode/max-width`)
 ** Full width (100%) on small screens below sidebar breakpoint
 ** Uses TiddlyWiki's `sidebarbreakpoint` metric for responsive behavior
 
-* '''Snippets Plugin''' - Config tiddler for enable/disable
+* ''Snippets Plugin'' - Config tiddler for enable/disable
 
-* '''Emoji Picker Plugin''' - Config tiddler for enable/disable
+* ''Emoji Picker Plugin'' - Config tiddler for enable/disable
 
 ---
 
@@ -184,13 +301,13 @@ tags:
 
 !!! New Features
 
-* '''Click Navigate Plugin''' - Ctrl+Click (Cmd+Click on Mac) to navigate to tiddlers
+* ''Click Navigate Plugin'' - Ctrl+Click (Cmd+Click on Mac) to navigate to tiddlers
 ** Works with WikiLinks, transclusions, CamelCase links, system links
 ** Shift+Ctrl+Click opens in new window
 ** Visual feedback when Ctrl is held
 ** Respects `$:/config/WikiParserRules/Inline/wikilink` setting
 
-* '''Link Preview Plugin''' - Show tiddler preview on hover over links
+* ''Link Preview Plugin'' - Show tiddler preview on hover over links
 ** Displays title, tags, content preview, and modified date
 ** Works with WikiLinks, transclusions, CamelCase links, system links
 ** Supports shadow tiddlers (e.g., `$:/core/ui/ViewTemplate`)
@@ -198,11 +315,11 @@ tags:
 
 !!! Improvements
 
-* '''Filter Operand Navigation''' - Click navigate and preview work with filter operands
+* ''Filter Operand Navigation'' - Click navigate and preview work with filter operands
 ** Only for operators that take tiddler titles: `title`, `tag`, `list`
 ** Properly extracts tiddler title from text references
 
-* '''System Link Parsing''' - Fixed trailing punctuation in system links
+* ''System Link Parsing'' - Fixed trailing punctuation in system links
 ** `$:/core/ui/ViewTemplate,` now correctly excludes the comma
 ** Same fix applied to URL auto-links
 
@@ -212,25 +329,25 @@ tags:
 
 !!! New Features
 
-* '''Transclusion Field/Index Completion''' - Autocomplete for fields and indexes in transclusions
+* ''Transclusion Field/Index Completion'' - Autocomplete for fields and indexes in transclusions
 ** `{{tiddler!!}}` now shows field completions for the specified tiddler
 ** `{{tiddler##}}` now shows index completions for data tiddlers (JSON, dictionary)
 ** Field completions show only fields present on the target tiddler
 ** Index completions use TiddlyWiki's built-in `getTiddlerDataCached()` for proper data tiddler support
 
-* '''Filter Text Reference Completion''' - Field/index completion inside filters
+* ''Filter Text Reference Completion'' - Field/index completion inside filters
 ** `{tiddler!!}` in filters now shows field completions
 ** `{tiddler##}` in filters now shows index completions
 ** Works in filter contexts like `{{{ [{Snippets##index}] }}}`
 
-* '''Hard Line Breaks Block''' - Support for TiddlyWiki's hard line breaks syntax
+* ''Hard Line Breaks Block'' - Support for TiddlyWiki's hard line breaks syntax
 ** `"""` on its own line starts a hard line breaks block
 ** Content inside preserves line breaks literally
 ** Proper syntax highlighting for the `"""` markers
 
 !!! Improvements
 
-* '''Triple-Quoted Attribute Parsing''' - Fixed parsing of `attribute="""value"""` syntax
+* ''Triple-Quoted Attribute Parsing'' - Fixed parsing of `attribute="""value"""` syntax
 ** Triple-quoted strings now correctly parsed in both block and inline contexts
 ** Allows multi-line attribute values with proper highlighting
 
@@ -240,17 +357,17 @@ tags:
 
 !!! New Features
 
-* '''Dynamic Widget Discovery''' - Widgets are now discovered automatically at runtime
+* ''Dynamic Widget Discovery'' - Widgets are now discovered automatically at runtime
 ** Uses `$tw.modules.forEachModuleOfType("widget")` to find all registered widgets
 ** Custom widget modules automatically appear in completions without configuration
 ** Widget definitions from `\widget` pragma also included
 
-* '''Widget Attribute Introspection''' - Attributes are now extracted from widget source code
+* ''Widget Attribute Introspection'' - Attributes are now extracted from widget source code
 ** Parses `this.getAttribute()` calls from widget JavaScript source
 ** Custom widgets with accessible source get automatic attribute completions
 ** Falls back to built-in attribute list when source introspection unavailable
 
-* '''Configurable Self-Closing Widgets''' - Control which widgets auto-complete with `/>` syntax
+* ''Configurable Self-Closing Widgets'' - Control which widgets auto-complete with `/>` syntax
 ** New Control Panel configuration: `$:/config/codemirror-6/selfClosingWidgets`
 ** Changes apply immediately without editor reload
 ** Action widgets (`$action-*`) always self-close regardless of configuration
@@ -258,7 +375,7 @@ tags:
 
 !!! Improvements
 
-* '''Widget Attribute Filtering''' - `class` and `style` attributes only shown for DOM-rendering widgets
+* ''Widget Attribute Filtering'' - `class` and `style` attributes only shown for DOM-rendering widgets
 ** Utility widgets like `$list`, `$set`, `$vars` no longer show irrelevant DOM attributes
 ** Action widgets properly excluded from class/style completions
 
@@ -268,7 +385,7 @@ tags:
 
 !!! New Features
 
-* '''User Snippets Plugin''' - Define custom code snippets via tiddlers
+* ''User Snippets Plugin'' - Define custom code snippets via tiddlers
 ** Create tiddlers tagged `$:/tags/CodeMirror/Snippet` with custom templates
 ** Full placeholder support: `${1}`, `${1:default}`, `$0` for final cursor position
 ** Tab/Shift+Tab navigation between placeholders (uses CodeMirror's built-in snippet system)
@@ -278,13 +395,13 @@ tags:
 
 !!! Improvements
 
-* '''Multi-Selection Autocompletion''' - All completions now work with multiple cursors
+* ''Multi-Selection Autocompletion'' - All completions now work with multiple cursors
 ** Snippets insert at all cursor positions (Tab navigation for single cursor only)
 ** Emoji picker inserts at all cursors
 ** Widget, attribute, tiddler title, macro, and HTML completions all support multi-cursor
 ** Added `buildMultiSelectionChanges` helper for consistent multi-cursor handling
 
-* '''Enhanced Widget Completion'''
+* ''Enhanced Widget Completion''
 ** Support for namespaced widgets with dots (e.g., `<$my.widget`)
 ** Widgets defined by `\widget` pragma now appear in completions with "(local)" detail
 ** Widget attribute completion also supports namespaced widgets
@@ -296,20 +413,20 @@ tags:
 
 !!! New Features
 
-* '''Enhanced Variable/Macro Completions''' - All callable types now appear in completions
+* ''Enhanced Variable/Macro Completions'' - All callable types now appear in completions
 ** `<<name>>` and `<name>` in filters now complete macros, procedures, functions, and variables
 ** `$variable="..."` attribute (e.g., in `<$transclude>`) completes all callable types
 ** Local definitions from current document shown with "(local)" detail
 ** Built-in variables (`transclusion`, `currentTiddler`, `tv-*`, etc.) shown with "(built-in)" detail
 
-* '''Widget Variable Extraction''' - Variables set by widgets are now detected in current document
+* ''Widget Variable Extraction'' - Variables set by widgets are now detected in current document
 ** `<$set name="...">` - extracts name attribute
 ** `<$vars attr="...">` and `<$let attr="...">` - all attributes become variables
 ** `<$list variable="..." counter="...">` - extracts variable and counter
 ** `<$range variable="...">` - extracts variable attribute
 ** `<$wikify name="...">` - extracts name attribute
 
-* '''Built-in Variables''' - Common TiddlyWiki variables always available in completions
+* ''Built-in Variables'' - Common TiddlyWiki variables always available in completions
 ** `transclusion`, `currentTiddler`, `storyTiddler`
 ** `tv-story-list`, `tv-history-list` (from `$navigator`)
 ** `tv-config-toolbar-icons`, `tv-config-toolbar-text`, `tv-config-toolbar-class`
@@ -321,26 +438,26 @@ tags:
 
 !!! New Features
 
-* '''Multi-Cursor Editing''' - Edit multiple locations simultaneously
+* ''Multi-Cursor Editing'' - Edit multiple locations simultaneously
 ** Ctrl+Click to add cursors at any position
 ** Ctrl+D to select next occurrence of current selection
 ** Ctrl+Alt+Up/Down to add cursors above/below
 ** Custom secondary cursor/selection rendering with native appearance
 ** New config: `$:/config/codemirror-6/multiCursor` to enable/disable
 
-* '''Configurable Cursor Blink Rate'''
+* ''Configurable Cursor Blink Rate''
 ** New config: `$:/config/codemirror-6/cursorBlinkRate` (default: 1200ms)
 ** Set to 0 to disable blinking
 ** Uses CSS transclusion for dynamic updates without reload
 
-* '''Filter Operator Completions''' - Context-aware completions inside filters
+* ''Filter Operator Completions'' - Context-aware completions inside filters
 ** Operand value completions for operators like `all[]`, `is[]`, `format[]`, `has[]`, `tag[]`
 ** Suffix/flag completions after `:` (e.g., `contains:casesensitive`, `search:literal:field`)
 ** Support for `+` combinations in `all[]` (e.g., `all[tiddlers+shadows]`)
 ** Dynamic completions for fields, tags, functions, and variables via callbacks
 ** Filter context detection: `[[tiddler]]` cursor placement differs inside vs outside filters
 
-* '''Mixed List Marker Support''' - Full support for TiddlyWiki mixed lists
+* ''Mixed List Marker Support'' - Full support for TiddlyWiki mixed lists
 ** List continuation works for mixed markers like `*#`, `#*`, `**#`, etc.
 ** Tab indents by duplicating last marker (e.g., `*#` → `*##`)
 ** Shift+Tab outdents by removing last marker (e.g., `*##` → `*#`)
@@ -356,25 +473,25 @@ tags:
 
 !!! New Features
 
-* '''Dynamic Keymap Switching''' - Change between default, Vim, and Emacs keymaps on-the-fly without reloading
+* ''Dynamic Keymap Switching'' - Change between default, Vim, and Emacs keymaps on-the-fly without reloading
 ** Keymap compartment architecture allows instant switching via Control Panel
 ** Engine tracks keymap plugins and reconfigures when settings change
 
-* '''Search & Replace Built-in''' - Search functionality merged into base editor plugin
+* ''Search & Replace Built-in'' - Search functionality merged into base editor plugin
 ** No longer requires separate plugin installation
 ** Same TiddlyWiki-styled panel interface
 
 !!! Improvements
 
-* '''Vim Mode'''
+* ''Vim Mode''
 ** Fixed Escape key to not close tiddlers when exiting insert/visual mode
 ** Added proper block cursor styling for all themes
 ** Added vim status panel styling for all themes
 
-* '''Emacs Mode'''
+* ''Emacs Mode''
 ** Added cursor and selection styling for all themes
 
-* '''Dark Theme Support'''
+* ''Dark Theme Support''
 ** Fixed search panel inputs having white background in dark themes
 ** Fixed goto-line panel inputs for dark themes
 ** Override CodeMirror's hardcoded `.cm-textfield` and `.cm-button` styles
@@ -391,19 +508,19 @@ tags:
 
 !!! New Features
 
-* '''Auto Close Tags Plugin''' - Automatically inserts closing tags for HTML elements and TiddlyWiki widgets
+* ''Auto Close Tags Plugin'' - Automatically inserts closing tags for HTML elements and TiddlyWiki widgets
 ** Auto-close when typing `>` after opening tag: `<div>` becomes `<div></div>`
 ** Widget support: `<$list>` becomes `<$list></$list>`
 ** Smart detection skips void elements (`br`, `img`) and self-closing widgets (`$action-*`)
 ** Close tag completion: typing `</` auto-completes with nearest unclosed tag
 ** Does not trigger inside macro calls (`<<macro>>`)
 
-* '''Tag/Widget Completion Enhancements'''
+* ''Tag/Widget Completion Enhancements''
 ** Autocompletion now inserts closing tags automatically
 ** Cursor positioned between opening and closing tags
 ** Self-closing elements handled correctly
 
-* '''Enter Key Between Tags'''
+* ''Enter Key Between Tags''
 ** Pressing Enter between `<tag></tag>` creates proper indentation:
 ```
 <div>
@@ -411,16 +528,16 @@ tags:
 </div>
 ```
 
-* '''Keymap Plugins'''
-** '''Vim Keymap''' - Full Vim emulation with normal, insert, visual, and command modes
-** '''Emacs Keymap''' - Emacs-style keybindings (Ctrl-A, Ctrl-E, Ctrl-K, etc.)
+* ''Keymap Plugins''
+** ''Vim Keymap'' - Full Vim emulation with normal, insert, visual, and command modes
+** ''Emacs Keymap'' - Emacs-style keybindings (Ctrl-A, Ctrl-E, Ctrl-K, etc.)
 
 !!! Improvements
 
-* '''Editor Preview Panel''' - Styled to match CodeMirror editor frame (border, border-radius, background)
-* '''Editor Height Configuration''' - Respects TiddlyWiki's `$:/config/TextEditor/EditorHeight/Mode` and Height settings
-* '''Transclusion Completion''' - Fixed to trigger after `{{` but not after `{{{` (filtered transclusion)
-* '''Strikethrough Parsing''' - Fixed issue where `~~text with {{ inside~~` wasn't rendering correctly
+* ''Editor Preview Panel'' - Styled to match CodeMirror editor frame (border, border-radius, background)
+* ''Editor Height Configuration'' - Respects TiddlyWiki's `$:/config/TextEditor/EditorHeight/Mode` and Height settings
+* ''Transclusion Completion'' - Fixed to trigger after `{{` but not after `{{{` (filtered transclusion)
+* ''Strikethrough Parsing'' - Fixed issue where `~~text with {{ inside~~` wasn't rendering correctly
 
 !!! Bug Fixes
 
@@ -440,7 +557,7 @@ tags:
 
 !!! Core Features
 
-* '''TiddlyWiki Language Support''' - Full syntax highlighting for TiddlyWiki5 wikitext
+* ''TiddlyWiki Language Support'' - Full syntax highlighting for TiddlyWiki5 wikitext
 ** Headings, text formatting (bold, italic, underline, strikethrough, etc.)
 ** WikiLinks, external links, transclusions, filtered transclusions
 ** Widgets with attribute completion
@@ -451,7 +568,7 @@ tags:
 ** Tables with header detection
 ** Block quotes and horizontal rules
 
-* '''Autocompletion'''
+* ''Autocompletion''
 ** Tiddler title completion after `[[`
 ** Transclusion completion after `{{`
 ** Widget completion after `<$`
@@ -461,29 +578,29 @@ tags:
 ** HTML tag and attribute completion
 ** Emoji picker with `:emoji:` syntax
 
-* '''Editor Enhancements'''
+* ''Editor Enhancements''
 ** Auto-close brackets and quotes
 ** Delete bracket pairs with backspace
 ** List continuation on Enter
 ** Tab/Shift+Tab for list indent/outdent
 ** Keyboard shortcuts for formatting (Ctrl+B, Ctrl+I, etc.)
 
-* '''Code Folding'''
+* ''Code Folding''
 ** Fold headings to next heading of same/higher level
 ** Fold widgets and HTML blocks
 ** Fold code blocks and typed blocks
 ** Fold gutter with visual indicators
 
-* '''Search & Replace'''
+* ''Search & Replace''
 ** TiddlyWiki-styled search panel
 ** Find and replace functionality
 ** Regex support
 
-* '''Line Numbers'''
+* ''Line Numbers''
 ** Optional line number gutter
 ** Active line highlighting
 
-* '''Toolbars'''
+* ''Toolbars''
 ** 10 customizable toolbar styles
 ** Formatting buttons
 ** Insert buttons for links, transclusions, code blocks
@@ -524,5 +641,5 @@ tags:
 
 !!! Other Plugins
 
-* '''Zen Mode''' - Distraction-free editing
-* '''Emoji Picker''' - Insert emojis with `:name:` syntax
+* ''Zen Mode'' - Distraction-free editing
+* ''Emoji Picker'' - Insert emojis with `:name:` syntax

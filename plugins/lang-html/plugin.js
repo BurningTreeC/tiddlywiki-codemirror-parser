@@ -19,6 +19,9 @@ var HTML_TYPES = [
 	"text/xhtml"
 ];
 
+var TAGS_CONFIG_TIDDLER = "$:/config/codemirror-6/lang-html/tags";
+var hasConfiguredTag = require("$:/plugins/BurningTreeC/tiddlywiki-codemirror/utils.js").hasConfiguredTag;
+
 exports.plugin = {
 	name: "lang-html",
 	description: "HTML syntax highlighting",
@@ -36,6 +39,11 @@ exports.plugin = {
 	},
 
 	condition: function(context) {
+		// Tag-based override takes precedence
+		if (hasConfiguredTag(context, TAGS_CONFIG_TIDDLER)) {
+			return true;
+		}
+		// Fall back to content type check
 		var type = context.tiddlerType;
 		return HTML_TYPES.indexOf(type) !== -1;
 	},

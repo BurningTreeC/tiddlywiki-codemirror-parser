@@ -84,6 +84,60 @@ const languages = [
     input: "@codemirror/lang-yaml",
     output: "plugins/lang-yaml/lang-yaml.js",
     title: "$:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/lang-yaml/lang-yaml.js"
+  },
+  {
+    name: "lezer",
+    input: "@codemirror/lang-lezer",
+    output: "plugins/lang-lezer/lang-lezer.js",
+    title: "$:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/lang-lezer/lang-lezer.js"
+  },
+  {
+    name: "wast",
+    input: "@codemirror/lang-wast",
+    output: "plugins/lang-wast/lang-wast.js",
+    title: "$:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/lang-wast/lang-wast.js"
+  },
+  {
+    name: "rust",
+    input: "@codemirror/lang-rust",
+    output: "plugins/lang-rust/lang-rust.js",
+    title: "$:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/lang-rust/lang-rust.js"
+  },
+  {
+    name: "sass",
+    input: "@codemirror/lang-sass",
+    output: "plugins/lang-sass/lang-sass.js",
+    title: "$:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/lang-sass/lang-sass.js"
+  },
+  {
+    name: "go",
+    input: "@codemirror/lang-go",
+    output: "plugins/lang-go/lang-go.js",
+    title: "$:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/lang-go/lang-go.js"
+  },
+  {
+    name: "php",
+    input: "@codemirror/lang-php",
+    output: "plugins/lang-php/lang-php.js",
+    title: "$:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/lang-php/lang-php.js"
+  },
+  {
+    name: "cpp",
+    input: "@codemirror/lang-cpp",
+    output: "plugins/lang-cpp/lang-cpp.js",
+    title: "$:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/lang-cpp/lang-cpp.js"
+  },
+  {
+    name: "java",
+    input: "@codemirror/lang-java",
+    output: "plugins/lang-java/lang-java.js",
+    title: "$:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/lang-java/lang-java.js"
+  },
+  {
+    name: "latex",
+    input: "codemirror-lang-latex",
+    output: "plugins/lang-latex/lang-latex.js",
+    title: "$:/plugins/BurningTreeC/tiddlywiki-codemirror/plugins/lang-latex/lang-latex.js"
   }
 ];
 
