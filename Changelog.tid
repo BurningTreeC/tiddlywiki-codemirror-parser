@@ -3,6 +3,17 @@ tags:
 
 ! Changelog
 
+!! Version 0.0.20
+
+!!! Bug Fixes
+
+* ''Widget Attribute Completion'' - Fixed HTML attributes appearing in widget completions
+** `htmlCompletionSource` from `@codemirror/lang-html` was not being skipped for widget attribute contexts
+** Now properly detects `<$widget attr` patterns and skips HTML completion
+** Widget completions now only show widget-specific attributes
+
+---
+
 !! Version 0.0.19
 
 !!! Code Cleanup
