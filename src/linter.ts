@@ -45,12 +45,225 @@ const builtInVariables = new Set([
 ])
 
 /**
- * Extract parameter names from a definition node.
+ * Map of widgets to the implicit variables they provide within their action attributes.
+ * These variables are available in the scope of the action content and passed to
+ * sub-macro-calls (<$macrocall>) and sub-transclusions (<$transclude>).
+ * Patterns ending with "*" are wildcards (e.g., "dom-*" matches "dom-x", "dom-clientX", etc.)
+ *
+ * Based on actual TiddlyWiki widget source code - see core/modules/widgets/*.js
+ */
+export const ACTION_IMPLICIT_VARIABLES: Record<string, string[]> = {
+  // Drag and drop widgets (see droppable.js, draggable.js)
+  "$droppable": ["actionTiddler", "actionTiddlerList", "modifier"],
+  "$dropzone": ["actionTiddler", "actionTiddlerList", "modifier"],
+  "$draggable": ["actionTiddler"],
+
+  // Form widgets (see button.js, checkbox.js, radio.js, select.js, range.js)
+  // $button only provides variables when using selector attribute (collectDOMVariables)
+  "$button": ["modifier"],
+  // $checkbox does NOT pass any variables to invokeActionString
+  // $radio passes actionValue
+  "$radio": ["actionValue"],
+  // $select does NOT pass any variables to invokeActionString
+  // $range passes actionValue and actionValueHasChanged
+  "$range": ["actionValue", "actionValueHasChanged"],
+
+  // Event handling widgets (see linkcatcher.js, messagecatcher.js, eventcatcher.js, keyboard.js)
+  "$linkcatcher": ["navigateTo", "modifier"],
+  "$messagecatcher": ["modifier", "event-*", "event-paramObject-*", "list-event", "list-event-paramObject"],
+  "$eventcatcher": [
+    "dom-*",  // All DOM attributes with dom- prefix (from collectDOMVariables)
+    "modifier",
+    "event-mousebutton",
+    "event-type",
+    "event-detail-*",  // Properties in event.detail with event-detail- prefix
+    "tv-popup-coords",
+    "tv-popup-abs-coords",
+    "tv-widgetnode-width",
+    "tv-widgetnode-height",
+    "tv-selectednode-posx",
+    "tv-selectednode-posy",
+    "tv-selectednode-width",
+    "tv-selectednode-height",
+    "event-fromselected-posx",
+    "event-fromselected-posy",
+    "event-fromcatcher-posx",
+    "event-fromcatcher-posy",
+    "event-fromviewport-posx",
+    "event-fromviewport-posy",
+  ],
+  "$keyboard": ["modifier", "event-key-descriptor"],
+}
+
+/**
+ * Map of widgets to their action attribute names.
+ * These are the attributes where implicit action variables are available.
+ * Only includes widgets that actually provide implicit variables.
+ */
+export const ACTION_ATTRIBUTE_NAMES: Record<string, string[]> = {
+  "$droppable": ["actions"],
+  "$dropzone": ["actions"],
+  "$draggable": ["startactions", "endactions"],
+  "$button": ["actions"],
+  "$radio": ["actions"],
+  "$range": ["actions", "actionsStart", "actionsStop"],
+  "$linkcatcher": ["actions"],
+  "$messagecatcher": ["actions"],
+  "$eventcatcher": [
+    // New $event syntax
+    "$click", "$dblclick", "$contextmenu",
+    "$mousedown", "$mouseup", "$mouseover", "$mouseout", "$mouseenter", "$mouseleave", "$mousemove",
+    "$pointerdown", "$pointerup", "$pointermove", "$pointerover", "$pointerout", "$pointerenter", "$pointerleave", "$pointercancel",
+    "$dragstart", "$dragend", "$dragenter", "$dragleave", "$dragover", "$drop", "$drag",
+    "$focusin", "$focusout", "$focus", "$blur",
+    "$keydown", "$keyup", "$keypress",
+    "$input", "$change", "$submit",
+    "$touchstart", "$touchend", "$touchmove", "$touchcancel",
+    "$wheel", "$scroll",
+    // Legacy actions-event syntax
+    "actions-click", "actions-dblclick", "actions-contextmenu",
+    "actions-mousedown", "actions-mouseup", "actions-mouseover", "actions-mouseout",
+    "actions-focusin", "actions-focusout",
+    "actions-keydown", "actions-keyup",
+    "actions-input", "actions-change",
+    "actions-dragstart", "actions-dragend", "actions-dragenter", "actions-dragleave", "actions-dragover", "actions-drop",
+    "actions-pointerdown", "actions-pointerup", "actions-pointermove", "actions-pointerover", "actions-pointerout", "actions-pointerenter", "actions-pointerleave", "actions-pointercancel"
+  ],
+  "$keyboard": ["actions"],
+}
+
+/**
+ * Get the widget name from a Widget node by finding its WidgetName child.
+ */
+function getWidgetName(widgetNode: SyntaxNode, doc: string): string | null {
+  let child = widgetNode.firstChild
+  while (child) {
+    if (child.name === "WidgetName") {
+      return doc.slice(child.from, child.to)
+    }
+    child = child.nextSibling
+  }
+  return null
+}
+
+/**
+ * Get the attribute name from an Attribute node by finding its AttributeName child.
+ */
+function getAttributeName(attrNode: SyntaxNode, doc: string): string | null {
+  let child = attrNode.firstChild
+  while (child) {
+    if (child.name === "AttributeName") {
+      return doc.slice(child.from, child.to)
+    }
+    child = child.nextSibling
+  }
+  return null
+}
+
+/**
+ * Check if a variable name matches a wildcard pattern.
+ * Patterns use "*" as a suffix wildcard (e.g., "dom-*" matches "dom-x", "dom-clientX").
+ */
+export function matchesWildcardPattern(varName: string, pattern: string): boolean {
+  if (pattern.endsWith("*")) {
+    const prefix = pattern.slice(0, -1)
+    return varName.startsWith(prefix)
+  }
+  return varName === pattern
+}
+
+/**
+ * Result of checking action context - contains both exact variables and wildcard patterns.
+ */
+export interface ActionContextVariables {
+  variables: string[]
+  patterns: string[]  // Wildcard patterns like "dom-*"
+}
+
+/**
+ * Get the action implicit variables available at a given node position.
+ * Walks up the tree to find ALL enclosing action attributes of widgets.
+ * Variables are accumulated because in TiddlyWiki, action variables from outer
+ * widgets are inherited by nested widgets within the action string.
+ */
+export function getActionContextVariables(node: SyntaxNode, doc: string): ActionContextVariables {
+  const result: ActionContextVariables = {
+    variables: [],
+    patterns: []
+  }
+  const seenVariables = new Set<string>()
+  const seenPatterns = new Set<string>()
+
+  // Walk up looking for Attribute nodes - accumulate ALL action contexts
+  let current: SyntaxNode | null = node
+  while (current) {
+    // If we hit an attribute node, check if it's an action attribute
+    if (current.name === "Attribute") {
+      const attrName = getAttributeName(current, doc)
+      if (attrName) {
+        // Find the parent widget
+        let parent = current.parent
+        while (parent) {
+          if (parent.name === "Widget" || parent.name === "InlineWidget") {
+            const widgetName = getWidgetName(parent, doc)
+            if (widgetName) {
+              // Check if this attribute is an action attribute for this widget
+              const actionAttrs = ACTION_ATTRIBUTE_NAMES[widgetName]
+              if (actionAttrs && actionAttrs.includes(attrName)) {
+                // Get the implicit variables for this widget
+                const implicitVars = ACTION_IMPLICIT_VARIABLES[widgetName]
+                if (implicitVars) {
+                  for (const v of implicitVars) {
+                    if (v.includes("*")) {
+                      if (!seenPatterns.has(v)) {
+                        seenPatterns.add(v)
+                        result.patterns.push(v)
+                      }
+                    } else {
+                      if (!seenVariables.has(v)) {
+                        seenVariables.add(v)
+                        result.variables.push(v)
+                      }
+                    }
+                  }
+                }
+                // Don't return - continue walking up to find more action contexts
+              }
+            }
+            break
+          }
+          parent = parent.parent
+        }
+      }
+    }
+    current = current.parent
+  }
+
+  return result
+}
+
+/**
+ * Check if a variable name is available in the action context.
+ */
+export function isActionContextVariable(varName: string, context: ActionContextVariables): boolean {
+  if (context.variables.includes(varName)) {
+    return true
+  }
+  for (const pattern of context.patterns) {
+    if (matchesWildcardPattern(varName, pattern)) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * Extract parameter names from a single definition node.
  * Parameters can be in:
  * - PragmaParams nodes (for \define, \procedure, \function, \widget pragmas)
  * - MacroParam/MacroParamName nodes (for other contexts)
  */
-function extractParameterNames(defNode: SyntaxNode, doc: string): Set<string> {
+function extractParameterNamesFromNode(defNode: SyntaxNode, doc: string): Set<string> {
   const params = new Set<string>()
 
   // Walk direct children looking for parameter nodes
@@ -87,7 +300,37 @@ function extractParameterNames(defNode: SyntaxNode, doc: string): Set<string> {
 }
 
 /**
+ * Extract parameter names from a definition node AND all its ancestor definitions.
+ * In TiddlyWiki, variables are inherited through the widget prototype chain,
+ * so parameters from outer pragmas are accessible in inner pragmas.
+ */
+function extractParameterNames(defNode: SyntaxNode, doc: string): Set<string> {
+  const params = new Set<string>()
+
+  // First, get parameters from this node
+  const ownParams = extractParameterNamesFromNode(defNode, doc)
+  for (const p of ownParams) {
+    params.add(p)
+  }
+
+  // Then, walk up the ancestor chain and collect parameters from enclosing pragmas
+  let ancestor = defNode.parent
+  while (ancestor) {
+    if (definitionTypes.has(ancestor.name)) {
+      const ancestorParams = extractParameterNamesFromNode(ancestor, doc)
+      for (const p of ancestorParams) {
+        params.add(p)
+      }
+    }
+    ancestor = ancestor.parent
+  }
+
+  return params
+}
+
+/**
  * Find all SubstitutedParam nodes within a definition and validate them.
+ * Skips nested definitions (they'll be handled separately with their own parameters).
  */
 function validateSubstitutedParams(
   defNode: SyntaxNode,
@@ -100,6 +343,23 @@ function validateSubstitutedParams(
   let node = defNode.firstChild
 
   while (node) {
+    // Skip nested definitions - they'll be handled separately with inherited params
+    if (definitionTypes.has(node.name)) {
+      if (node.nextSibling) {
+        node = node.nextSibling
+      } else {
+        node = null
+        while (stack.length > 0) {
+          const parent = stack.pop()!
+          if (parent.nextSibling) {
+            node = parent.nextSibling
+            break
+          }
+        }
+      }
+      continue
+    }
+
     if (node.name === "SubstitutedParam") {
       // Find the SubstitutedParamName child
       let paramNameNode = node.firstChild
@@ -203,6 +463,7 @@ function findOrphanedSubstitutedParams(
 
 /**
  * Find all Placeholder ($param$) nodes within a macro definition and validate them.
+ * Skips nested definitions (they'll be handled separately with their own parameters).
  */
 function validatePlaceholders(
   defNode: SyntaxNode,
@@ -214,6 +475,23 @@ function validatePlaceholders(
   let node = defNode.firstChild
 
   while (node) {
+    // Skip nested definitions - they'll be handled separately with inherited params
+    if (definitionTypes.has(node.name)) {
+      if (node.nextSibling) {
+        node = node.nextSibling
+      } else {
+        node = null
+        while (stack.length > 0) {
+          const parent = stack.pop()!
+          if (parent.nextSibling) {
+            node = parent.nextSibling
+            break
+          }
+        }
+      }
+      continue
+    }
+
     if (node.name === "Placeholder") {
       // Find the VariableName child (the parameter name)
       let paramNameNode = node.firstChild
@@ -318,6 +596,7 @@ function findOrphanedPlaceholders(
 /**
  * Warn about SubstitutedParam usage in definitions that don't support it.
  * \procedure and \function should use regular variable access (<<param>>) instead of <<__param__>>.
+ * Skips nested definitions (they'll be handled separately).
  */
 function warnSubstitutedParamsInWrongContext(
   defNode: SyntaxNode,
@@ -334,6 +613,23 @@ function warnSubstitutedParamsInWrongContext(
     : "\\widget"
 
   while (node) {
+    // Skip nested definitions - they'll be handled separately
+    if (definitionTypes.has(node.name)) {
+      if (node.nextSibling) {
+        node = node.nextSibling
+      } else {
+        node = null
+        while (stack.length > 0) {
+          const parent = stack.pop()!
+          if (parent.nextSibling) {
+            node = parent.nextSibling
+            break
+          }
+        }
+      }
+      continue
+    }
+
     if (node.name === "SubstitutedParam") {
       // Find the SubstitutedParamName child for the error message
       let paramName = "?"
@@ -386,12 +682,14 @@ function lintParameters(view: EditorView): Diagnostic[] {
   const macroDefRanges: Array<{ from: number; to: number }> = []
 
   // First pass: find all definitions and validate their parameters
+  // Note: We let the iterator descend into definitions so nested definitions are also visited.
+  // The validation functions skip nested definitions to avoid double-processing.
   tree.iterate({
     enter: (node) => {
       if (definitionTypes.has(node.name)) {
         const defNode = node.node
 
-        // Extract parameter names
+        // Extract parameter names (includes inherited params from ancestor definitions)
         const validParams = extractParameterNames(defNode, doc)
 
         // Check if this definition type allows __param__ substitutions
@@ -409,11 +707,7 @@ function lintParameters(view: EditorView): Diagnostic[] {
           macroDefRanges.push({ from: defNode.from, to: defNode.to })
           validatePlaceholders(defNode, validParams, doc, diagnostics)
         }
-
-        // Don't descend into this node again (we handle it manually)
-        return false
       }
-      return
     },
   })
 
@@ -439,5 +733,6 @@ export const substitutedParamLinter = linter(lintParameters)
 
 /**
  * Combined TiddlyWiki linter (includes all lint checks).
+ * Currently same as substitutedParamLinter - syntax checks are in the TiddlyWiki lint plugin.
  */
 export const tiddlywikiLinter = linter(lintParameters)

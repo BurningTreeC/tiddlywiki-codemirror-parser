@@ -1,8 +1,0 @@
-title: $:/config/codemirror-6/highlightActiveLine
-tags: $:/tags/Config/CodeMirror/Editor
-caption: Highlight active line
-description: Highlights the line where the cursor is located
-config-type: checkbox
-config-category: Gutter
-default: yes
-text: yes

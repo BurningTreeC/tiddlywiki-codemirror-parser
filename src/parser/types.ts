@@ -77,6 +77,11 @@ export enum Type {
   HardLineBreaks,
   HardLineBreaksMark,   // The """ markers
 
+  // KaTeX/LaTeX math blocks ($$ ... $$)
+  KaTeXBlock,
+  KaTeXMark,            // The $$ markers
+  LaTeXContent,         // LaTeX content (for mixed-language highlighting)
+
   // Other blocks
   HorizontalRule,
   CommentBlock,
@@ -100,6 +105,8 @@ export enum Type {
   AttributeFiltered,    // {{{filter}}}
   AttributeMacro,       // <<macro>>
   AttributeSubstituted, // `substituted`
+  AttributeParamRef,    // @varname (parameter reference in $parameters widget)
+  AttributeWikitext,    // Attribute value containing wikitext (e.g., emptyMessage)
   SelfClosingMarker,    // The / in />
 
   // Transclusion blocks
@@ -124,6 +131,7 @@ export enum Type {
   SubscriptMark,        // ,,
   Highlight,
   HighlightMark,        // @@
+  HighlightStyles,      // CSS styles in @@color:red;...@@
 
   // Code
   InlineCode,
@@ -156,8 +164,10 @@ export enum Type {
   Transclusion,
   TransclusionMark,     // {{ and }}
   TransclusionTarget,   // tiddler reference
-  TransclusionField,    // !!field
-  TransclusionIndex,    // ##index
+  TransclusionFieldMark, // !!
+  TransclusionField,    // field name after !!
+  TransclusionIndexMark, // ##
+  TransclusionIndex,    // index name after ##
   TransclusionTemplate, // ||template
 
   FilteredTransclusion,
@@ -185,6 +195,10 @@ export enum Type {
   Entity,               // &entity;
   HardBreak,            // """ or line break
   Dash,                 // -- or ---
+  InvalidWidget,        // <$ followed by space (invalid widget syntax)
+  IncompleteWidget,     // <$widget ... (missing closing >)
+  IncompleteHTMLTag,    // <tag ... (missing closing >) - inline
+  IncompleteHTMLBlock,  // <tag ... (missing closing >) - block level
   Variable,             // $(var)$ in substituted strings
   VariableMark,         // $( and )$
   VariableName,         // var in $(var)$
@@ -202,8 +216,19 @@ export enum Type {
   FilterOperatorName,   // operator name
   FilterOperand,        // operand in [operator[operand]]
   FilterVariable,       // <varname> in filters
+  FilterMultiVariable,  // (varname) multi-valued variable in filters
   FilterTextRef,        // {textref} in filters
   FilterRegexp,         // /regexp/ in filters
+  IncompleteFilterRun,  // [operator... - incomplete filter run in plain text
+
+  // Multi-valued variable display
+  MVVDisplay,           // ((varname)) or (((filter))) inline display
+  MVVDisplayMark,       // (( )) or ((( ))) markers
+  MVVSeparatorMark,     // || in ((var||sep)) or (((filter||sep)))
+  MVVSeparatorValue,    // The separator value (e.g., : in ||:)
+
+  // Multi-valued variable attribute
+  AttributeMVV,         // attr=((varname)) in widget/HTML attributes
 
   // Styled blocks (.class prefix)
   StyledBlock,
@@ -258,7 +283,9 @@ export const BlockTypes = new Set([
   Type.HorizontalRule,
   Type.CommentBlock,
   Type.HTMLBlock,
+  Type.IncompleteHTMLBlock,
   Type.Widget,
+  Type.IncompleteWidget,
   Type.TransclusionBlock,
   Type.FilteredTransclusionBlock,
   Type.MacroCallBlock,

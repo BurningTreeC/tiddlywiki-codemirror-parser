@@ -48,7 +48,7 @@ function isList(type: NodeType): boolean {
  */
 function isBlock(type: NodeType): boolean {
   // Check common block types - includes all foldable TiddlyWiki elements
-  return /^(Paragraph|Heading\d|BulletList|OrderedList|DefinitionList|BlockQuote|Table|FencedCode|TypedBlock|Widget|HTMLBlock|TransclusionBlock|FilteredTransclusionBlock|MacroCallBlock|CommentBlock|HorizontalRule|ConditionalBlock|MacroDefinition|ProcedureDefinition|FunctionDefinition|WidgetDefinition|StyledBlock)$/.test(type.name)
+  return /^(Paragraph|Heading\d|BulletList|OrderedList|DefinitionList|BlockQuote|Table|FencedCode|TypedBlock|Widget|HTMLBlock|TransclusionBlock|FilteredTransclusionBlock|MacroCallBlock|CommentBlock|HorizontalRule|HardLineBreaks|ConditionalBlock|MacroDefinition|ProcedureDefinition|FunctionDefinition|WidgetDefinition|StyledBlock)$/.test(type.name)
 }
 
 /**
@@ -84,22 +84,69 @@ function containerIndent(context: TreeIndentContext): number | null {
   const openLine = context.state.doc.lineAt(node.from)
   const closeLine = context.state.doc.lineAt(node.to)
   const baseIndent = getLineIndent(context, node.from)
+  const cursorLine = context.state.doc.lineAt(context.pos)
+
+  // For pragma definitions, use tree-based detection for semantic correctness
+  if (isPragmaDefinition(node.name)) {
+    // Find PragmaEnd child node (if pragma is complete)
+    let pragmaEnd: SyntaxNode | null = null
+    for (let child = node.lastChild; child; child = child.prevSibling) {
+      if (child.name === "PragmaEnd") {
+        pragmaEnd = child
+        break
+      }
+    }
+
+    // Check if cursor is on the opening line
+    if (cursorLine.number === openLine.number) {
+      const lineText = cursorLine.text
+      const atLineEnd = context.pos >= cursorLine.from + lineText.trimEnd().length
+      if (atLineEnd) {
+        // Check if it's a multi-line opener (ends with closing paren, no body content on same line)
+        if (/^\s*\\(?:define|procedure|function|widget)\s+\S+\s*\([^)]*\)\s*$/.test(lineText)) {
+          return baseIndent + context.unit
+        }
+      }
+      return null
+    }
+
+    // If pragma has a PragmaEnd, check cursor position relative to it
+    if (pragmaEnd) {
+      const endLine = context.state.doc.lineAt(pragmaEnd.from)
+
+      // Cursor is on the \end line - use base indent (same as pragma opener)
+      if (cursorLine.number === endLine.number) {
+        return baseIndent
+      }
+
+      // Cursor is after the \end line - use base indent (outside pragma)
+      if (cursorLine.number > endLine.number) {
+        return baseIndent
+      }
+
+      // Cursor is before \end (inside body) - indent one level
+      return baseIndent + context.unit
+    }
+
+    // Pragma is incomplete (no PragmaEnd yet)
+    // Single-line pragma with body on same line - no indent change
+    if (openLine.number === closeLine.number) {
+      const lineText = openLine.text.trim()
+      // Multi-line opener (just declaration, no body) - indent body
+      if (/^\\(?:define|procedure|function|widget)\s+\S+\s*\([^)]*\)\s*$/.test(lineText)) {
+        return baseIndent + context.unit
+      }
+      // Has body content on same line - no indent change
+      return baseIndent
+    }
+
+    // Multi-line incomplete pragma - cursor is inside body, indent
+    return baseIndent + context.unit
+  }
 
   // If node spans only a single line, check if it's an opening container that should indent
   // ConditionalBlock, Widget, HTMLBlock should still indent even when incomplete
   if (openLine.number === closeLine.number) {
-    // Single-line pragma definitions (with body on same line) don't indent
-    // But multi-line pragma openers (no body, just declaration) should indent
-    if (isPragmaDefinition(node.name)) {
-      const lineText = openLine.text.trim()
-      // Check if it's a multi-line opener (ends with closing paren, no body content)
-      if (/^\\(?:define|procedure|function|widget)\s+\S+\s*\([^)]*\)\s*$/.test(lineText)) {
-        // Multi-line pragma opener - indent body
-        return baseIndent + context.unit
-      }
-      // Single-line pragma with body - no indent change
-      return baseIndent
-    }
     // Allow indentation for opening tags that expect content
     const openingContainers = /^(ConditionalBlock|Widget|HTMLBlock)$/
     if (!openingContainers.test(node.name)) {
@@ -108,17 +155,12 @@ function containerIndent(context: TreeIndentContext): number | null {
   }
 
   // Check if cursor is on the same line as opening tag
-  const cursorLine = context.state.doc.lineAt(context.pos)
   if (cursorLine.number === openLine.number) {
     const lineText = cursorLine.text
     // Check if cursor is at end of line (after %> or closing tag)
     const atLineEnd = context.pos >= cursorLine.from + lineText.trimEnd().length
 
     if (atLineEnd) {
-      // Check for multi-line pragma opener (ends with closing paren, no body)
-      if (/^\s*\\(?:define|procedure|function|widget)\s+\S+\s*\([^)]*\)\s*$/.test(lineText)) {
-        return baseIndent + context.unit
-      }
       // Check for <%if%>, <%elseif%>, <%else%> openers - indent content
       if (/<%\s*(if|elseif)\s+.+%>\s*$/.test(lineText) || /<%\s*else\s*%>\s*$/.test(lineText)) {
         return baseIndent + context.unit
@@ -155,19 +197,13 @@ function containerIndent(context: TreeIndentContext): number | null {
 
   // Check if this is a pure closing line (<%endif%> or closing tags)
   const lineText = cursorLine.text.trim()
-  if (/^<\/[$a-zA-Z]|^<%\s*endif\s*%>|^\\end(?:\s|$)/.test(lineText)) {
+  if (/^<\/[$a-zA-Z]|^<%\s*endif\s*%>/.test(lineText)) {
     return baseIndent // Same indent as opening
   }
 
   // Check if this is a branch opener line (<%else%> or <%elseif%>) - these outdent but their content indents
   if (/^<%\s*(else|elseif)\s/.test(lineText) || /^<%\s*else\s*%>/.test(lineText)) {
     return baseIndent // The line itself is at base indent
-  }
-
-  // Multi-line pragma definitions indent their body content by one level
-  // \end will outdent back to baseIndent (handled above in closing line check)
-  if (isPragmaDefinition(node.name)) {
-    return baseIndent + context.unit
   }
 
   // Content inside other containers: indent one level
@@ -191,8 +227,12 @@ const configured = baseParser.configure({
   props: [
     // Folding support for TiddlyWiki5 syntax
     foldNodeProp.add(type => {
+      // Allow inline widgets and HTML tags (they can span multiple lines and be foldable)
+      // Note: Inline conditionals are handled by inlineConditionalFold service, not foldNodeProp
+      const isInlineFoldable = type.name === "InlineWidget" || type.name === "HTMLTag"
+
       // Don't fold document, headings (they use section folding via headerIndent), or lists
-      if (!isBlock(type) || type.name === "Document" || isHeading(type) != null || isList(type)) {
+      if ((!isBlock(type) && !isInlineFoldable) || type.name === "Document" || isHeading(type) != null || isList(type)) {
         return undefined
       }
 
@@ -206,12 +246,19 @@ const configured = baseParser.configure({
       if (isPragmaDefinition(type.name)) {
         return (tree, state) => {
           const firstLineEnd = state.doc.lineAt(tree.from).to
+          // Only fold if the element spans multiple lines
+          if (tree.to <= firstLineEnd) {
+            return null
+          }
           // Find PragmaEnd child to fold up to (but not including) it
           let endNode = tree.lastChild
           if (endNode && endNode.name === "PragmaEnd") {
             // Fold to start of \end line
             const endLine = state.doc.lineAt(endNode.from)
-            return { from: firstLineEnd, to: endLine.from > firstLineEnd ? endLine.from - 1 : tree.to }
+            if (endLine.from > firstLineEnd) {
+              return { from: firstLineEnd, to: endLine.from - 1 }
+            }
+            return null
           }
           return { from: firstLineEnd, to: tree.to }
         }
@@ -221,8 +268,36 @@ const configured = baseParser.configure({
       if (type.name === "Widget" || type.name === "HTMLBlock") {
         return (tree, state) => {
           const firstLineEnd = state.doc.lineAt(tree.from).to
+          // Only fold if the element spans multiple lines
+          if (tree.to <= firstLineEnd) {
+            return null
+          }
           // Find closing tag to fold up to (but not including) it
           const closeTag = type.name === "Widget" ? tree.getChild("WidgetEnd") : tree.getChild("HTMLEndTag")
+          if (closeTag) {
+            // Fold to start of closing tag line
+            const closeLine = state.doc.lineAt(closeTag.from)
+            if (closeLine.from > firstLineEnd) {
+              return { from: firstLineEnd, to: closeLine.from - 1 }
+            }
+            // Closing tag on same line - not foldable
+            return null
+          }
+          // No closing tag found but element spans multiple lines - fold to end
+          return { from: firstLineEnd, to: tree.to }
+        }
+      }
+
+      // Inline widgets and HTML tags that span multiple lines - also foldable
+      if (type.name === "InlineWidget" || type.name === "HTMLTag") {
+        return (tree, state) => {
+          const firstLineEnd = state.doc.lineAt(tree.from).to
+          // Only fold if the element spans multiple lines
+          if (tree.to <= firstLineEnd) {
+            return null
+          }
+          // Find closing tag to fold up to (but not including) it
+          const closeTag = type.name === "InlineWidget" ? tree.getChild("WidgetEnd") : tree.getChild("CloseTag")
           if (closeTag) {
             // Fold to start of closing tag line
             const closeLine = state.doc.lineAt(closeTag.from)
@@ -235,9 +310,14 @@ const configured = baseParser.configure({
       }
 
       // Conditional blocks (<%if%>...<%endif%>)
+      // Note: Inline conditionals (Conditional marker nodes) are handled by inlineConditionalFold service
       if (type.name === "ConditionalBlock") {
         return (tree, state) => {
           const firstLineEnd = state.doc.lineAt(tree.from).to
+          // Only fold if the element spans multiple lines
+          if (tree.to <= firstLineEnd) {
+            return null
+          }
           // Find the last ConditionalMark (<%endif%>) to fold up to
           let lastMark = tree.lastChild
           while (lastMark && lastMark.name !== "ConditionalMark") {
@@ -248,7 +328,10 @@ const configured = baseParser.configure({
             if (endLine.from > firstLineEnd) {
               return { from: firstLineEnd, to: endLine.from - 1 }
             }
+            // End mark on same line - not foldable
+            return null
           }
+          // No end mark found but element spans multiple lines - fold to end
           return { from: firstLineEnd, to: tree.to }
         }
       }
@@ -257,6 +340,10 @@ const configured = baseParser.configure({
       if (type.name === "BlockQuote") {
         return (tree, state) => {
           const firstLineEnd = state.doc.lineAt(tree.from).to
+          // Only fold if the element spans multiple lines
+          if (tree.to <= firstLineEnd) {
+            return null
+          }
           // Find closing QuoteMark
           let lastQuote = tree.lastChild
           while (lastQuote && lastQuote.name !== "QuoteMark") {
@@ -267,6 +354,7 @@ const configured = baseParser.configure({
             if (closeLine.from > firstLineEnd) {
               return { from: firstLineEnd, to: closeLine.from - 1 }
             }
+            return null
           }
           return { from: firstLineEnd, to: tree.to }
         }
@@ -276,6 +364,10 @@ const configured = baseParser.configure({
       if (type.name === "FencedCode") {
         return (tree, state) => {
           const firstLineEnd = state.doc.lineAt(tree.from).to
+          // Only fold if the element spans multiple lines
+          if (tree.to <= firstLineEnd) {
+            return null
+          }
           // Find closing CodeMark
           let closeMark = tree.lastChild
           while (closeMark && closeMark.name !== "CodeMark") {
@@ -286,6 +378,7 @@ const configured = baseParser.configure({
             if (closeLine.from > firstLineEnd) {
               return { from: firstLineEnd, to: closeLine.from - 1 }
             }
+            return null
           }
           return { from: firstLineEnd, to: tree.to }
         }
@@ -295,6 +388,10 @@ const configured = baseParser.configure({
       if (type.name === "TypedBlock") {
         return (tree, state) => {
           const firstLineEnd = state.doc.lineAt(tree.from).to
+          // Only fold if the element spans multiple lines
+          if (tree.to <= firstLineEnd) {
+            return null
+          }
           // Find closing TypedBlockMark
           let closeMark = tree.lastChild
           while (closeMark && closeMark.name !== "TypedBlockMark") {
@@ -305,6 +402,7 @@ const configured = baseParser.configure({
             if (closeLine.from > firstLineEnd) {
               return { from: firstLineEnd, to: closeLine.from - 1 }
             }
+            return null
           }
           return { from: firstLineEnd, to: tree.to }
         }
@@ -314,6 +412,10 @@ const configured = baseParser.configure({
       if (type.name === "Table") {
         return (tree, state) => {
           const firstLineEnd = state.doc.lineAt(tree.from).to
+          // Only fold if the table spans multiple lines
+          if (tree.to <= firstLineEnd) {
+            return null
+          }
           // For tables, we want to keep at least the header visible
           // Fold from after first row to end of table
           const header = tree.getChild("TableHeader") || tree.getChild("TableRow")
@@ -323,17 +425,22 @@ const configured = baseParser.configure({
               return { from: headerEnd, to: tree.to }
             }
           }
-          return { from: firstLineEnd, to: tree.to }
+          // Header takes entire table - nothing to fold
+          return null
         }
       }
 
       // Default: fold from end of first line to end of block
       // This handles: TransclusionBlock, FilteredTransclusionBlock, MacroCallBlock,
       // CommentBlock, StyledBlock, etc.
-      return (tree, state) => ({
-        from: state.doc.lineAt(tree.from).to,
-        to: tree.to
-      })
+      return (tree, state) => {
+        const firstLineEnd = state.doc.lineAt(tree.from).to
+        // Only fold if the element spans multiple lines
+        if (tree.to <= firstLineEnd) {
+          return null
+        }
+        return { from: firstLineEnd, to: tree.to }
+      }
     }),
 
     // Add heading level prop
@@ -370,7 +477,31 @@ const configured = baseParser.configure({
             return baseIndent + context.unit
           }
 
-          // Check for \end on previous line - stay at same indent as \end
+          // Check for \end on previous line using tree-based detection
+          // Find any PragmaEnd node that ends on the previous line
+          const tree = syntaxTree(context.state)
+          const prevLineEnd = prevLine.to
+          const nodeAtPrevEnd = tree.resolveInner(prevLineEnd, -1)
+
+          // Walk up to find if we're at/after a PragmaEnd
+          let foundPragmaEnd = false
+          let pragmaBaseIndent = 0
+          for (let n: SyntaxNode | null = nodeAtPrevEnd; n; n = n.parent) {
+            if (n.name === "PragmaEnd") {
+              foundPragmaEnd = true
+              // Find the parent pragma definition to get its indent
+              if (n.parent && isPragmaDefinition(n.parent.name)) {
+                pragmaBaseIndent = getLineIndent(context, n.parent.from)
+              }
+              break
+            }
+          }
+
+          if (foundPragmaEnd) {
+            return pragmaBaseIndent
+          }
+
+          // Fallback: regex check for \end (for partial/incomplete trees)
           if (/^\s*\\end(?:\s|$)/.test(prevLineText)) {
             const endLineIndent = getLineIndent(context, prevLine.from)
             return endLineIndent
@@ -421,6 +552,98 @@ export const headerIndent = foldService.of((state, start, end) => {
     const upto = findSectionEnd(node, heading)
     if (upto > end) return { from: end, to: upto }
   }
+  return null
+})
+
+/**
+ * Fold service for inline conditionals
+ * Allows folding from <%if%> to matching <%endif%> when they're inline (not ConditionalBlock)
+ */
+export const inlineConditionalFold = foldService.of((state, lineStart, lineEnd) => {
+  const tree = syntaxTree(state)
+  const doc = state.doc
+
+  // Use a cursor to find Conditional nodes on this line
+  const cursor = tree.cursor()
+  let ifNode: { from: number, to: number } | null = null
+
+  // First pass: find a Conditional <%if%> that starts on this line
+  while (cursor.next()) {
+    // Skip nodes that start after our line
+    if (cursor.from > lineEnd) break
+
+    // Skip nodes that start before our line
+    if (cursor.from < lineStart) continue
+
+    // Skip ConditionalBlock nodes (handled by foldNodeProp)
+    if (cursor.name === "ConditionalBlock") {
+      // Don't enter ConditionalBlock children, skip the whole subtree
+      let skipped = cursor.nextSibling()
+      if (!skipped) {
+        while (cursor.parent()) {
+          if (cursor.nextSibling()) {
+            skipped = true
+            break
+          }
+        }
+      }
+      // If we reached the root with no more siblings, we're done traversing
+      if (!skipped) break
+      continue
+    }
+
+    if (cursor.name === "Conditional") {
+      const text = doc.sliceString(cursor.from, cursor.to)
+      if (/<%\s*if\b/.test(text)) {
+        ifNode = { from: cursor.from, to: cursor.to }
+        break
+      }
+    }
+  }
+
+  if (!ifNode) return null
+
+  // Found an <%if%> - now find the matching <%endif%>
+  const ifLineEnd = doc.lineAt(ifNode.to).to
+  let depth = 1
+
+  // Continue from current cursor position to find matching <%endif%>
+  while (cursor.next()) {
+    // Skip ConditionalBlock nodes
+    if (cursor.name === "ConditionalBlock") {
+      let skipped = cursor.nextSibling()
+      if (!skipped) {
+        while (cursor.parent()) {
+          if (cursor.nextSibling()) {
+            skipped = true
+            break
+          }
+        }
+      }
+      // If we reached the root with no more siblings, we're done traversing
+      if (!skipped) break
+      continue
+    }
+
+    if (cursor.name === "Conditional") {
+      const text = doc.sliceString(cursor.from, cursor.to)
+      if (/<%\s*if\b/.test(text)) {
+        depth++
+      } else if (/<%\s*endif\s*%>/.test(text)) {
+        depth--
+        if (depth === 0) {
+          // Found matching <%endif%>
+          const endifLine = doc.lineAt(cursor.from)
+          // Only fold if endif is on a different line
+          if (endifLine.from > ifLineEnd) {
+            return { from: ifLineEnd, to: endifLine.from - 1 }
+          }
+          return null
+        }
+      }
+    }
+  }
+
   return null
 })
 

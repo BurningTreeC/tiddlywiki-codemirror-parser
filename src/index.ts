@@ -29,11 +29,11 @@ export {
   Heading, HorizontalRule, FencedCode, TypedBlock,
   List, Table, CommentBlock,
   TransclusionBlock, FilteredTransclusionBlock, MacroCallBlock,
-  HTMLBlock,
+  HTMLBlock, KaTeXBlock,
   DefaultBlockParsers,
 
   // Inline parsers
-  Escape, Entity, InlineCode,
+  Escape, Entity, InlineCode, InlineKaTeX,
   Bold, Italic, Underline, Strikethrough, Superscript, Subscript, Highlight,
   WikiLink, ExternalLink, ImageLink,
   Transclusion, FilteredTransclusion, MacroCall,
@@ -44,7 +44,7 @@ export {
   TiddlyWikiParser, parser,
 
   // Language support
-  tiddlywikiLanguage, headerIndent, mkLang, getCodeParser,
+  tiddlywikiLanguage, headerIndent, inlineConditionalFold, mkLang, getCodeParser,
   tiddlywiki, tiddlywikiHighlightStyle, tiddlywikiKeymap,
   TiddlyWikiLanguageConfig,
 } from "./parser"

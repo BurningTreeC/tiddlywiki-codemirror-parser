@@ -104,6 +104,10 @@ export class Line {
   indent: number = 0
   /** Character code at current position, or -1 at end */
   next: number = -1
+  /** Position of first non-whitespace character */
+  skipPos: number = 0
+  /** Character code at first non-whitespace position, or -1 if all whitespace */
+  skipNext: number = -1
 
   /**
    * Move forward past whitespace, updating pos, indent, and next
@@ -176,6 +180,16 @@ export class Line {
     this.depth = 0
     this.markers = []
     this.next = text.length ? text.charCodeAt(0) : -1
+    // Find first non-whitespace position
+    this.skipPos = this.skipSpace(0)
+    this.skipNext = this.skipPos < text.length ? text.charCodeAt(this.skipPos) : -1
+  }
+
+  /**
+   * Get text starting from first non-whitespace character
+   */
+  get textAfterIndent(): string {
+    return this.text.slice(this.skipPos)
   }
 
   /**

@@ -14,6 +14,7 @@
 
 import { Type } from "./types"
 import { Element, elt, Line, PragmaParser, Ch, space } from "./core"
+import { createFilterTextRef, createFilterVariable, createFilterMultiVariable, parseMacroParams, skipBracedBlock } from "./utils"
 import type { BlockContext } from "./block-context"
 
 /**
@@ -133,6 +134,23 @@ function findEnd(cx: BlockContext, name: string): { bodyStart: number, bodyEnd: 
 }
 
 /**
+ * Check if a string looks like a filter expression.
+ * A filter starts with [ and ends with ], but is NOT:
+ * - [img[...]] (image syntax)
+ * - [ext[...]] (external link syntax)
+ * Note: [[title]...] IS a valid filter (literal title operand)
+ */
+function looksLikeFilter(str: string): boolean {
+  const trimmed = str.trim()
+  if (!trimmed.startsWith('[') || !trimmed.endsWith(']')) return false
+  // Not an image [img[...]]
+  if (/^\[img\[/i.test(trimmed)) return false
+  // Not an external link [ext[...]]
+  if (/^\[ext\[/i.test(trimmed)) return false
+  return true
+}
+
+/**
  * Parse a filter expression into elements
  * Used for \function body parsing
  */
@@ -157,6 +175,7 @@ function parseFilterBody(filterContent: string, offset: number): Element[] {
 
       // Parse operators within this step
       const stepChildren: Element[] = []
+      let currentOperatorName = ''  // Track operator name for special handling (e.g., regexp)
 
       while (pos < len && filterContent[pos] !== ']') {
         // Check for negation
@@ -176,17 +195,26 @@ function parseFilterBody(filterContent: string, offset: number): Element[] {
             else if (filterContent[pos] === ']') depth--
             if (depth > 0) pos++
           }
-          stepChildren.push(elt(Type.FilterOperand, offset + operandStart, offset + pos))
+          // Use FilterRegexp for regexp operator operands
+          const operandType = currentOperatorName === 'regexp' ? Type.FilterRegexp : Type.FilterOperand
+          stepChildren.push(elt(operandType, offset + operandStart, offset + pos))
           if (pos < len && filterContent[pos] === ']') pos++
+          currentOperatorName = ''  // Reset after consuming operand
         } else if (operandCh === '<') {
           // Variable: <varname> or <__param__>
           pos++
           const operandStart = pos
-          while (pos < len && filterContent[pos] !== '>') pos++
+          while (pos < len && filterContent[pos] !== '>') {
+            // Skip braced blocks so {{{...}}} content doesn't break > scanning
+            const afterBraced = skipBracedBlock(filterContent, pos)
+            if (afterBraced > pos) { pos = afterBraced; continue }
+            pos++
+          }
           const varContent = filterContent.slice(operandStart, pos)
           // Always create SubstitutedParam for __param__ pattern for proper syntax highlighting
           // (linter can validate if param is actually defined)
-          const substitutedMatch = /^__([^_]+)__$/.exec(varContent)
+          const hasClosingAngle = pos < len && filterContent[pos] === '>'
+          const substitutedMatch = /^__(.+)__$/.exec(varContent)
           if (substitutedMatch) {
             const paramName = substitutedMatch[1]
             const varStart = offset + operandStart - 1  // Include <
@@ -199,7 +227,50 @@ function parseFilterBody(filterContent: string, offset: number): Element[] {
             ]
             stepChildren.push(elt(Type.SubstitutedParam, varStart, varEnd, nameChildren))
           } else {
-            stepChildren.push(elt(Type.FilterVariable, offset + operandStart, offset + pos))
+            // Check if this is a macro call with params (contains whitespace)
+            const spaceIdx = varContent.search(/\s/)
+            if (spaceIdx !== -1) {
+              // Macro call: <macroname params>
+              const macroStart = offset + operandStart - 1  // Include <
+              const macroEnd = hasClosingAngle ? offset + pos + 1 : offset + pos
+              const macroChildren: Element[] = [
+                elt(Type.MacroCallMark, macroStart, macroStart + 1),  // <
+              ]
+
+              const macroName = varContent.slice(0, spaceIdx)
+              const nameStart = offset + operandStart
+              const nameEnd = nameStart + macroName.length
+
+              // Check if macro name is a placeholder
+              const placeholderMatch = /^\$([a-zA-Z][a-zA-Z0-9\-_]*)\$$/.exec(macroName)
+              if (placeholderMatch) {
+                const pName = placeholderMatch[1]
+                macroChildren.push(elt(Type.Placeholder, nameStart, nameEnd, [
+                  elt(Type.PlaceholderMark, nameStart, nameStart + 1),
+                  elt(Type.VariableName, nameStart + 1, nameStart + 1 + pName.length),
+                  elt(Type.PlaceholderMark, nameEnd - 1, nameEnd)
+                ]))
+              } else {
+                macroChildren.push(elt(Type.MacroName, nameStart, nameEnd))
+              }
+
+              // Parse params
+              const paramsStr = varContent.slice(spaceIdx)
+              const paramsStart = offset + operandStart + spaceIdx
+              const paramElements = parseMacroParams(paramsStr.trim(), paramsStart + (paramsStr.length - paramsStr.trimStart().length))
+              macroChildren.push(...paramElements)
+
+              if (hasClosingAngle) {
+                macroChildren.push(elt(Type.MacroCallMark, offset + pos, offset + pos + 1))  // >
+              }
+
+              stepChildren.push(elt(Type.MacroCall, macroStart, macroEnd, macroChildren))
+            } else {
+              // Simple variable reference: <varname>
+              const varStart = offset + operandStart - 1  // Include <
+              const varEnd = hasClosingAngle ? offset + pos + 1 : offset + pos  // Include > if present
+              stepChildren.push(createFilterVariable(varContent, varStart, varEnd))
+            }
           }
           if (pos < len) pos++
         } else if (operandCh === '{') {
@@ -207,7 +278,22 @@ function parseFilterBody(filterContent: string, offset: number): Element[] {
           pos++
           const operandStart = pos
           while (pos < len && filterContent[pos] !== '}') pos++
-          stepChildren.push(elt(Type.FilterTextRef, offset + operandStart, offset + pos))
+          const textRef = filterContent.slice(operandStart, pos)
+          const hasClosingBrace = pos < len && filterContent[pos] === '}'
+          const refStart = offset + operandStart - 1  // Include {
+          const refEnd = hasClosingBrace ? offset + pos + 1 : offset + pos  // Include } if present
+          stepChildren.push(createFilterTextRef(textRef, refStart, refEnd))
+          if (pos < len) pos++
+        } else if (operandCh === '(') {
+          // Multi-valued variable: (varname)
+          pos++
+          const operandStart = pos
+          while (pos < len && filterContent[pos] !== ')') pos++
+          const varContent = filterContent.slice(operandStart, pos)
+          const hasClosingParen = pos < len && filterContent[pos] === ')'
+          const varStart = offset + operandStart - 1  // Include (
+          const varEnd = hasClosingParen ? offset + pos + 1 : offset + pos  // Include ) if present
+          stepChildren.push(createFilterMultiVariable(varContent, varStart, varEnd))
           if (pos < len) pos++
         } else if (operandCh === '/') {
           // Regexp: /regexp/flags
@@ -220,10 +306,17 @@ function parseFilterBody(filterContent: string, offset: number): Element[] {
           stepChildren.push(elt(Type.FilterRegexp, offset + operandStart, offset + pos))
           if (pos < len) pos++
           while (pos < len && /[gimsuy]/.test(filterContent[pos])) pos++
-        } else if (/[a-zA-Z]/.test(operandCh)) {
-          // Operator name
+        } else if (operandCh === ',') {
+          // Comma separates multiple operands for functions: [func[a],<b>]
+          // Just skip the comma and continue parsing next operand
+          pos++
+        } else if (/[^\s\[\]<>{},]/.test(operandCh)) {
+          // Filter operator/function name - TiddlyWiki allows any char except brackets, whitespace, and comma
           const opStart = pos
-          while (pos < len && /[a-zA-Z0-9\-_:!]/.test(filterContent[pos])) pos++
+          while (pos < len && /[^\s\[\]<>{},]/.test(filterContent[pos])) pos++
+          const opName = filterContent.slice(opStart, pos)
+          // Track the operator name (strip ! prefix and : suffix for matching)
+          currentOperatorName = opName.replace(/^!/, '').replace(/:.*$/, '')
           stepChildren.push(elt(Type.FilterOperatorName, offset + opStart, offset + pos))
         } else {
           pos++
@@ -235,8 +328,10 @@ function parseFilterBody(filterContent: string, offset: number): Element[] {
 
       elements.push(elt(Type.FilterOperator, offset + stepStart, offset + pos, stepChildren))
     } else if (ch === '+' || ch === '-' || ch === '~' || ch === '=') {
-      // Run prefix
+      // Run prefix: + - ~ = =>
       pos++
+      // => shortcut for :let
+      if (ch === '=' && pos < len && filterContent[pos] === '>') pos++
     } else if (ch === ':') {
       // Named run prefix
       pos++
@@ -256,7 +351,8 @@ function parseParams(paramStr: string, basePos: number): Element[] {
   const params: Element[] = []
   if (!paramStr.trim()) return params
 
-  const paramRe = /\s*([A-Za-z0-9\-_]+)(?:\s*:\s*(?:"""([\s\S]*?)"""|"([^"]*)"|'([^']*)'|\[\[([^\]]*)\]\]|([^,\s)]+)))?/g
+  // Parameter names: TiddlyWiki uses [^:),\s]+ - anything except :, ), comma, whitespace
+  const paramRe = /\s*([^:),\s]+)(?:\s*:\s*(?:"""([\s\S]*?)"""|"([^"]*)"|'([^']*)'|\[\[([^\]]*)\]\]|([^,\s)]+)))?/g
   let match
 
   while ((match = paramRe.exec(paramStr)) !== null) {
@@ -266,6 +362,42 @@ function parseParams(paramStr: string, basePos: number): Element[] {
   }
 
   return params
+}
+
+/**
+ * Create the common header elements for a pragma.
+ * All pragmas have PragmaMark and PragmaKeyword, optionally PragmaName and params.
+ *
+ * @param pragmaStart - Absolute position of the pragma line start
+ * @param text - The full line text
+ * @param keyword - The keyword (e.g., "define", "procedure", "function")
+ * @param name - Optional pragma name (for \define, \procedure, etc.)
+ * @param paramStr - Optional parameter string (contents between parentheses)
+ */
+function createPragmaHeader(
+  pragmaStart: number,
+  text: string,
+  keyword: string,
+  name?: string,
+  paramStr?: string
+): Element[] {
+  const backslashOffset = text.indexOf("\\")
+  const children: Element[] = [
+    elt(Type.PragmaMark, pragmaStart + backslashOffset, pragmaStart + backslashOffset + 1),
+    elt(Type.PragmaKeyword, pragmaStart + backslashOffset + 1, pragmaStart + backslashOffset + 1 + keyword.length),
+  ]
+
+  if (name) {
+    const nameStart = pragmaStart + text.indexOf(name)
+    children.push(elt(Type.PragmaName, nameStart, nameStart + name.length))
+  }
+
+  if (paramStr) {
+    const paramStart = pragmaStart + text.indexOf("(") + 1
+    children.push(...parseParams(paramStr, paramStart))
+  }
+
+  return children
 }
 
 /**
@@ -283,8 +415,6 @@ export const MacroDefPragma: PragmaParser = {
       const pragmaStart = cx.lineStart
       const name = multiMatch[1]
       const paramStr = multiMatch[2]
-      // Find the actual backslash position (accounting for leading whitespace)
-      const backslashOffset = text.indexOf("\\")
 
       // Save position in case we need to fall back to single-line
       const savedPos = cx.savePosition()
@@ -293,17 +423,7 @@ export const MacroDefPragma: PragmaParser = {
       const endInfo = findEnd(cx, name)
       if (endInfo) {
         // Create elements for pragma mark, keyword, name, params
-        const children: Element[] = [
-          elt(Type.PragmaMark, pragmaStart + backslashOffset, pragmaStart + backslashOffset + 1),
-          elt(Type.PragmaKeyword, pragmaStart + backslashOffset + 1, pragmaStart + backslashOffset + 7), // "define"
-          elt(Type.PragmaName, pragmaStart + text.indexOf(name), pragmaStart + text.indexOf(name) + name.length),
-        ]
-
-        // Parse parameters
-        if (paramStr) {
-          const paramStart = pragmaStart + text.indexOf("(") + 1
-          children.push(...parseParams(paramStr, paramStart))
-        }
+        const children = createPragmaHeader(pragmaStart, text, "define", name, paramStr)
 
         // Parse body content recursively
         if (endInfo.bodyEnd > endInfo.bodyStart) {
@@ -327,8 +447,6 @@ export const MacroDefPragma: PragmaParser = {
       const name = singleMatch[1]
       const paramStr = singleMatch[2]
       const body = singleMatch[3]
-      // Find the actual backslash position (accounting for leading whitespace)
-      const backslashOffset = text.indexOf("\\")
 
       // If there's any body content, check for \end and treat as multi-line if found
       if (body) {
@@ -336,17 +454,7 @@ export const MacroDefPragma: PragmaParser = {
         const endInfo = findEnd(cx, name)
         if (endInfo) {
           // Found \end - treat as multi-line
-          const children: Element[] = [
-            elt(Type.PragmaMark, pragmaStart + backslashOffset, pragmaStart + backslashOffset + 1),
-            elt(Type.PragmaKeyword, pragmaStart + backslashOffset + 1, pragmaStart + backslashOffset + 7),
-            elt(Type.PragmaName, pragmaStart + text.indexOf(name), pragmaStart + text.indexOf(name) + name.length),
-          ]
-
-          // Parse parameters
-          if (paramStr) {
-            const paramStart = pragmaStart + text.indexOf("(") + 1
-            children.push(...parseParams(paramStr, paramStart))
-          }
+          const children = createPragmaHeader(pragmaStart, text, "define", name, paramStr)
 
           // Parse body content recursively (includes the incomplete part from first line)
           const bodyStart = pragmaStart + text.length - body.length
@@ -363,23 +471,25 @@ export const MacroDefPragma: PragmaParser = {
         cx.restorePosition(savedPos)
       }
 
-      const children: Element[] = [
-        elt(Type.PragmaMark, pragmaStart + backslashOffset, pragmaStart + backslashOffset + 1),
-        elt(Type.PragmaKeyword, pragmaStart + backslashOffset + 1, pragmaStart + backslashOffset + 7),
-        elt(Type.PragmaName, pragmaStart + text.indexOf(name), pragmaStart + text.indexOf(name) + name.length),
-      ]
+      const children = createPragmaHeader(pragmaStart, text, "define", name, paramStr)
 
-      if (paramStr) {
-        const paramStart = pragmaStart + text.indexOf("(") + 1
-        children.push(...parseParams(paramStr, paramStart))
-      }
-
-      // Single-line body - parse as inline wikitext
+      // Single-line body
       if (body) {
         // Find where body actually starts in text (after the regex matched \s*)
         const bodyStart = pragmaStart + text.length - body.length
-        const inlineElements = cx.parser.parseInline(body, bodyStart)
-        children.push(...inlineElements)
+
+        // Check if body looks like a filter expression (starts with [ ends with ], not [img[ or [ext[)
+        if (looksLikeFilter(body)) {
+          const trimmedBody = body.trim()
+          const trimOffset = body.indexOf(trimmedBody)
+          const filterStart = bodyStart + trimOffset
+          const filterElements = parseFilterBody(trimmedBody, filterStart)
+          children.push(elt(Type.FilterExpression, filterStart, filterStart + trimmedBody.length, filterElements))
+        } else {
+          // Parse as inline wikitext
+          const inlineElements = cx.parser.parseInline(body, bodyStart)
+          children.push(...inlineElements)
+        }
       }
 
       cx.nextLine()
@@ -406,8 +516,6 @@ export const FnProcDefPragma: PragmaParser = {
       const keyword = multiMatch[1]
       const name = multiMatch[2]
       const paramStr = multiMatch[3]
-      // Find the actual backslash position (accounting for leading whitespace)
-      const backslashOffset = text.indexOf("\\")
 
       let nodeType: Type
       switch (keyword) {
@@ -422,16 +530,7 @@ export const FnProcDefPragma: PragmaParser = {
 
       const endInfo = findEnd(cx, name)
       if (endInfo) {
-        const children: Element[] = [
-          elt(Type.PragmaMark, pragmaStart + backslashOffset, pragmaStart + backslashOffset + 1),
-          elt(Type.PragmaKeyword, pragmaStart + backslashOffset + 1, pragmaStart + backslashOffset + 1 + keyword.length),
-          elt(Type.PragmaName, pragmaStart + text.indexOf(name), pragmaStart + text.indexOf(name) + name.length),
-        ]
-
-        if (paramStr) {
-          const paramStart = pragmaStart + text.indexOf("(") + 1
-          children.push(...parseParams(paramStr, paramStart))
-        }
+        const children = createPragmaHeader(pragmaStart, text, keyword, name, paramStr)
 
         // Parse body content
         if (endInfo.bodyEnd > endInfo.bodyStart) {
@@ -464,8 +563,6 @@ export const FnProcDefPragma: PragmaParser = {
       const name = singleMatch[2]
       const paramStr = singleMatch[3]
       const body = singleMatch[4]
-      // Find the actual backslash position (accounting for leading whitespace)
-      const backslashOffset = text.indexOf("\\")
 
       let nodeType: Type
       switch (keyword) {
@@ -481,16 +578,7 @@ export const FnProcDefPragma: PragmaParser = {
         const endInfo = findEnd(cx, name)
         if (endInfo) {
           // Found \end - treat as multi-line
-          const children: Element[] = [
-            elt(Type.PragmaMark, pragmaStart + backslashOffset, pragmaStart + backslashOffset + 1),
-            elt(Type.PragmaKeyword, pragmaStart + backslashOffset + 1, pragmaStart + backslashOffset + 1 + keyword.length),
-            elt(Type.PragmaName, pragmaStart + text.indexOf(name), pragmaStart + text.indexOf(name) + name.length),
-          ]
-
-          if (paramStr) {
-            const paramStart = pragmaStart + text.indexOf("(") + 1
-            children.push(...parseParams(paramStr, paramStart))
-          }
+          const children = createPragmaHeader(pragmaStart, text, keyword, name, paramStr)
 
           // Parse body content (includes the incomplete part from first line)
           const bodyStart = pragmaStart + text.length - body.length
@@ -515,16 +603,7 @@ export const FnProcDefPragma: PragmaParser = {
         cx.restorePosition(savedPos)
       }
 
-      const children: Element[] = [
-        elt(Type.PragmaMark, pragmaStart + backslashOffset, pragmaStart + backslashOffset + 1),
-        elt(Type.PragmaKeyword, pragmaStart + backslashOffset + 1, pragmaStart + backslashOffset + 1 + keyword.length),
-        elt(Type.PragmaName, pragmaStart + text.indexOf(name), pragmaStart + text.indexOf(name) + name.length),
-      ]
-
-      if (paramStr) {
-        const paramStart = pragmaStart + text.indexOf("(") + 1
-        children.push(...parseParams(paramStr, paramStart))
-      }
+      const children = createPragmaHeader(pragmaStart, text, keyword, name, paramStr)
 
       // Single-line body parsing
       if (body) {

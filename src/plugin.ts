@@ -10,7 +10,7 @@
 import {Extension, Compartment, Prec} from "@codemirror/state"
 import {keymap, EditorView} from "@codemirror/view"
 import {LanguageDescription} from "@codemirror/language"
-import {tiddlywikiLanguage, headerIndent, tiddlywiki} from "./parser"
+import {tiddlywikiLanguage, tiddlywiki} from "./parser"
 import {
   insertNewlineContinueMarkup,
   deleteMarkupBackward,
@@ -115,22 +115,6 @@ const COMPARTMENT_NAME = "tiddlywikiLanguage"
 const tiddlywikiKeymap = Prec.high(keymap.of([
   {key: "Enter", run: insertNewlineContinueMarkup},
   {key: "Backspace", run: deleteMarkupBackward},
-  {key: "Mod-b", run: toggleBold},
-  {key: "Mod-i", run: toggleItalic},
-  {key: "Mod-u", run: toggleUnderline},
-  {key: "Mod-`", run: toggleInlineCode},
-  {key: "Mod-k", run: insertWikiLink},
-  {key: "Mod-Shift-k", run: insertTransclusion},
-  {key: "Mod-1", run: setHeading1},
-  {key: "Mod-2", run: setHeading2},
-  {key: "Mod-3", run: setHeading3},
-  {key: "Mod-4", run: setHeading4},
-  {key: "Mod-5", run: setHeading5},
-  {key: "Mod-6", run: setHeading6},
-  {key: "Mod-0", run: removeHeading},
-  {key: "Mod-Shift-8", run: toggleBulletList},
-  {key: "Mod-Shift-7", run: toggleNumberedList},
-  {key: "Mod-Shift-c", run: insertCodeBlock},
 ]))
 
 // ============================================================================
@@ -150,152 +134,430 @@ function getCommandTarget(view: EditorView) {
 // Declare $tw global (provided by TiddlyWiki)
 declare const $tw: any
 
-/**
- * Get tiddler titles for autocompletion
- * Uses widget.wiki for proper context
- */
-function getTiddlerTitles(): string[] {
-  if (typeof $tw === "undefined") return []
-  try {
-    const wiki = _currentEngine?.widget?.wiki || $tw.wiki
-    if (!wiki) return []
+// ============================================================================
+// Completion Data Cache with Smart Invalidation
+// ============================================================================
 
-    // Use eachShadowPlusTiddlers to get all titles including shadows
-    const allTitles: string[] = []
-    if (wiki.eachShadowPlusTiddlers) {
-      wiki.eachShadowPlusTiddlers((_tiddler: any, title: string) => {
-        allTitles.push(title)
-      })
-    } else {
-      // Fallback: try allTitles + allShadowTitles
-      const tiddlers = wiki.allTitles ? wiki.allTitles() : []
-      const shadows = wiki.allShadowTitles ? wiki.allShadowTitles() : []
-      allTitles.push(...tiddlers, ...shadows)
-    }
-
-    // Deduplicate and sort (non-system tiddlers first)
-    const uniqueTitles = [...new Set(allTitles)]
-    return uniqueTitles.sort((a, b) => {
-      const aSystem = a.startsWith("$:/")
-      const bSystem = b.startsWith("$:/")
-      if (aSystem !== bSystem) return aSystem ? 1 : -1
-      return a.localeCompare(b)
-    })
-  } catch (e) {
-    return []
-  }
+interface CacheEntry<T> {
+  data: T
+  valid: boolean
 }
 
-/**
- * Get image tiddler titles for [img[ autocompletion
- * Filters for tiddlers with type starting with "image/"
- */
-function getImageTiddlerTitles(): string[] {
-  if (typeof $tw === "undefined") return []
-  try {
-    const wiki = _currentEngine?.widget?.wiki || $tw.wiki
-    if (!wiki) return []
-    const widget = _currentEngine?.widget
-    // Use widget context for filter if available (needed for shadows)
-    const results = widget
-      ? wiki.filterTiddlers("[all[tiddlers+shadows]is[image]]", widget)
-      : wiki.filterTiddlers("[all[tiddlers+shadows]is[image]]")
-    return results || []
-  } catch (e) {
-    return []
-  }
+// Caches for different data types
+const cache = {
+  tiddlerTitles: null as CacheEntry<string[]> | null,
+  imageTiddlerTitles: null as CacheEntry<string[]> | null,
+  tagNames: null as CacheEntry<string[]> | null,
+  macroNames: null as CacheEntry<string[]> | null,
+  widgetNames: null as CacheEntry<string[]> | null,
+  globalWidgetDefs: null as CacheEntry<Record<string, string[]>> | null, // widget name -> params
+  filterOperators: null as CacheEntry<string[]> | null,
+  wikiRules: null as CacheEntry<{ name: string; types: string }[]> | null,
 }
 
+// Track if we've set up the wiki change listener
+let _changeListenerInstalled = false
+
 /**
- * Get macro names for autocompletion
- * Uses widget.wiki for proper context
+ * Install wiki change listener for smart cache invalidation
  */
-function getMacroNames(): string[] {
-  if (typeof $tw === "undefined") return []
-  try {
-    const names: string[] = []
-    // Get built-in macros
-    if ($tw.macros) {
-      names.push(...Object.keys($tw.macros))
-    }
-    // Get macro tiddlers (both $:/tags/Macro and $:/tags/Global)
-    const wiki = _currentEngine?.widget?.wiki || $tw.wiki
-    if (wiki) {
-      const macroTiddlers = wiki.filterTiddlers("[all[tiddlers+shadows]tag[$:/tags/Macro]] [all[tiddlers+shadows]tag[$:/tags/Global]]") || []
-      for (const title of macroTiddlers) {
-        // Extract macro/procedure/function names from tiddler
-        const tiddler = wiki.getTiddler(title)
+function installChangeListener(): void {
+  if (_changeListenerInstalled) return
+  if (typeof $tw === "undefined" || !$tw.wiki) return
+
+  _changeListenerInstalled = true
+
+  // Listen to wiki changes
+  $tw.wiki.addEventListener("change", (changes: Record<string, any>) => {
+    if (!changes) return
+
+    let titlesChanged = false
+    let tagsChanged = false
+    let macrosChanged = false
+    let imagesChanged = false
+
+    for (const title of Object.keys(changes)) {
+      const change = changes[title]
+
+      // Tiddler created or deleted
+      if (change.deleted || change.created) {
+        titlesChanged = true
+        // Check if it's an image or macro tiddler
+        if (title.startsWith("$:/")) {
+          // Could be a macro tiddler
+          macrosChanged = true
+        }
+        imagesChanged = true // Could be an image
+        tagsChanged = true // New tiddler might have tags
+      }
+
+      // Check for modified fields (not just text)
+      if (change.modified) {
+        // Check specifically which fields changed
+        const tiddler = $tw.wiki.getTiddler(title)
         if (tiddler) {
-          const text = tiddler.fields.text || ""
-          // Match \define, \procedure, \function declarations
-          const defineMatches = text.matchAll(/\\(?:define|procedure|function)\s+([^\s(]+)/g)
-          for (const match of defineMatches) {
-            names.push(match[1])
+          // Tags changed
+          if (tiddler.fields.tags) {
+            tagsChanged = true
+          }
+          // Macro tiddler modified
+          if (tiddler.hasTag("$:/tags/Macro") || tiddler.hasTag("$:/tags/Global")) {
+            macrosChanged = true
+          }
+          // Image tiddler
+          const type = tiddler.fields.type || ""
+          if (type.startsWith("image/")) {
+            imagesChanged = true
           }
         }
       }
     }
-    return [...new Set(names)] // deduplicate
+
+    // Invalidate relevant caches
+    if (titlesChanged && cache.tiddlerTitles) {
+      cache.tiddlerTitles.valid = false
+    }
+    if (tagsChanged && cache.tagNames) {
+      cache.tagNames.valid = false
+    }
+    if (macrosChanged && cache.macroNames) {
+      cache.macroNames.valid = false
+    }
+    if (macrosChanged && cache.globalWidgetDefs) {
+      cache.globalWidgetDefs.valid = false
+    }
+    if (macrosChanged && cache.widgetNames) {
+      cache.widgetNames.valid = false
+    }
+    if (imagesChanged && cache.imageTiddlerTitles) {
+      cache.imageTiddlerTitles.valid = false
+    }
+    // Note: filterOperators, wikiRules don't change at runtime
+  })
+}
+
+/**
+ * Get cached data or compute it
+ */
+function getCached<T>(
+  key: keyof typeof cache,
+  compute: () => T
+): T {
+  const entry = cache[key] as CacheEntry<T> | null
+  if (entry && entry.valid) {
+    return entry.data
+  }
+  const data = compute()
+  ;(cache[key] as CacheEntry<T>) = { data, valid: true }
+  return data
+}
+
+/**
+ * Get tiddler titles for autocompletion (cached)
+ * Uses widget.wiki for proper context
+ */
+function getTiddlerTitles(): string[] {
+  if (typeof $tw === "undefined") return []
+  installChangeListener()
+  return getCached("tiddlerTitles", () => {
+    try {
+      const wiki = _currentEngine?.widget?.wiki || $tw.wiki
+      if (!wiki) return []
+
+      // Use eachShadowPlusTiddlers to get all titles including shadows
+      const allTitles: string[] = []
+      if (wiki.eachShadowPlusTiddlers) {
+        wiki.eachShadowPlusTiddlers((_tiddler: any, title: string) => {
+          allTitles.push(title)
+        })
+      } else {
+        // Fallback: try allTitles + allShadowTitles
+        const tiddlers = wiki.allTitles ? wiki.allTitles() : []
+        const shadows = wiki.allShadowTitles ? wiki.allShadowTitles() : []
+        allTitles.push(...tiddlers, ...shadows)
+      }
+
+      // Deduplicate and sort: regular tiddlers first, then system, then drafts
+      const uniqueTitles = [...new Set(allTitles)]
+
+      // Check which titles are drafts
+      const drafts = new Set<string>()
+      for (const title of uniqueTitles) {
+        const tiddler = wiki.getTiddler(title)
+        if (tiddler && tiddler.fields["draft.of"]) {
+          drafts.add(title)
+        }
+      }
+
+      return uniqueTitles.sort((a, b) => {
+        const aDraft = drafts.has(a)
+        const bDraft = drafts.has(b)
+        // Drafts always at the bottom
+        if (aDraft !== bDraft) return aDraft ? 1 : -1
+
+        const aSystem = a.startsWith("$:/")
+        const bSystem = b.startsWith("$:/")
+        if (aSystem !== bSystem) return aSystem ? 1 : -1
+        return a.localeCompare(b)
+      })
+    } catch (e) {
+      return []
+    }
+  })
+}
+
+/**
+ * Get image tiddler titles for [img[ autocompletion (cached)
+ * Filters for tiddlers with type starting with "image/"
+ */
+function getImageTiddlerTitles(): string[] {
+  if (typeof $tw === "undefined") return []
+  installChangeListener()
+  return getCached("imageTiddlerTitles", () => {
+    try {
+      const wiki = _currentEngine?.widget?.wiki || $tw.wiki
+      if (!wiki) return []
+      const widget = _currentEngine?.widget
+      // Use widget context for filter if available (needed for shadows)
+      const results = widget
+        ? wiki.filterTiddlers("[all[tiddlers+shadows]is[image]]", widget)
+        : wiki.filterTiddlers("[all[tiddlers+shadows]is[image]]")
+      return results || []
+    } catch (e) {
+      return []
+    }
+  })
+}
+
+/**
+ * Check if a tiddler is a draft (has draft.of field)
+ * Not cached since draft status can change frequently
+ */
+function isDraftTiddler(title: string): boolean {
+  if (typeof $tw === "undefined") return false
+  try {
+    const wiki = _currentEngine?.widget?.wiki || $tw.wiki
+    if (!wiki) return false
+    const tiddler = wiki.getTiddler(title)
+    return !!(tiddler && tiddler.fields["draft.of"])
   } catch (e) {
-    return []
+    return false
   }
 }
 
 /**
- * Get widget names for autocompletion
+ * Get macro names for autocompletion (cached)
+ * Uses widget.wiki for proper context
+ */
+function getMacroNames(): string[] {
+  if (typeof $tw === "undefined") return []
+  installChangeListener()
+  return getCached("macroNames", () => {
+    try {
+      const names: string[] = []
+      // Get built-in macros
+      if ($tw.macros) {
+        names.push(...Object.keys($tw.macros))
+      }
+      // Get macro tiddlers (both $:/tags/Macro and $:/tags/Global)
+      const wiki = _currentEngine?.widget?.wiki || $tw.wiki
+      if (wiki) {
+        const macroTiddlers = wiki.filterTiddlers("[all[tiddlers+shadows]tag[$:/tags/Macro]] [all[tiddlers+shadows]tag[$:/tags/Global]]") || []
+        for (const title of macroTiddlers) {
+          // Extract macro/procedure/function names from tiddler
+          const tiddler = wiki.getTiddler(title)
+          if (tiddler) {
+            const text = tiddler.fields.text || ""
+            // Match \define, \procedure, \function declarations
+            const defineMatches = text.matchAll(/\\(?:define|procedure|function)\s+([^\s(]+)/g)
+            for (const match of defineMatches) {
+              names.push(match[1])
+            }
+          }
+        }
+      }
+      return [...new Set(names)] // deduplicate
+    } catch (e) {
+      return []
+    }
+  })
+}
+
+/**
+ * Extract parameters from a params string like "param1, param2:'default'"
+ */
+function extractParams(paramsStr: string | undefined): string[] {
+  const params: string[] = []
+  if (paramsStr && paramsStr.trim()) {
+    const paramParts = paramsStr.split(',')
+    for (const part of paramParts) {
+      const paramName = part.trim().split(':')[0].trim()
+      if (paramName) params.push(paramName)
+    }
+  }
+  return params
+}
+
+/**
+ * Get widget definitions from global tiddlers (cached)
+ * Returns a map of widget name -> param names
+ * Handles both inline params: \widget $foo(p1, p2)
+ * And \parameters pragma: \widget $foo\n\parameters (p1, p2)
+ */
+function getGlobalWidgetDefs(): Record<string, string[]> {
+  if (typeof $tw === "undefined") return {}
+  installChangeListener()
+  return getCached("globalWidgetDefs", () => {
+    try {
+      const defs: Record<string, string[]> = {}
+      const wiki = _currentEngine?.widget?.wiki || $tw.wiki
+      if (wiki) {
+        const globalTiddlers = wiki.filterTiddlers("[all[tiddlers+shadows]tag[$:/tags/Macro]] [all[tiddlers+shadows]tag[$:/tags/Global]]") || []
+        for (const title of globalTiddlers) {
+          const tiddler = wiki.getTiddler(title)
+          if (tiddler) {
+            const text = tiddler.fields.text || ""
+
+            // Match \widget definitions with optional inline params
+            // Also capture following \parameters pragma if present
+            const widgetRegex = /\\widget\s+(\$[^\s(]+)(?:\(([^)]*)\))?/g
+            let match
+            while ((match = widgetRegex.exec(text)) !== null) {
+              const widgetName = match[1]
+              const inlineParamsStr = match[2]
+
+              if (!defs[widgetName]) {
+                let params = extractParams(inlineParamsStr)
+
+                // If no inline params, check for \parameters pragma after \widget
+                if (params.length === 0) {
+                  // Look for \parameters on the same or next line
+                  const afterWidget = text.slice(match.index + match[0].length)
+                  const parametersMatch = /^\s*\n?\s*\\parameters\s*\(([^)]*)\)/.exec(afterWidget)
+                  if (parametersMatch) {
+                    params = extractParams(parametersMatch[1])
+                  }
+                }
+
+                defs[widgetName] = params
+              }
+            }
+          }
+        }
+      }
+      return defs
+    } catch (e) {
+      return {}
+    }
+  })
+}
+
+/**
+ * Get widget names for autocompletion (cached)
+ * Includes built-in widgets, widget-subclass modules, and custom widgets from global tiddlers
  */
 function getWidgetNames(): string[] {
   if (typeof $tw === "undefined") return []
-  try {
-    const names: string[] = []
-    // Get widget names from $tw.widgets (they don't have $ prefix in the registry)
-    if ($tw.widgets) {
-      for (const name of Object.keys($tw.widgets)) {
-        names.push("$" + name)
+  installChangeListener()
+  return getCached("widgetNames", () => {
+    try {
+      const names: string[] = []
+      const seen = new Set<string>()
+      // Get widget names from $tw.widgets (they don't have $ prefix in the registry)
+      if ($tw.widgets) {
+        for (const name of Object.keys($tw.widgets)) {
+          const widgetName = "$" + name
+          if (!seen.has(widgetName)) {
+            seen.add(widgetName)
+            names.push(widgetName)
+          }
+        }
       }
+      // Also check widget modules using TiddlyWiki's module API
+      if ($tw.modules?.forEachModuleOfType) {
+        $tw.modules.forEachModuleOfType("widget", (title: string, mod: Record<string, unknown>) => {
+          if (mod) {
+            for (const exportName of Object.keys(mod)) {
+              if (exportName && typeof exportName === "string") {
+                const widgetName = "$" + exportName
+                if (!seen.has(widgetName)) {
+                  seen.add(widgetName)
+                  names.push(widgetName)
+                }
+              }
+            }
+          }
+        })
+        // Also check widget-subclass modules (e.g., $log is a subclass of $action-log)
+        $tw.modules.forEachModuleOfType("widget-subclass", (title: string, mod: Record<string, unknown>) => {
+          if (mod) {
+            const subclassName = (mod.name || mod.baseClass) as string | undefined
+            if (subclassName && typeof subclassName === "string") {
+              const widgetName = "$" + subclassName
+              if (!seen.has(widgetName)) {
+                seen.add(widgetName)
+                names.push(widgetName)
+              }
+            }
+          }
+        })
+      }
+      // Get custom widgets from global tiddlers
+      const globalDefs = getGlobalWidgetDefs()
+      for (const name of Object.keys(globalDefs)) {
+        if (!seen.has(name)) {
+          seen.add(name)
+          names.push(name)
+        }
+      }
+      return names
+    } catch (e) {
+      return []
     }
-    return names
-  } catch (e) {
-    return []
-  }
+  })
 }
 
 /**
- * Get filter operator names for autocompletion
+ * Get filter operator names for autocompletion (cached, static - doesn't change at runtime)
  * Uses widget.wiki for proper context
  */
 function getFilterOperators(): string[] {
   if (typeof $tw === "undefined") return []
-  try {
-    const wiki = _currentEngine?.widget?.wiki || $tw.wiki
-    // Filter operators are registered in wiki.filterOperators
-    if (wiki?.filterOperators) {
-      return Object.keys(wiki.filterOperators).sort()
+  return getCached("filterOperators", () => {
+    try {
+      const wiki = _currentEngine?.widget?.wiki || $tw.wiki
+      // Filter operators are registered in wiki.filterOperators
+      if (wiki?.filterOperators) {
+        return Object.keys(wiki.filterOperators).sort()
+      }
+      return []
+    } catch (e) {
+      return []
     }
-    return []
-  } catch (e) {
-    return []
-  }
+  })
 }
 
 /**
- * Get tag names for autocompletion in tag[], tagging[] operators
+ * Get tag names for autocompletion in tag[], tagging[] operators (cached)
  * Uses [all[tiddlers+shadows]is[tag]] filter
  */
 function getTagNames(): string[] {
   if (typeof $tw === "undefined") return []
-  try {
-    const wiki = _currentEngine?.widget?.wiki || $tw.wiki
-    if (!wiki) return []
-    const widget = _currentEngine?.widget
-    // Use widget context for filter if available (needed for shadows)
-    const results = widget
-      ? wiki.filterTiddlers("[all[tiddlers+shadows]is[tag]]", widget)
-      : wiki.filterTiddlers("[all[tiddlers+shadows]is[tag]]")
-    return results || []
-  } catch (e) {
-    return []
-  }
+  installChangeListener()
+  return getCached("tagNames", () => {
+    try {
+      const wiki = _currentEngine?.widget?.wiki || $tw.wiki
+      if (!wiki) return []
+      const widget = _currentEngine?.widget
+      // Use widget context for filter if available (needed for shadows)
+      const results = widget
+        ? wiki.filterTiddlers("[all[tiddlers+shadows]is[tag]]", widget)
+        : wiki.filterTiddlers("[all[tiddlers+shadows]is[tag]]")
+      return results || []
+    } catch (e) {
+      return []
+    }
+  })
 }
 
 /**
@@ -361,6 +623,36 @@ function getMacroParams(macroName: string): string[] | null {
 }
 
 /**
+ * Get widget attributes/parameters for autocompletion
+ * For custom widgets defined with \widget, tries widget.getVariableInfo first
+ * (like macros/procedures), then falls back to global widget defs cache.
+ * Returns null for built-in widgets (completion falls back to static list)
+ */
+function getWidgetAttributes(widgetName: string): string[] | null {
+  if (typeof $tw === "undefined") return null
+  try {
+    // Try widget.getVariableInfo first (like macros/procedures)
+    const widget = _currentEngine?.widget
+    if (widget?.getVariableInfo) {
+      const info = widget.getVariableInfo(widgetName)
+      if (info && info.params && Array.isArray(info.params)) {
+        return info.params.map((p: any) => p.name)
+      }
+    }
+    // Fallback: check global widget definitions cache
+    // (widget.getVariableInfo may not return params for \widget definitions)
+    const globalDefs = getGlobalWidgetDefs()
+    if (globalDefs[widgetName] && globalDefs[widgetName].length > 0) {
+      return globalDefs[widgetName]
+    }
+    // Return null for built-in widgets - let completion fall back to static list
+    return null
+  } catch (e) {
+    return null
+  }
+}
+
+/**
  * Get code languages from context or return empty array
  * The CM6 engine can pass available languages via context.options.codeLanguages
  * These should be LanguageDescription objects from @codemirror/language-data
@@ -376,9 +668,87 @@ function getCodeLanguages(): readonly LanguageDescription[] {
 }
 
 /**
- * Build language support with options from context
+ * Get wiki parser rules for \rules pragma completion (cached, static - doesn't change at runtime)
+ * Returns rule names with their types (pragma, block, inline)
  */
-function buildLanguageSupport(context: CM6PluginContext): Extension {
+function getWikiRules(): { name: string; types: string }[] {
+  if (typeof $tw === "undefined") return []
+  return getCached("wikiRules", () => {
+    try {
+      const rules: { name: string; types: string }[] = []
+      const wikiruleModules = $tw.modules.getModulesByTypeAsHashmap("wikirule")
+      if (!wikiruleModules) return []
+
+      for (const moduleName of Object.keys(wikiruleModules)) {
+        const module = wikiruleModules[moduleName]
+        if (!module || !module.name) continue
+
+        // Convert types object to string (e.g., {block: true, inline: true} -> "block, inline")
+        const typeNames: string[] = []
+        if (module.types) {
+          if (module.types.pragma) typeNames.push("pragma")
+          if (module.types.block) typeNames.push("block")
+          if (module.types.inline) typeNames.push("inline")
+        }
+
+        rules.push({
+          name: module.name,
+          types: typeNames.join(", ") || "unknown"
+        })
+      }
+
+      return rules.sort((a, b) => a.name.localeCompare(b.name))
+    } catch (e) {
+      return []
+    }
+  })
+}
+
+/**
+ * Check if CamelCase links are disabled in TiddlyWiki settings (read once at startup)
+ * Reads $:/config/WikiParserRules/Inline/wikilink - "disable" means disabled
+ */
+const _disableCamelCaseLinks: boolean = (() => {
+  if (typeof $tw === "undefined") return false
+  try {
+    const setting = $tw.wiki?.getTiddlerText("$:/config/WikiParserRules/Inline/wikilink", "enable")
+    return setting === "disable"
+  } catch (e) {
+    return false
+  }
+})()
+
+/**
+ * Check if KaTeX plugin is installed
+ * Checks if the $latex or $katex widget exists by iterating widget modules
+ */
+function isKaTeXEnabled(): boolean {
+  if (typeof $tw === "undefined") return false
+  try {
+    // Use forEachModuleOfType to properly execute and check widget modules
+    if ($tw.modules && $tw.modules.forEachModuleOfType) {
+      let found = false
+      $tw.modules.forEachModuleOfType("widget", (_title: string, mod: any) => {
+        if (mod && (mod.latex || mod.katex)) {
+          found = true
+        }
+      })
+      return found
+    }
+    return false
+  } catch (e) {
+    return false
+  }
+}
+
+/**
+ * Build language support with options from context
+ *
+ * @param context - Plugin context
+ * @param skipNestedLanguageExtensions - If true, don't include nested language support extensions.
+ *   Used during compartment reconfiguration to avoid duplicate compartment errors.
+ */
+function buildLanguageSupport(context: CM6PluginContext, skipNestedLanguageExtensions = false): Extension {
   const options = context.options || {}
 
   // Store engine reference for context-aware completions
@@ -393,15 +763,21 @@ function buildLanguageSupport(context: CM6PluginContext): Extension {
     completeTiddlers: options.completeTiddlers !== false,
     completeFilterOperators: options.completeFilterOperators !== false,
     completeFilterRunPrefixes: options.completeFilterRunPrefixes !== false,
+    disableCamelCaseLinks: _disableCamelCaseLinks,
+    enableKaTeX: isKaTeXEnabled(),
+    skipNestedLanguageExtensions, // Skip nested lang extensions on reconfiguration
     getTiddlerTitles,
+    isDraftTiddler,
     getImageTiddlerTitles,
     getMacroNames,
     getMacroParams,
     getWidgetNames,
+    getWidgetAttributes,
     getFilterOperators,
     getTagNames,
     getTiddlerFields,
-    getTiddlerIndexes
+    getTiddlerIndexes,
+    getWikiRules
   })
 }
 
@@ -455,30 +831,33 @@ export const plugin = {
     const extensions: Extension[] = []
     const engine = context.engine as CM6Engine | undefined
     const compartments = engine?._compartments
-    
-    // Language support via compartment
-    const langSupport = buildLanguageSupport(context)
-    
+
+    // Build the full language support (includes support extensions like autocompletion)
+    const langSupport = buildLanguageSupport(context, /* skipNestedLanguageExtensions */ false) as any
+
+    // Put ONLY the Language in the compartment (for reconfiguration on language switch)
+    // Support extensions go OUTSIDE the compartment (so they persist across switches)
     if (compartments?.[COMPARTMENT_NAME]) {
-      // Wrap in compartment for later reconfiguration
-      extensions.push(compartments[COMPARTMENT_NAME].of(langSupport))
+      // Wrap just the Language in compartment for later reconfiguration
+      extensions.push(compartments[COMPARTMENT_NAME].of(langSupport.language))
+      // Add support extensions outside the compartment (they persist)
+      if (langSupport.support) {
+        extensions.push(langSupport.support)
+      }
     } else {
-      // No compartment available, add directly
+      // No compartment available, add the full LanguageSupport directly
       extensions.push(langSupport)
     }
-    
-    // Header folding support
-    extensions.push(headerIndent)
-    
+
     // Keymap (unless read-only or custom keymap is active)
     if (!context.readOnly) {
       const wiki = context.engine?.widget?.wiki || (typeof $tw !== "undefined" ? $tw.wiki : null)
-      const selectedKeymap = wiki?.getTiddlerText?.("$:/config/codemirror-6/keymap", "default") ?? "default"
+      const selectedKeymap = wiki?.getTiddlerText?.("$:/config/codemirror-6/editor/keymap", "default") ?? "default"
       if (selectedKeymap === "default") {
         extensions.push(tiddlywikiKeymap)
       }
     }
-    
+
     return extensions
   },
   
@@ -486,12 +865,24 @@ export const plugin = {
    * Get compartment content for dynamic reconfiguration
    * Called by engine.setType() when switching content types
    * Returns RAW content (without compartment.of wrapper)
+   *
+   * IMPORTANT: For reconfiguration, we only return the Language itself,
+   * NOT the full LanguageSupport with all its support extensions.
+   * The support extensions (autocompletion, keymaps, highlighting, etc.)
+   * are already in the editor state from initial setup and would cause
+   * "Duplicate use of compartment" errors if re-added.
    */
   getCompartmentContent(context: CM6PluginContext): Extension[] {
-    const langSupport = buildLanguageSupport(context)
-    
-    // Return array of extensions (engine wraps in compartment.reconfigure)
-    return [langSupport, headerIndent]
+    // Build the language support to get a configured parser
+    const langSupport = buildLanguageSupport(context, /* skipNestedLanguageExtensions */ true)
+
+    // Return ONLY the Language (not the full LanguageSupport with support extensions)
+    // This avoids Compartment duplication from extensions like autocompletion()
+    if (langSupport && typeof langSupport === 'object' && 'language' in langSupport) {
+      return [(langSupport as any).language]
+    }
+    // Fallback: return empty if something went wrong
+    return []
   },
   
   /**

@@ -41,13 +41,15 @@ class Context {
     let marker = ""
     if (this.node.name == "OrderedList" || this.node.name == "BulletList") {
       // Match any combination of list markers: *, #, or mixed like *#, #*, **#, etc.
-      let text = doc.sliceString(this.item!.from, this.item!.from + 20)
-      let match = /^([*#]+)/.exec(text)
+      // Allow leading whitespace since TiddlyWiki supports indented lists
+      let text = doc.sliceString(this.item!.from, this.item!.from + 30)
+      let match = /^\s*([*#]+)/.exec(text)
       if (match) marker = match[1]
     } else if (this.node.name == "DefinitionList") {
       // Definition lists can have mixed markers
-      let text = doc.sliceString(this.item!.from, this.item!.from + 20)
-      let match = /^([;:*#]+)/.exec(text)
+      // Allow leading whitespace
+      let text = doc.sliceString(this.item!.from, this.item!.from + 30)
+      let match = /^\s*([;:*#]+)/.exec(text)
       if (match) marker = match[1]
       else marker = this.type
     } else if (this.node.name == "BlockQuote") {
@@ -55,8 +57,9 @@ class Context {
       if (this.type == "<<<") {
         marker = "<<<" // Multi-line block quote doesn't continue
       } else {
-        let text = doc.sliceString(this.item!.from, this.item!.from + 20)
-        let match = /^([>*#]+)/.exec(text)
+        // Allow leading whitespace
+        let text = doc.sliceString(this.item!.from, this.item!.from + 30)
+        let match = /^\s*([>*#]+)/.exec(text)
         if (match) marker = match[1]
         else marker = ">"
       }
@@ -88,33 +91,34 @@ function getContext(node: SyntaxNode, doc: Text): Context[] {
     let match: RegExpExecArray | null
 
     if (node.name == "BlockQuote") {
-      match = /^(\s*)(<<<)(\s*)/.exec(line.text.slice(startPos))
+      // Match from line start to capture any leading whitespace
+      match = /^(\s*)(<<<)(\s*)/.exec(line.text)
       if (match) {
-        context.push(new Context(node, startPos, startPos + match[0].length, match[1], match[3], "<<<", null))
+        context.push(new Context(node, 0, match[0].length, match[1], match[3], "<<<", null))
       }
     } else if (node.name == "ListItem" && (node.parent?.name == "OrderedList" || node.parent?.name == "BulletList")) {
-      // Match any combination of list markers: *, #, or mixed like *#, #*, **#, etc.
-      match = /^(\s*)([*#]+)(\s+)/.exec(line.text.slice(startPos))
+      // Match from line start to capture leading whitespace (TiddlyWiki allows indented lists)
+      match = /^(\s*)([*#]+)(\s+)/.exec(line.text)
       if (match) {
-        context.push(new Context(node.parent!, startPos, startPos + match[0].length, match[1], match[3], match[2], node))
+        context.push(new Context(node.parent!, 0, match[0].length, match[1], match[3], match[2], node))
       }
     } else if (node.name == "ListItem" && node.parent?.name == "BlockQuote") {
       // Single-line > quote style - can also be mixed with * or #
-      match = /^(\s*)([>*#]+)(\s*)/.exec(line.text.slice(startPos))
+      match = /^(\s*)([>*#]+)(\s*)/.exec(line.text)
       if (match) {
-        context.push(new Context(node.parent!, startPos, startPos + match[0].length, match[1], match[3], match[2], node))
+        context.push(new Context(node.parent!, 0, match[0].length, match[1], match[3], match[2], node))
       }
     } else if (node.name == "DefinitionTerm") {
       // Definition terms can be mixed with other markers
-      match = /^(\s*)([;:*#]+)(\s*)/.exec(line.text.slice(startPos))
+      match = /^(\s*)([;:*#]+)(\s*)/.exec(line.text)
       if (match) {
-        context.push(new Context(node.parent!, startPos, startPos + match[0].length, match[1], match[3], match[2], node))
+        context.push(new Context(node.parent!, 0, match[0].length, match[1], match[3], match[2], node))
       }
     } else if (node.name == "DefinitionDescription") {
       // Definition descriptions can be mixed with other markers
-      match = /^(\s*)([;:*#]+)(\s*)/.exec(line.text.slice(startPos))
+      match = /^(\s*)([;:*#]+)(\s*)/.exec(line.text)
       if (match) {
-        context.push(new Context(node.parent!, startPos, startPos + match[0].length, match[1], match[3], match[2], node))
+        context.push(new Context(node.parent!, 0, match[0].length, match[1], match[3], match[2], node))
       }
     }
   }
@@ -142,21 +146,30 @@ function normalizeIndent(content: string, state: EditorState): string {
 // Insert Newline Continue Markup Command
 // ============================================================================
 
+export type EnterFallbackBehavior = "smart" | "indent" | "none"
+
 /// Configurable version of the continue-markup command
-export const insertNewlineContinueMarkupCommand = (_config: {
+/// @param fallbackBehavior - What to do when NOT in a list:
+///   - "smart": Full smart indentation (widgets, tags, conditionals, etc.)
+///   - "indent": Just match the previous line's indentation
+///   - "none": No indentation at all
+export const insertNewlineContinueMarkupCommand = (config: {
   /// Unused - kept for backward compatibility
   nonTightLists?: boolean
+  /// Fallback behavior when not in a list (default: "smart")
+  fallbackBehavior?: EnterFallbackBehavior
 } = {}): StateCommand => ({state, dispatch}) => {
+  const fallbackBehavior = config.fallbackBehavior || "smart"
   let tree = syntaxTree(state)
   let {doc} = state
   let dont = null
-  
+
   let changes = state.changeByRange(range => {
-    if (!range.empty || !tiddlywikiLanguage.isActiveAt(state, range.from, -1) && 
+    if (!range.empty || !tiddlywikiLanguage.isActiveAt(state, range.from, -1) &&
         !tiddlywikiLanguage.isActiveAt(state, range.from, 1)) {
       return dont = {range}
     }
-    
+
     let pos = range.from
     let line = doc.lineAt(pos)
     // Try to resolve node at cursor position; if at end of document/line with no
@@ -166,14 +179,43 @@ export const insertNewlineContinueMarkupCommand = (_config: {
       node = tree.resolveInner(pos - 1, -1)
     }
     let context = getContext(node, doc)
-    
+
     while (context.length && context[context.length - 1].from > pos - line.from) {
       context.pop()
     }
 
-    // No list/quote context - fall back to language indentation
+    // No list/quote context - fall back based on configured behavior
     if (!context.length) {
       const lineText = line.text
+
+      // "none" mode: just insert newline, no indentation
+      if (fallbackBehavior === "none") {
+        const insert = state.lineBreak
+        return {
+          range: EditorSelection.cursor(pos + insert.length),
+          changes: {from: pos, insert}
+        }
+      }
+
+      // "indent" mode: match previous line's indentation
+      if (fallbackBehavior === "indent") {
+        let indentStr = ""
+        for (let i = 0; i < lineText.length; i++) {
+          const ch = lineText.charAt(i)
+          if (ch === " " || ch === "\t") {
+            indentStr += ch
+          } else {
+            break
+          }
+        }
+        const insert = state.lineBreak + indentStr
+        return {
+          range: EditorSelection.cursor(pos + insert.length),
+          changes: {from: pos, insert}
+        }
+      }
+
+      // "smart" mode: full smart indentation
       const unit = state.facet(indentUnit)
       const unitSize = unit === "\t" ? state.tabSize : unit.length
 
@@ -222,9 +264,78 @@ export const insertNewlineContinueMarkupCommand = (_config: {
       const trimmed = lineText.trim()
       const textAfterCursorTrimmed = textAfterCursor.trim()
 
+      // Tree-based pragma detection for semantic correctness
+      // Only handle pragma-specific lines (\end, pragma opener) - let getIndentation handle nested content
+      const isPragmaDef = (name: string) => /^(MacroDefinition|ProcedureDefinition|FunctionDefinition|WidgetDefinition)$/.test(name)
+
+      // Find enclosing pragma definition using tree
+      let pragmaNode: SyntaxNode | null = null
+      let pragmaEnd: SyntaxNode | null = null
+      for (let n: SyntaxNode | null = node; n; n = n.parent) {
+        if (isPragmaDef(n.name)) {
+          pragmaNode = n
+          // Find PragmaEnd child
+          for (let child = n.lastChild; child; child = child.prevSibling) {
+            if (child.name === "PragmaEnd") {
+              pragmaEnd = child
+              break
+            }
+          }
+          break
+        }
+      }
+
+      // Handle pragma-specific indentation only for specific lines
+      // Don't override indentation for content inside nested widgets/conditionals
+      if (pragmaNode) {
+        const pragmaBaseIndent = (() => {
+          const pragmaLine = doc.lineAt(pragmaNode!.from)
+          let ind = 0
+          for (let i = 0; i < pragmaLine.text.length; i++) {
+            const ch = pragmaLine.text.charCodeAt(i)
+            if (ch === 32) ind++
+            else if (ch === 9) ind += state.tabSize
+            else break
+          }
+          return ind
+        })()
+
+        const pragmaOpenLine = doc.lineAt(pragmaNode.from)
+
+        if (pragmaEnd) {
+          const endLine = doc.lineAt(pragmaEnd.from)
+
+          // Cursor is on the \end line - next line should be at pragma base indent
+          if (line.number === endLine.number) {
+            indent = pragmaBaseIndent
+          }
+          // Cursor is after \end - use pragma base indent
+          else if (line.number > endLine.number) {
+            indent = pragmaBaseIndent
+          }
+          // Cursor is on the pragma opener line - indent body
+          else if (line.number === pragmaOpenLine.number) {
+            if (/^\s*\\(?:define|procedure|function|widget)\s+\S+\s*\([^)]*\)\s*$/.test(lineText)) {
+              indent = pragmaBaseIndent + unitSize
+            }
+          }
+          // Cursor is inside pragma body but NOT on special lines - trust getIndentation
+          // This allows nested widgets/conditionals to provide their own indentation
+        } else {
+          // Incomplete pragma (no \end yet)
+          // Check if current line is the pragma opener
+          if (line.number === pragmaOpenLine.number) {
+            // On opener line, check if it's multi-line style
+            if (/^\s*\\(?:define|procedure|function|widget)\s+\S+\s*\([^)]*\)\s*$/.test(lineText)) {
+              indent = pragmaBaseIndent + unitSize
+            }
+          }
+          // For other lines in incomplete pragma, trust getIndentation
+        }
+      }
+      // Fallback: regex-based detection for cases where tree isn't complete
       // After \end - always use the \end line's indent (same as the opening pragma)
-      // This check must be outside the fallback to override getIndentation's result
-      if (/^\\end(?:\s|$)/.test(trimmed) && textAfterCursorTrimmed === "") {
+      else if (/^\\end(?:\s|$)/.test(trimmed) && textAfterCursorTrimmed === "") {
         indent = baseIndent
       }
       // Fallback: if indentation is null/0, check line text for patterns that need indentation
@@ -248,6 +359,12 @@ export const insertNewlineContinueMarkupCommand = (_config: {
           // Closing tag - keep same indent as current line
           indent = baseIndent
         }
+      }
+
+      // Final fallback: if no indentation rule matched, preserve current line's indentation
+      // This handles plain text inside nested structures (widgets, conditionals, etc.)
+      if (indent == null || indent === 0) {
+        indent = baseIndent
       }
 
       let indentStr = ""

@@ -33,17 +33,17 @@ export {
   Heading, HorizontalRule, FencedCode, TypedBlock,
   List, Table, CommentBlock,
   TransclusionBlock, FilteredTransclusionBlock, MacroCallBlock,
-  HTMLBlock,
+  HTMLBlock, KaTeXBlock,
   DefaultBlockParsers,
 } from "./block-parsers"
 
 // Inline parsers
 export {
-  Escape, Entity, InlineCode,
+  Escape, Entity, InlineCode, InlineKaTeX,
   Bold, Italic, Underline, Strikethrough, Superscript, Subscript, Highlight,
   WikiLink, ExternalLink, ImageLink,
   Transclusion, FilteredTransclusion, MacroCall,
-  Widget, HTMLTag, Dash, CamelCaseLink, SystemLink, URLAutoLink,
+  Widget, WidgetCloseTag, HTMLTag, HTMLCloseTag, Dash, CamelCaseLink, SystemLink, URLAutoLink,
   DefaultInlineParsers,
 } from "./inline-parsers"
 
@@ -51,10 +51,12 @@ export {
 export { TiddlyWikiParser, parser } from "./parser"
 
 // Language support (CodeMirror 6 integration)
-export { tiddlywikiLanguage, headerIndent, mkLang, getCodeParser } from "./language"
+export { tiddlywikiLanguage, headerIndent, inlineConditionalFold, mkLang, getCodeParser } from "./language"
 export {
   tiddlywiki,
   tiddlywikiHighlightStyle,
   tiddlywikiKeymap,
+  createTiddlywikiKeymap,
   TiddlyWikiLanguageConfig,
 } from "./extensions"
+export type { TabBehavior, ShiftTabBehavior, EnterIndentBehavior, KeymapConfig } from "./extensions"

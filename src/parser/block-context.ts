@@ -129,6 +129,9 @@ export class BlockContext implements PartialParse {
 
   get line(): Line { return this._line }
 
+  /** Get the end position of the current parsing range */
+  get rangeEnd(): number { return this.to }
+
   get parsers(): readonly BlockParser[] {
     return this.parser.blockParsers
   }
@@ -168,6 +171,25 @@ export class BlockContext implements PartialParse {
       return false
     }
     this.lineEnd = this.findLineEnd()
+    this._line.reset(this.readLineText())
+    return true
+  }
+
+  /**
+   * Skip to a specific position in the document
+   * Used when sibling content has been parsed recursively and we need to skip past it
+   */
+  skipToPosition(pos: number): boolean {
+    if (pos >= this.to) {
+      this.lineStart = this.to
+      this.lineEnd = this.to
+      this._atEnd = true
+      this._line.reset("")
+      return false
+    }
+    // Find the line containing this position
+    this.lineStart = pos
+    this.lineEnd = this.findLineEnd(pos)
     this._line.reset(this.readLineText())
     return true
   }
@@ -330,6 +352,9 @@ export class BlockContext implements PartialParse {
    * Pragmas are only valid at the very top of the document (or within another
    * pragma's body). Once we encounter non-pragma content, no more pragmas.
    *
+   * HTML comments (<!-- -->) are allowed before and between pragmas - they
+   * don't count as "content" that ends the pragma section.
+   *
    * For better editor UX, we're forgiving about malformed pragma bodies:
    * - After parsing at least one pragma, if orphan content appears but more
    *   pragmas follow, we skip the orphan lines and continue
@@ -349,6 +374,69 @@ export class BlockContext implements PartialParse {
       const trimmed = lineText.trim()
       if (trimmed === "") {
         this.nextLine()
+        continue
+      }
+
+      // Handle HTML comments - they don't count as content that ends pragma section
+      if (trimmed.startsWith("<!--")) {
+        const commentStart = this.lineStart
+        const commentChildren: Element[] = []
+
+        // Check for --> on this line (single-line comment)
+        const endIdx = lineText.indexOf("-->")
+        if (endIdx !== -1) {
+          // Single-line comment
+          const afterComment = lineText.slice(endIdx + 3)
+          const commentEndPos = commentStart + endIdx + 3
+          commentChildren.push(elt(Type.CommentMarker, commentStart, commentStart + 4))
+          commentChildren.push(elt(Type.CommentMarker, commentEndPos - 3, commentEndPos))
+          this.addElement(elt(Type.CommentBlock, commentStart, commentEndPos, commentChildren))
+
+          if (afterComment.trim()) {
+            // Content after comment - parse it as a paragraph and end pragma section
+            const inlineElements = this.parser.parseInline(afterComment, commentEndPos)
+            const paragraphElt = this.elt(Type.Paragraph, commentEndPos, commentEndPos + afterComment.length, inlineElements as Element[])
+            this.addElement(paragraphElt)
+            this.nextLine()
+            break
+          }
+          this.nextLine()
+          continue
+        }
+
+        // Multi-line comment - consume lines until we find -->
+        let foundEnd = false
+        let hasContentAfter = false
+        while (this.nextLine()) {
+          const currentLine = this._line.text
+          const closeIdx = currentLine.indexOf('-->')
+          if (closeIdx !== -1) {
+            // Check if there's content after --> on the closing line
+            const afterComment = currentLine.slice(closeIdx + 3)
+            const commentEndPos = this.lineStart + closeIdx + 3
+            this.addElement(elt(Type.CommentBlock, commentStart, commentEndPos))
+            foundEnd = true
+            if (afterComment.trim()) {
+              // Content after comment - parse it as a paragraph and end pragma section
+              const inlineElements = this.parser.parseInline(afterComment, commentEndPos)
+              const paragraphElt = this.elt(Type.Paragraph, commentEndPos, commentEndPos + afterComment.length, inlineElements as Element[])
+              this.addElement(paragraphElt)
+              hasContentAfter = true
+            }
+            this.nextLine()
+            break
+          }
+        }
+
+        if (!foundEnd) {
+          // Unclosed comment - add what we have
+          this.addElement(elt(Type.CommentBlock, commentStart, this.lineStart))
+        }
+
+        // If there was content after the closing -->, end pragma section
+        if (hasContentAfter) {
+          break
+        }
         continue
       }
 
@@ -500,37 +588,52 @@ export class BlockContext implements PartialParse {
 
   /**
    * Parse a paragraph (default fallback)
+   *
+   * In TiddlyWiki, block elements (headings, lists, tables, etc.) are only
+   * recognized as separate blocks when preceded by a blank line. Without a
+   * blank line, they become part of the paragraph content.
+   *
+   * Example: "text\n!heading" → single paragraph
+   *          "text\n\n!heading" → paragraph + heading
    */
   private parseParagraph() {
     const start = this.lineStart
     const content: string[] = [this._line.text]
 
-    // Consume lines until we hit a block element
-    // Blank lines are included to allow inline formatting (like ~~strikethrough~~)
-    // to span across visual paragraph breaks, matching TiddlyWiki's behavior
+    // Track blank lines - block elements only start new blocks after blank lines
+    let hadBlankLine = false
+
+    // Consume lines until we hit a blank line followed by a block element
     while (this.nextLine()) {
       const text = this._line.text
 
-      // Include blank lines - they don't end paragraphs in TiddlyWiki
-      // (inline formatting can span across them)
+      // Track blank lines - they create a potential block boundary
       if (text.trim() === "") {
         content.push(text)
+        hadBlankLine = true
         continue
       }
 
-      // Check if this line starts a new block
-      let startsBlock = false
-      for (const parser of this.parsers) {
-        // Simple check - if any parser matches at position 0, it's a new block
-        const firstChar = text.charCodeAt(0)
-        if (this.isBlockStarter(text, firstChar)) {
-          startsBlock = true
+      // Only check for block starters if we had a blank line before
+      // Without a blank line, everything continues as paragraph content
+      if (hadBlankLine) {
+        // Use skipNext/textAfterIndent to allow leading whitespace before block elements
+        const firstChar = this._line.skipNext
+        const trimmedText = this._line.textAfterIndent
+        const hasLeadingWhitespace = this._line.skipPos > 0
+        if (this.isBlockStarter(trimmedText, firstChar, hasLeadingWhitespace)) {
+          // Remove trailing blank lines from paragraph content
+          // since they separate this paragraph from the next block
+          while (content.length > 0 && content[content.length - 1].trim() === "") {
+            content.pop()
+          }
           break
         }
       }
 
-      if (startsBlock) break
+      // Not a block starter (or no blank line before) - add to paragraph
       content.push(text)
+      hadBlankLine = false
     }
 
     // Parse inline content
@@ -544,24 +647,43 @@ export class BlockContext implements PartialParse {
 
   /**
    * Quick check if a line starts a block element
+   * @param text - The text after leading whitespace
+   * @param firstChar - The first non-whitespace character code
+   * @param hasLeadingWhitespace - Whether there is leading whitespace on the line
    */
-  private isBlockStarter(text: string, firstChar: number): boolean {
+  private isBlockStarter(text: string, firstChar: number, hasLeadingWhitespace: boolean): boolean {
+    // Elements that ALLOW leading whitespace
     if (firstChar === Ch.Exclamation) return true  // Heading
     if (firstChar === Ch.Asterisk || firstChar === Ch.Hash ||
         firstChar === Ch.Semicolon || firstChar === Ch.Colon ||
         firstChar === Ch.GreaterThan) return true  // List
-    if (firstChar === Ch.Pipe) return true  // Table
     if (firstChar === Ch.Backtick && text.startsWith("```")) return true  // Code
     if (firstChar === Ch.Dollar && text.startsWith("$$$")) return true  // Typed block
     if (firstChar === Ch.Dash && /^-{3,}$/.test(text.trim())) return true  // HR
-    if (firstChar === Ch.LessThan) {
-      // HTML/Widget: only treat as block if tag doesn't close on same line
-      // This allows inline HTML within formatting like ~~<div>text</div>~~
 
-      // HTML comment
+    if (firstChar === Ch.LessThan) {
+      // Block quote: <<< - allows leading whitespace
+      if (text.startsWith("<<<")) return true
+
+      // HTML comment - allows leading whitespace
       if (text.startsWith('<!--')) {
         return !text.includes('-->')  // Block if comment doesn't close on same line
       }
+
+      // Macro call: <<name ...>> - NO leading whitespace allowed
+      if (text.startsWith("<<")) {
+        if (hasLeadingWhitespace) return false
+        // Check for closing >> on same line
+        const closeIdx = text.indexOf(">>", 2)
+        if (closeIdx === -1) return true  // No closing >> - multi-line macro block
+        // Has closing >> - check if there's content after (then it's inline, not block)
+        if (text.slice(closeIdx + 2).trim()) return false
+        return true  // Single-line macro at start of line is block
+      }
+
+      // HTML/Widget: allows leading whitespace
+      // Only treat as block if tag doesn't close on same line
+      // This allows inline HTML within formatting like ~~<div>text</div>~~
 
       // Match opening tag (HTML or widget)
       const tagMatch = text.match(/^<(\$?[a-zA-Z][a-zA-Z0-9\-\.]*)/)
@@ -580,8 +702,19 @@ export class BlockContext implements PartialParse {
       // Opening tag without close on same line - treat as block
       return true
     }
+
+    // Elements that do NOT allow leading whitespace - must start at column 0
+    if (hasLeadingWhitespace) return false
+
+    if (firstChar === Ch.Pipe) return true  // Table
     if (firstChar === Ch.LeftBrace && text.startsWith("{{")) return true  // Transclusion
     if (firstChar === Ch.Backslash) return true  // Pragma
+
+    // KaTeX block: only if KaTeXBlock parser is registered (KaTeX plugin installed)
+    if (firstChar === Ch.Dollar && text.startsWith("$$") && !text.startsWith("$$$")) {
+      if (this.parsers.some(p => p.name === "KaTeXBlock")) return true
+    }
+
     return false
   }
 
@@ -619,6 +752,63 @@ export class BlockContext implements PartialParse {
 
   stopAt(pos: number) {
     this.stoppedAt = pos
+  }
+
+  /**
+   * Check if content starts with a blank line (determines block vs inline mode)
+   *
+   * In TiddlyWiki, widget/HTML content is parsed in "block mode" only if there's
+   * a blank line after the opening tag. Without a blank line, content is "inline mode"
+   * where block elements like headings are not recognized.
+   *
+   * Example:
+   * - <$list>\n! Hello → inline mode (! Hello is text, not heading)
+   * - <$list>\n\n! Hello → block mode (! Hello is a heading)
+   *
+   * @param from Start position of content
+   * @param to End position of content
+   * @returns true if content starts with a blank line (block mode)
+   */
+  startsWithBlankLine(from: number, to: number): boolean {
+    if (from >= to) return false
+    const content = this.input.read(from, Math.min(from + 20, to))
+    // Check for blank line: newline followed by another newline (with optional spaces/tabs between)
+    return /^[\t ]*[\r\n][\t ]*[\r\n]/.test(content)
+  }
+
+  /**
+   * Parse a range of content as inline elements only (no block parsing).
+   * Used for inline-mode widget/HTML content where block elements should not be recognized.
+   *
+   * @param from Start position in the document
+   * @param to End position in the document
+   * @returns Array of parsed inline elements
+   */
+  parseInlineRange(from: number, to: number): Element[] {
+    if (from >= to) return []
+    const content = this.input.read(from, to)
+    return this.parser.parseInline(content, from) as Element[]
+  }
+
+  /**
+   * Parse widget/HTML body content, respecting block vs inline mode.
+   * - If content starts with a blank line → block mode (parse as blocks)
+   * - Otherwise → inline mode (parse as inline only)
+   *
+   * @param from Start position of content (right after opening tag's >)
+   * @param to End position of content (right before closing tag)
+   * @returns Array of parsed elements
+   */
+  parseWidgetContent(from: number, to: number): Element[] {
+    if (from >= to) return []
+
+    if (this.startsWithBlankLine(from, to)) {
+      // Block mode - parse as blocks
+      return this.parseContentRange(from, to, false)
+    } else {
+      // Inline mode - parse as inline only
+      return this.parseInlineRange(from, to)
+    }
   }
 
   /**
@@ -666,14 +856,35 @@ export class BlockContext implements PartialParse {
 
   /**
    * Convert a tree node (at cursor position) to an Element
+   *
+   * Handles foreign parser nodes (from mixed-language parsing like LaTeX)
+   * by mapping them to appropriate TiddlyWiki types and not recursing
+   * into their children (which use a different nodeSet).
    */
   private nodeToElement(cursor: any, offset: number): Element | null {
-    const type = cursor.type.id
+    const typeName = cursor.type.name
     const from = cursor.from + offset
     const to = cursor.to + offset
-    const children: Element[] = []
 
-    // Recursively convert children
+    // Check if this node type exists in TiddlyWiki's Type enum
+    // If not, it's from a foreign parser (e.g., LaTeX mixed-language)
+    const typeId = (Type as any)[typeName]
+
+    if (typeId === undefined || typeof typeId !== "number") {
+      // Foreign node - map known wrapper types to TiddlyWiki types
+      // Don't recurse into children (they use a different nodeSet)
+      if (typeName === "LaTeX") {
+        return new Element(Type.LaTeXContent, from, to, [])
+      }
+      if (typeName === "JavaScript" || typeName === "CSS" || typeName === "Script") {
+        return new Element(Type.CodeText, from, to, [])
+      }
+      // Unknown foreign node - skip it entirely
+      return null
+    }
+
+    // Known TiddlyWiki node - recursively convert children
+    const children: Element[] = []
     if (cursor.firstChild()) {
       do {
         const child = this.nodeToElement(cursor, offset)
@@ -684,6 +895,6 @@ export class BlockContext implements PartialParse {
       cursor.parent()
     }
 
-    return new Element(type, from, to, children)
+    return new Element(typeId, from, to, children)
   }
 }
