@@ -25,11 +25,11 @@ export default [
       '**/files/widgets/**/*.js',
       '**/keymap-*/files/plugin.js',
       // Also ignore from parser directory
-      '../BTC-TiddlyWiki5/plugins/codemirror-6/**/files/lang-*.js',
-      '../BTC-TiddlyWiki5/plugins/codemirror-6/**/files/lang-*.cjs',
-      '../BTC-TiddlyWiki5/plugins/codemirror-6/**/files/codemirror-*.js',
-      '../BTC-TiddlyWiki5/plugins/codemirror-6/**/files/lezer-*.js',
-      '../BTC-TiddlyWiki5/plugins/codemirror-6/**/files/lib/*.js'
+      '../TiddlyWiki5/plugins/codemirror-6/**/files/lang-*.js',
+      '../TiddlyWiki5/plugins/codemirror-6/**/files/lang-*.cjs',
+      '../TiddlyWiki5/plugins/codemirror-6/**/files/codemirror-*.js',
+      '../TiddlyWiki5/plugins/codemirror-6/**/files/lezer-*.js',
+      '../TiddlyWiki5/plugins/codemirror-6/**/files/lib/*.js'
     ]
   },
   {

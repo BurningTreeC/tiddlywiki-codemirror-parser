@@ -15,10 +15,10 @@ import typescript from "@rollup/plugin-typescript";
 import terser from "@rollup/plugin-terser";
 
 // Output directory for main combined plugin
-const OUTPUT_DIR = "../BTC-TiddlyWiki5/plugins/tiddlywiki/codemirror-6";
+const OUTPUT_DIR = "../TiddlyWiki5/plugins/tiddlywiki/codemirror-6";
 
 // Output directory for separate optional plugins
-const SEPARATE_PLUGINS_DIR = "../BTC-TiddlyWiki5/plugins/tiddlywiki";
+const SEPARATE_PLUGINS_DIR = "../TiddlyWiki5/plugins/tiddlywiki";
 
 // TiddlyWiki module paths for external dependencies
 const twPaths = {
