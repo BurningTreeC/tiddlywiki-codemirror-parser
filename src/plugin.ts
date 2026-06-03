@@ -248,6 +248,7 @@ function getCached<T>(
     return entry.data
   }
   const data = compute()
+  // @ts-expect-error TS(2352): Conversion of type 'CacheEntry<string[]> | CacheEn... Remove this comment to see the full error message
   ;(cache[key] as CacheEntry<T>) = { data, valid: true }
   return data
 }
