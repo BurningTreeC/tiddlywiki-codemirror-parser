@@ -30,7 +30,7 @@ jobs:
         run: npm run typecheck
 
       - name: Build TiddlyWiki plugin
-        run: npm run build:tiddlywiki
+        run: npm run build:all
 
       - name: Upload plugin artifact
         uses: actions/upload-artifact@v4
