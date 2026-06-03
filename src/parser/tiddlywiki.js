@@ -6,7 +6,6 @@
  */
 import { Prec } from "@codemirror/state";
 import { keymap, EditorView } from "@codemirror/view";
-// @ts-expect-error TS(6133): 'LanguageDescription' is declared but its value is... Remove this comment to see the full error message
 import { LanguageSupport, syntaxHighlighting, indentOnInput, syntaxTree } from "@codemirror/language";
 import { autocompletion, completionKeymap, completionStatus, startCompletion } from "@codemirror/autocomplete";
 import { html, htmlCompletionSource } from "@codemirror/lang-html";
@@ -43,11 +42,8 @@ const htmlNoMatch = html({ matchClosingTags: false });
  */
 export function tiddlywiki(config = {}) {
     const { codeLanguages, defaultCodeLanguage, addKeymap = true, base: { parser } = tiddlywikiLanguage, completeHTMLTags = true, completeWidgets = true, completeMacros = true, completeTiddlers = true, completeFilterOperators = true, completeFilterRunPrefixes = true, getTiddlerTitles, isDraftTiddler, getImageTiddlerTitles, getMacroNames, getMacroParams, getWidgetNames, getWidgetAttributes, getFilterOperators, getFieldNames, getTagNames, getTypeNames, getFileExtensions, getFunctionNames, getVariableNames, getTiddlerIndexes, getTiddlerFields, getStoryViews, getDeserializers, getPageClasses, getCSSProperties, getCSSValues, getCSSValuesForProperty, 
-    // @ts-expect-error TS(6133): 'htmlTagLanguage' is declared but its value is nev... Remove this comment to see the full error message
     htmlTagLanguage = htmlNoMatch, getSelfClosingWidgets, getWikiRules, disableCamelCaseLinks = false, enableKaTeX = false, getTabOutsideListBehavior, getShiftTabOutsideListBehavior, getEnterIndentBehavior, getFilterBracketMode, 
-    // @ts-expect-error TS(6133): 'skipNestedLanguageExtensions' is declared but its... Remove this comment to see the full error message
     skipNestedLanguageExtensions = false, 
-    // @ts-expect-error TS(6133): 'nestedLanguageExtensions' is declared but its val... Remove this comment to see the full error message
     nestedLanguageExtensions, nestedLanguageCompletionSources, nestedLanguageCompletions, } = config;
     // Validate parser
     if (!(parser instanceof TiddlyWikiParser)) {
@@ -539,7 +535,6 @@ export function tiddlywiki(config = {}) {
                     }
                     // Check for opening tag <tagname
                     if (ch === '<' && /[a-zA-Z$]/.test(textAfter[pos + 1])) {
-                        // @ts-expect-error TS(6133): 'tagStart' is declared but its value is never read... Remove this comment to see the full error message
                         const tagStart = pos;
                         pos++;
                         // Read tag name
@@ -554,7 +549,6 @@ export function tiddlywiki(config = {}) {
                             // Scan forward to find > or /> while skipping quoted content
                             let isSelfClosing = false;
                             let foundEnd = false;
-                            // @ts-expect-error TS(6133): 'scanStart' is declared but its value is never rea... Remove this comment to see the full error message
                             const scanStart = pos;
                             while (pos < len && !foundEnd) {
                                 const sch = textAfter[pos];

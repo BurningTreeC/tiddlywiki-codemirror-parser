@@ -12,7 +12,6 @@
  * - \whitespace trim/notrim
  */
 import { Type } from "./types";
-// @ts-expect-error TS(6133): 'Ch' is declared but its value is never read.
 import { elt } from "./core";
 import { createFilterTextRef, createFilterVariable, createFilterMultiVariable, parseMacroParams, skipBracedBlock } from "./utils";
 /**
@@ -612,9 +611,7 @@ export const RulesPragma = {
         if (!match)
             return null;
         const pragmaStart = cx.lineStart;
-        // @ts-expect-error TS(6133): 'action' is declared but its value is never read.
         const action = match[1];
-        // @ts-expect-error TS(6133): 'rules' is declared but its value is never read.
         const rules = match[2];
         // Find the actual backslash position (accounting for leading whitespace)
         const backslashOffset = line.text.indexOf("\\");

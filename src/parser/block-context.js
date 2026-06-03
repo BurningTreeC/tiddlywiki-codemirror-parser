@@ -3,9 +3,7 @@
  *
  * Handles block-level parsing following the Lezer Markdown architecture.
  */
-// @ts-expect-error TS(6133): 'TreeCursor' is declared but its value is never re... Remove this comment to see the full error message
 import { Tree } from "@lezer/common";
-// @ts-expect-error TS(6133): 'CompositeBlockTypes' is declared but its value is... Remove this comment to see the full error message
 import { Type } from "./types";
 import { Line, Element, elt, CompositeBlock, Ch } from "./core";
 // Buffer for building parse tree
@@ -82,11 +80,8 @@ export class BlockContext {
         this._atEnd = false;
         this.dontInject = new Set();
         // Fragment parsing (for incremental updates)
-        // @ts-expect-error TS(6133): 'fragments' is declared but its value is never rea... Remove this comment to see the full error message
         this.fragments = null;
-        // @ts-expect-error TS(6133): 'fragmentIndex' is declared but its value is never... Remove this comment to see the full error message
         this.fragmentIndex = 0;
-        // @ts-expect-error TS(6133): 'fragmentEnd' is declared but its value is never r... Remove this comment to see the full error message
         this.fragmentEnd = -1;
         this.lineStart = 0;
         this.lineEnd = 0;
@@ -764,7 +759,6 @@ export class BlockContext {
      * @param parsePragmasFirst Whether to parse pragmas at the start of the range
      * @returns Array of parsed elements
      */
-    // @ts-expect-error TS(6133): 'parsePragmasFirst' is declared but its value is n... Remove this comment to see the full error message
     parseContentRange(from, to, parsePragmasFirst = true) {
         if (from >= to)
             return [];

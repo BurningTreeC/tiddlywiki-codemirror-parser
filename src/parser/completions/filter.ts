@@ -28,7 +28,6 @@ function isInsideConditionalContext(state: EditorState, pos: number): boolean {
   // For inline conditionals, check if we're between <%if%> and <%endif%> siblings
   current = node
   while (current && !current.type.isTop) {
-    // @ts-expect-error TS(7022): 'parent' implicitly has type 'any' because it does... Remove this comment to see the full error message
     const parent = current.parent
     if (parent) {
       const conditionals: Array<{ type: string, from: number, to: number }> = []

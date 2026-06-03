@@ -7,7 +7,6 @@
 
 import { Prec } from "@codemirror/state"
 import { keymap, EditorView } from "@codemirror/view"
-// @ts-expect-error TS(6133): 'LanguageDescription' is declared but its value is... Remove this comment to see the full error message
 import { Language, LanguageSupport, LanguageDescription, syntaxHighlighting, indentOnInput, syntaxTree } from "@codemirror/language"
 import { autocompletion, completionKeymap, completionStatus, startCompletion } from "@codemirror/autocomplete"
 import { html, htmlCompletionSource } from "@codemirror/lang-html"
@@ -118,7 +117,6 @@ export function tiddlywiki(config: TiddlyWikiLanguageConfig = {}): LanguageSuppo
     getCSSProperties,
     getCSSValues,
     getCSSValuesForProperty,
-    // @ts-expect-error TS(6133): 'htmlTagLanguage' is declared but its value is nev... Remove this comment to see the full error message
     htmlTagLanguage = htmlNoMatch,
     getSelfClosingWidgets,
     getWikiRules,
@@ -128,9 +126,7 @@ export function tiddlywiki(config: TiddlyWikiLanguageConfig = {}): LanguageSuppo
     getShiftTabOutsideListBehavior,
     getEnterIndentBehavior,
     getFilterBracketMode,
-    // @ts-expect-error TS(6133): 'skipNestedLanguageExtensions' is declared but its... Remove this comment to see the full error message
     skipNestedLanguageExtensions = false,
-    // @ts-expect-error TS(6133): 'nestedLanguageExtensions' is declared but its val... Remove this comment to see the full error message
     nestedLanguageExtensions,
     nestedLanguageCompletionSources,
     nestedLanguageCompletions,
@@ -648,7 +644,6 @@ export function tiddlywiki(config: TiddlyWikiLanguageConfig = {}): LanguageSuppo
 
           // Check for opening tag <tagname
           if (ch === '<' && /[a-zA-Z$]/.test(textAfter[pos + 1])) {
-            // @ts-expect-error TS(6133): 'tagStart' is declared but its value is never read... Remove this comment to see the full error message
             const tagStart = pos
             pos++
             // Read tag name
@@ -663,7 +658,6 @@ export function tiddlywiki(config: TiddlyWikiLanguageConfig = {}): LanguageSuppo
               // Scan forward to find > or /> while skipping quoted content
               let isSelfClosing = false
               let foundEnd = false
-              // @ts-expect-error TS(6133): 'scanStart' is declared but its value is never rea... Remove this comment to see the full error message
               const scanStart = pos
               while (pos < len && !foundEnd) {
                 const sch = textAfter[pos]

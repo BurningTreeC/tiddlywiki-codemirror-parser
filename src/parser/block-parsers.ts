@@ -5,10 +5,8 @@
  */
 
 import { Type } from "./types"
-// @ts-expect-error TS(6133): 'space' is declared but its value is never read.
 import { Element, elt, Line, BlockParser, BlockResult, Ch, space } from "./core"
 import type { BlockContext } from "./block-context"
-// @ts-expect-error TS(6133): 'createFilterTextRef' is declared but its value is... Remove this comment to see the full error message
 import { parseTransclusionTarget, parseMacroParams, createFilterTextRef, createFilterVariable, createAttributeNameElement, parseFilterOperandPlaceholders, parseFilterExpressionDetailed, skipBracedBlock } from "./utils"
 
 // ============================================================================
@@ -424,7 +422,6 @@ export const List: BlockParser = {
 // Opening: <<< (optionally with class)
 const blockQuoteOpenRe = /^<<<(.*)$/
 // Closing: <<< (optionally with citation)
-// @ts-expect-error TS(6133): 'blockQuoteCloseRe' is declared but its value is n... Remove this comment to see the full error message
 const blockQuoteCloseRe = /^<<<(.*)$/
 
 export const MultiLineBlockQuote: BlockParser = {
@@ -593,7 +590,6 @@ function parseTableRow(text: string, offset: number, cx: BlockContext, marker?: 
 // ============================================================================
 
 const htmlCommentStartRe = /^<!--/
-// @ts-expect-error TS(6133): 'htmlCommentEndRe' is declared but its value is ne... Remove this comment to see the full error message
 const htmlCommentEndRe = /-->/
 
 export const CommentBlock: BlockParser = {
@@ -669,7 +665,6 @@ export const TransclusionBlock: BlockParser = {
     const start = cx.lineStart
     const target = match[1]
     const template = match[2]
-    // @ts-expect-error TS(6133): 'params' is declared but its value is never read.
     const params = match[3]
 
     const children: Element[] = [
@@ -997,7 +992,6 @@ function parsePlaceholdersInString(content: string, offset: number): Element[] {
 function parseAttributes(
   attrString: string,
   offset: number,
-  // @ts-expect-error TS(6133): 'isWidget' is declared but its value is never read... Remove this comment to see the full error message
   isWidget: boolean,
   parseInline?: (content: string, offset: number) => readonly Element[],
   parseContent?: (content: string, offset: number) => Element[]
@@ -1453,7 +1447,6 @@ const placeholderTagBlockRe = /^(\s*)<\$([a-zA-Z][a-zA-Z0-9\-_]*)\$/
 // Placeholder closing tag pattern: </$name$>
 const placeholderCloseTagBlockRe = /^(\s*)<\/\$([a-zA-Z][a-zA-Z0-9\-_]*)\$>/
 // Self-closing check
-// @ts-expect-error TS(6133): 'selfClosingRe' is declared but its value is never... Remove this comment to see the full error message
 const selfClosingRe = /\/>\s*$/
 
 export const HTMLBlock: BlockParser = {
@@ -2013,12 +2006,9 @@ export const HTMLBlock: BlockParser = {
 
     // Determine if this is a multi-line block with content
     if (!selfClose) {
-      // @ts-expect-error TS(6133): 'openRe' is declared but its value is never read.
       const openRe = new RegExp(`<${tagName.replace(/\$/g, '\\$')}(?:\\s|>|/>)`)
-      // @ts-expect-error TS(6133): 'closeRe' is declared but its value is never read.
       const closeRe = new RegExp(`</${tagName.replace(/\$/g, '\\$')}>`)
       // For multi-line: match closing tag at start of line with optional indent
-      // @ts-expect-error TS(6133): 'closeReWithIndent' is declared but its value is n... Remove this comment to see the full error message
       const closeReWithIndent = new RegExp(`^(\\s*)</${tagName.replace(/\$/g, '\\$')}>`)
       let blockEnd = openingTagLineEnd
       let foundClose = false
@@ -2491,7 +2481,6 @@ export const HTMLBlock: BlockParser = {
 // ============================================================================
 
 // Regex matching CSS styles: one or more property:value; pairs
-// @ts-expect-error TS(6133): 'blockCssStylesRe' is declared but its value is ne... Remove this comment to see the full error message
 const blockCssStylesRe = /^((?:[^\.\r\n\s:]+:[^\r\n;]+;)+)/
 
 export const StyledBlock: BlockParser = {
@@ -2555,7 +2544,6 @@ export const StyledBlock: BlockParser = {
     // Find closing @@ on its own line
     let closingLine = cx.lineStart + line.text.length + 1
     let contentEnd = closingLine
-    // @ts-expect-error TS(6133): 'foundClose' is declared but its value is never re... Remove this comment to see the full error message
     let foundClose = false
 
     while (closingLine < cx.input.length) {

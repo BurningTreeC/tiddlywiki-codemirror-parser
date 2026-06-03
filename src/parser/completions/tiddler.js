@@ -88,7 +88,6 @@ export function tiddlerCompletion(getTiddlerTitles, getImageTiddlerTitles, isDra
                     const textAfter = view.state.sliceDoc(to, to + 2);
                     const hasClosingBrace = textAfter[0] === "}";
                     const hasOuterBracket = textAfter[1] === "]" || textAfter[0] === "]";
-                    // @ts-expect-error TS(6133): 'suffix' is declared but its value is never read.
                     let suffix = "}";
                     if (hasClosingBrace)
                         suffix = "";

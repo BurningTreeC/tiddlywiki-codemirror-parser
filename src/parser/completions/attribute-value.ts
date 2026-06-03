@@ -962,7 +962,6 @@ export function wikitextAttributeCompletion(
   getMacroParams?: (name: string) => string[] | null
 ) {
   // Use module-level cached constants (avoid circular deps by not importing)
-  // @ts-expect-error TS(6133): 'coreWidgets' is declared but its value is never r... Remove this comment to see the full error message
   const coreWidgets = CORE_WIDGETS_LIST
   const commonHtmlTags = COMMON_HTML_TAGS_LIST
 

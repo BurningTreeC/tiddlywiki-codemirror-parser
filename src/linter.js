@@ -4,7 +4,6 @@
  * Provides lint diagnostics for TiddlyWiki wikitext.
  */
 import { syntaxTree } from "@codemirror/language";
-// @ts-expect-error TS(2307): Cannot find module '@codemirror/lint' or its corre... Remove this comment to see the full error message
 import { linter } from "@codemirror/lint";
 /**
  * All definition types (for general iteration)

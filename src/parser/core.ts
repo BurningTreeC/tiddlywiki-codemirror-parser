@@ -5,7 +5,6 @@
  */
 
 import { Tree, TreeBuffer, NodeType, NodeSet, NodeProp, Input } from "@lezer/common"
-// @ts-expect-error TS(6133): 'CompositeBlockTypes' is declared but its value is... Remove this comment to see the full error message
 import { Type, CompositeBlockTypes } from "./types"
 
 // Character codes for common characters

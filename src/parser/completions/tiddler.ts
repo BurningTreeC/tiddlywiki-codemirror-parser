@@ -103,7 +103,6 @@ export function tiddlerCompletion(
           const hasClosingBrace = textAfter[0] === "}"
           const hasOuterBracket = textAfter[1] === "]" || textAfter[0] === "]"
 
-          // @ts-expect-error TS(6133): 'suffix' is declared but its value is never read.
           let suffix = "}"
           if (hasClosingBrace) suffix = ""
           if (!hasClosingBrace && !hasOuterBracket) suffix = "}]"

@@ -33,7 +33,6 @@ function isInsideConditionalContext(state: EditorState, pos: number): boolean {
   // Walk up to find a parent that might contain Conditional siblings
   current = node
   while (current && !current.type.isTop) {
-    // @ts-expect-error TS(7022): 'parent' implicitly has type 'any' because it does... Remove this comment to see the full error message
     const parent = current.parent
     if (parent) {
       // Collect Conditional siblings in this parent
@@ -135,7 +134,6 @@ function getActionVariablesFromCallSites(
   }
 
   // Helper to check if a node is inside the definition being edited (skip self-references)
-  // @ts-expect-error TS(6133): 'isInsideDefinition' is declared but its value is ... Remove this comment to see the full error message
   function isInsideDefinition(node: SyntaxNode): boolean {
     return node.from >= defFrom && node.to <= defTo
   }
@@ -307,7 +305,6 @@ function getWidgetVariablesFromCallSites(
       // Check if this <$set> is closed before callPos
       const closeRegex = /<\/\$set\s*>/gi
       closeRegex.lastIndex = openPos + match[0].length
-      // @ts-expect-error TS(6133): 'closeMatch' is declared but its value is never re... Remove this comment to see the full error message
       let closeMatch
       let isClosed = false
       while ((closeMatch = closeRegex.exec(textBefore)) !== null) {

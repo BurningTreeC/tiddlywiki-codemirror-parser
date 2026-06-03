@@ -5,7 +5,6 @@
  */
 
 import { Type } from "./types"
-// @ts-expect-error TS(6133): 'Ch' is declared but its value is never read.
 import { Element, elt, DelimiterType, Ch } from "./core"
 import type { InlineContext } from "./inline-context"
 
@@ -717,7 +716,6 @@ export function detectDelimiterRun(
   const beforeRun = cx.slice(runStart - 1, runStart)
   const afterRun = cx.slice(runEnd, runEnd + 1)
   const sBeforeRun = isWhitespaceOrEmpty(beforeRun)
-  // @ts-expect-error TS(6133): 'sAfterRun' is declared but its value is never rea... Remove this comment to see the full error message
   const sAfterRun = isWhitespaceOrEmpty(afterRun)
 
   // Determine match position: first N for opener, last N for closer
@@ -734,9 +732,7 @@ export function detectDelimiterRun(
   // Flanking for the actual delimiter position
   const before = cx.slice(matchStart - 1, matchStart)
   const after = cx.slice(matchStart + delimLength, matchStart + delimLength + 1)
-  // @ts-expect-error TS(6133): 'sBefore' is declared but its value is never read.
   const sBefore = isWhitespaceOrEmpty(before)
-  // @ts-expect-error TS(6133): 'sAfter' is declared but its value is never read.
   const sAfter = isWhitespaceOrEmpty(after)
 
   return {
@@ -1173,7 +1169,6 @@ function parseFilterStep(content: string, offset: number): Element[] {
   if (!opMatch) return elements
 
   let pos = 0
-  // @ts-expect-error TS(6133): 'negation' is declared but its value is never read... Remove this comment to see the full error message
   const [fullMatch, negation, opName, colonSuffix] = opMatch
 
   if (fullMatch.length > 0) {

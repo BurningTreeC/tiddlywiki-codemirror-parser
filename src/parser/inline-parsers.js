@@ -4,7 +4,6 @@
  * Inline-level parsing rules following the Lezer Markdown architecture.
  */
 import { Type } from "./types";
-// @ts-expect-error TS(6133): 'elt' is declared but its value is never read.
 import { Ch } from "./core";
 import { createDelimiterParser, parseTransclusionTarget, parseMacroParams as parseMacroParamsUtil, createAttributeNameElement, createImageSourceElement, createURLLinkElement, parseFilterExpressionDetailed, skipBracedBlock, } from "./utils";
 // ============================================================================

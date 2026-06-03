@@ -8,12 +8,10 @@
 import {
   Language, defineLanguageFacet, languageDataProp, foldNodeProp,
   indentNodeProp, foldService, syntaxTree, LanguageDescription, ParseContext,
-  // @ts-expect-error TS(6133): 'getIndentUnit' is declared but its value is never... Remove this comment to see the full error message
   TreeIndentContext, getIndentUnit
 } from "@codemirror/language"
 import { SyntaxNode, NodeType, NodeProp } from "@lezer/common"
 import { TiddlyWikiParser, parser as baseParser } from "./parser"
-// @ts-expect-error TS(6133): 'Type' is declared but its value is never read.
 import { Type } from "./types"
 
 /**
@@ -56,7 +54,6 @@ function isBlock(type: NodeType): boolean {
 /**
  * Check if a node type is a container that should indent its contents
  */
-// @ts-expect-error TS(6133): 'isIndentingContainer' is declared but its value i... Remove this comment to see the full error message
 function isIndentingContainer(name: string): boolean {
   return /^(Widget|HTMLBlock|ConditionalBlock|ConditionalBranch|BlockQuote|MacroDefinition|ProcedureDefinition|FunctionDefinition|WidgetDefinition)$/.test(name);
 }

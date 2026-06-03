@@ -4,9 +4,7 @@
  * Block-level parsing rules following the Lezer Markdown architecture.
  */
 import { Type } from "./types";
-// @ts-expect-error TS(6133): 'space' is declared but its value is never read.
 import { elt, Ch } from "./core";
-// @ts-expect-error TS(6133): 'createFilterTextRef' is declared but its value is... Remove this comment to see the full error message
 import { parseTransclusionTarget, parseMacroParams, createAttributeNameElement, parseFilterExpressionDetailed, skipBracedBlock } from "./utils";
 // ============================================================================
 // Heading Parser (! to !!!!!!)
@@ -366,7 +364,6 @@ export const List = {
 // Opening: <<< (optionally with class)
 const blockQuoteOpenRe = /^<<<(.*)$/;
 // Closing: <<< (optionally with citation)
-// @ts-expect-error TS(6133): 'blockQuoteCloseRe' is declared but its value is n... Remove this comment to see the full error message
 const blockQuoteCloseRe = /^<<<(.*)$/;
 export const MultiLineBlockQuote = {
     name: "MultiLineBlockQuote",
@@ -511,7 +508,6 @@ function parseTableRow(text, offset, cx, marker) {
 // Comment Block (<!-- -->)
 // ============================================================================
 const htmlCommentStartRe = /^<!--/;
-// @ts-expect-error TS(6133): 'htmlCommentEndRe' is declared but its value is ne... Remove this comment to see the full error message
 const htmlCommentEndRe = /-->/;
 export const CommentBlock = {
     name: "CommentBlock",
@@ -575,7 +571,6 @@ export const TransclusionBlock = {
         const start = cx.lineStart;
         const target = match[1];
         const template = match[2];
-        // @ts-expect-error TS(6133): 'params' is declared but its value is never read.
         const params = match[3];
         const children = [
             elt(Type.TransclusionMark, start, start + 2),
@@ -866,7 +861,6 @@ function parsePlaceholdersInString(content, offset) {
  * @param parseContent - Optional function to parse full wikitext (including pragmas) for triple-quoted values
  */
 function parseAttributes(attrString, offset, 
-// @ts-expect-error TS(6133): 'isWidget' is declared but its value is never read... Remove this comment to see the full error message
 isWidget, parseInline, parseContent) {
     const elements = [];
     let pos = 0;
@@ -1326,7 +1320,6 @@ const placeholderTagBlockRe = /^(\s*)<\$([a-zA-Z][a-zA-Z0-9\-_]*)\$/;
 // Placeholder closing tag pattern: </$name$>
 const placeholderCloseTagBlockRe = /^(\s*)<\/\$([a-zA-Z][a-zA-Z0-9\-_]*)\$>/;
 // Self-closing check
-// @ts-expect-error TS(6133): 'selfClosingRe' is declared but its value is never... Remove this comment to see the full error message
 const selfClosingRe = /\/>\s*$/;
 export const HTMLBlock = {
     name: "HTMLBlock",
@@ -1886,12 +1879,9 @@ export const HTMLBlock = {
         }
         // Determine if this is a multi-line block with content
         if (!selfClose) {
-            // @ts-expect-error TS(6133): 'openRe' is declared but its value is never read.
             const openRe = new RegExp(`<${tagName.replace(/\$/g, '\\$')}(?:\\s|>|/>)`);
-            // @ts-expect-error TS(6133): 'closeRe' is declared but its value is never read.
             const closeRe = new RegExp(`</${tagName.replace(/\$/g, '\\$')}>`);
             // For multi-line: match closing tag at start of line with optional indent
-            // @ts-expect-error TS(6133): 'closeReWithIndent' is declared but its value is n... Remove this comment to see the full error message
             const closeReWithIndent = new RegExp(`^(\\s*)</${tagName.replace(/\$/g, '\\$')}>`);
             let blockEnd = openingTagLineEnd;
             let foundClose = false;
@@ -2350,7 +2340,6 @@ export const HTMLBlock = {
 // Handles: @@, @@.class, @@color:red;, @@color:red;.class
 // ============================================================================
 // Regex matching CSS styles: one or more property:value; pairs
-// @ts-expect-error TS(6133): 'blockCssStylesRe' is declared but its value is ne... Remove this comment to see the full error message
 const blockCssStylesRe = /^((?:[^\.\r\n\s:]+:[^\r\n;]+;)+)/;
 export const StyledBlock = {
     name: "StyledBlock",
@@ -2410,7 +2399,6 @@ export const StyledBlock = {
         // Find closing @@ on its own line
         let closingLine = cx.lineStart + line.text.length + 1;
         let contentEnd = closingLine;
-        // @ts-expect-error TS(6133): 'foundClose' is declared but its value is never re... Remove this comment to see the full error message
         let foundClose = false;
         while (closingLine < cx.input.length) {
             // Read until end of line

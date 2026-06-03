@@ -479,7 +479,6 @@ function getWidgetNames(): string[] {
       }
       // Also check widget modules using TiddlyWiki's module API
       if ($tw.modules?.forEachModuleOfType) {
-        // @ts-expect-error TS(6133): 'title' is declared but its value is never read.
         $tw.modules.forEachModuleOfType("widget", (title: string, mod: Record<string, unknown>) => {
           if (mod) {
             for (const exportName of Object.keys(mod)) {
@@ -494,7 +493,6 @@ function getWidgetNames(): string[] {
           }
         })
         // Also check widget-subclass modules (e.g., $log is a subclass of $action-log)
-        // @ts-expect-error TS(6133): 'title' is declared but its value is never read.
         $tw.modules.forEachModuleOfType("widget-subclass", (title: string, mod: Record<string, unknown>) => {
           if (mod) {
             const subclassName = (mod.name || mod.baseClass) as string | undefined

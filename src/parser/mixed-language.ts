@@ -4,7 +4,6 @@
  * Provides support for nested language parsing in code blocks and typed blocks.
  */
 
-// @ts-expect-error TS(6133): 'LanguageSupport' is declared but its value is nev... Remove this comment to see the full error message
 import { Language, LanguageSupport, LanguageDescription } from "@codemirror/language"
 import { parseMixed, SyntaxNodeRef, Input, Parser } from "@lezer/common"
 import { TiddlyWikiParser } from "./parser"

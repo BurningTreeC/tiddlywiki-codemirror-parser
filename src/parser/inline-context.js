@@ -5,7 +5,6 @@
  */
 import { Type } from "./types";
 import { 
-// @ts-expect-error TS(6133): 'elt' is declared but its value is never read.
 Element, InlineDelimiter, space } from "./core";
 // Flags for delimiter sides
 const Open = 1, Close = 2;

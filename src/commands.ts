@@ -4,7 +4,6 @@
  * TiddlyWiki-spezifische Editor-Befehle für CodeMirror 6.
  */
 
-// @ts-expect-error TS(6133): 'Line' is declared but its value is never read.
 import {StateCommand, Text, EditorState, EditorSelection, ChangeSpec, countColumn, Line, Extension} from "@codemirror/state"
 import {EditorView} from "@codemirror/view"
 import {syntaxTree, indentUnit, getIndentation} from "@codemirror/language"
@@ -38,7 +37,6 @@ class Context {
     }
   }
 
-  // @ts-expect-error TS(6133): 'add' is declared but its value is never read.
   marker(doc: Text, add: number): string {
     let marker = ""
     if (this.node.name == "OrderedList" || this.node.name == "BulletList") {
@@ -89,7 +87,6 @@ function getContext(node: SyntaxNode, doc: Text): Context[] {
   for (let i = nodes.length - 1; i >= 0; i--) {
     let node = nodes[i]
     let line = doc.lineAt(node.from)
-    // @ts-expect-error TS(6133): 'startPos' is declared but its value is never read... Remove this comment to see the full error message
     let startPos = node.from - line.from
     let match: RegExpExecArray | null
 

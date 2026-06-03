@@ -5,7 +5,6 @@
  */
 
 import { syntaxTree } from "@codemirror/language"
-// @ts-expect-error TS(2307): Cannot find module '@codemirror/lint' or its corre... Remove this comment to see the full error message
 import { Diagnostic, linter } from "@codemirror/lint"
 import { EditorView } from "@codemirror/view"
 import type { SyntaxNode } from "@lezer/common"

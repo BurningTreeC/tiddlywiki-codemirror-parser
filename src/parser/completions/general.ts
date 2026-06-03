@@ -7,7 +7,6 @@ import { Completion, CompletionContext, CompletionResult } from "@codemirror/aut
 import { syntaxTree } from "@codemirror/language"
 import { coreWidgets } from "./widget"
 import { commonMacros } from "./macro"
-// @ts-expect-error TS(6133): 'htmlGlobalAttributes' is declared but its value i... Remove this comment to see the full error message
 import { commonHtmlTags, htmlGlobalAttributes } from "./html"
 import { builtInVariables, selfClosingTags, extractLocalDefinitions, getTiddlerBoost, getTiddlerSortText } from "./common"
 

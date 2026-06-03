@@ -6,18 +6,15 @@
 
 import {
   Parser, Tree, TreeFragment, Input, PartialParse,
-  // @ts-expect-error TS(6133): 'NodeProp' is declared but its value is never read... Remove this comment to see the full error message
   NodeType, NodeSet, NodeProp, ParseWrapper
 } from "@lezer/common"
 import { styleTags, tags as t, Tag } from "@lezer/highlight"
 import { Type } from "./types"
 import {
   Element, BlockParser, InlineParser, PragmaParser,
-  // @ts-expect-error TS(6133): 'NodeSpec' is declared but its value is never read... Remove this comment to see the full error message
   TiddlyWikiConfig, NodeSpec
 } from "./core"
 import { BlockContext } from "./block-context"
-// @ts-expect-error TS(6133): 'InlineContext' is declared but its value is never... Remove this comment to see the full error message
 import { InlineContext, parseInline } from "./inline-context"
 import { DefaultPragmaParsers } from "./pragma-parsers"
 import { DefaultBlockParsers } from "./block-parsers"

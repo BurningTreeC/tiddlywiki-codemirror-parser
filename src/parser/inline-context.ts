@@ -6,9 +6,7 @@
 
 import { Type } from "./types"
 import {
-  // @ts-expect-error TS(6133): 'elt' is declared but its value is never read.
   Element, elt, InlineDelimiter, DelimiterType,
-  // @ts-expect-error TS(6133): 'InlineParser' is declared but its value is never ... Remove this comment to see the full error message
   InlineParser, space, Punctuation, Ch
 } from "./core"
 import type { TiddlyWikiParser } from "./parser"
