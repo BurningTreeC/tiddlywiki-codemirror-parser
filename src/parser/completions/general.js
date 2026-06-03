@@ -14,14 +14,14 @@ import { builtInVariables, selfClosingTags, extractLocalDefinitions, getTiddlerB
 function isInSpecificContext(textBefore) {
     // Check for patterns that other completion sources handle
     const patterns = [
-        /<[a-zA-Z$][^>]*$/,
-        /<<[^>]*$/,
-        /\[\[[^\]]*$/,
-        /\{\{[^}]*$/,
-        /\[img\[[^\]]*$/,
-        /\[[^\[\]]*$/,
-        /^\s*\\[\w]*$/,
-        /^\s*\\rules\s+(only|except)\s+/,
+        /<[a-zA-Z$][^>]*$/, // HTML tag or widget
+        /<<[^>]*$/, // Macro call
+        /\[\[[^\]]*$/, // Link
+        /\{\{[^}]*$/, // Transclusion
+        /\[img\[[^\]]*$/, // Image
+        /\[[^\[\]]*$/, // Filter (inside brackets)
+        /^\s*\\[\w]*$/, // Pragma at line start
+        /^\s*\\rules\s+(only|except)\s+/, // Rules pragma
         /<%([ \t]*\w*)?$/, // Conditional
     ];
     return patterns.some(p => p.test(textBefore));

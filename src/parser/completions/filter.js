@@ -506,7 +506,7 @@ function createFilterOperatorResult(context, partial, _matchLength, inFilterCont
             label: fn,
             type: "function",
             detail: paramCount > 0 ? `function (${paramCount} param${paramCount > 1 ? 's' : ''})` : "function",
-            boost: 5,
+            boost: 5, // Boost local functions
             apply: (view, _completion, from, to) => {
                 const mode = getFilterBracketMode ? getFilterBracketMode() : "always";
                 const textAfter = view.state.sliceDoc(to, to + 2);

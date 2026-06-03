@@ -162,7 +162,7 @@ export function htmlTagCompletion(context) {
             displayLabel: "<!-- comment -->",
             type: "keyword",
             detail: "comment",
-            boost: m[0] === "<!" ? 10 : 0,
+            boost: m[0] === "<!" ? 10 : 0, // Boost when typing "<!""
             apply: (view, _completion, from, to) => {
                 const insert = "<!-- comment -->";
                 // Select "comment" so user can immediately type their comment

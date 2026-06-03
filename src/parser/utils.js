@@ -124,8 +124,8 @@ export function createFilterTextRef(content, refStart, refEnd) {
     if (placeholderMatch) {
         const paramName = placeholderMatch[1];
         const children = [
-            elt(Type.TransclusionMark, refStart, refStart + 1),
-            elt(Type.PlaceholderMark, contentStart, contentStart + 1),
+            elt(Type.TransclusionMark, refStart, refStart + 1), // {
+            elt(Type.PlaceholderMark, contentStart, contentStart + 1), // $
             elt(Type.VariableName, contentStart + 1, contentStart + 1 + paramName.length),
             elt(Type.PlaceholderMark, contentEnd - 1, contentEnd), // $
         ];
@@ -182,8 +182,8 @@ export function createFilterVariable(content, varStart, varEnd) {
     if (substitutedMatch) {
         const paramName = substitutedMatch[1];
         const children = [
-            elt(Type.MacroCallMark, varStart, varStart + 1),
-            elt(Type.SubstitutedParamMark, contentStart, contentStart + 2),
+            elt(Type.MacroCallMark, varStart, varStart + 1), // <
+            elt(Type.SubstitutedParamMark, contentStart, contentStart + 2), // __
             elt(Type.SubstitutedParamName, contentStart + 2, contentStart + 2 + paramName.length),
             elt(Type.SubstitutedParamMark, contentEnd - 2, contentEnd), // __
         ];
@@ -197,8 +197,8 @@ export function createFilterVariable(content, varStart, varEnd) {
     if (placeholderMatch) {
         const paramName = placeholderMatch[1];
         const children = [
-            elt(Type.MacroCallMark, varStart, varStart + 1),
-            elt(Type.PlaceholderMark, contentStart, contentStart + 1),
+            elt(Type.MacroCallMark, varStart, varStart + 1), // <
+            elt(Type.PlaceholderMark, contentStart, contentStart + 1), // $
             elt(Type.VariableName, contentStart + 1, contentStart + 1 + paramName.length),
             elt(Type.PlaceholderMark, contentEnd - 1, contentEnd), // $
         ];
@@ -209,7 +209,7 @@ export function createFilterVariable(content, varStart, varEnd) {
     }
     // Regular variable reference
     const children = [
-        elt(Type.MacroCallMark, varStart, varStart + 1),
+        elt(Type.MacroCallMark, varStart, varStart + 1), // <
         elt(Type.VariableName, contentStart, contentEnd),
     ];
     if (hasClosingAngle) {
@@ -237,8 +237,8 @@ export function createFilterMultiVariable(content, varStart, varEnd) {
     if (substitutedMatch) {
         const paramName = substitutedMatch[1];
         const children = [
-            elt(Type.MacroCallMark, varStart, varStart + 1),
-            elt(Type.SubstitutedParamMark, contentStart, contentStart + 2),
+            elt(Type.MacroCallMark, varStart, varStart + 1), // (
+            elt(Type.SubstitutedParamMark, contentStart, contentStart + 2), // __
             elt(Type.SubstitutedParamName, contentStart + 2, contentStart + 2 + paramName.length),
             elt(Type.SubstitutedParamMark, contentEnd - 2, contentEnd), // __
         ];
@@ -252,8 +252,8 @@ export function createFilterMultiVariable(content, varStart, varEnd) {
     if (placeholderMatch) {
         const paramName = placeholderMatch[1];
         const children = [
-            elt(Type.MacroCallMark, varStart, varStart + 1),
-            elt(Type.PlaceholderMark, contentStart, contentStart + 1),
+            elt(Type.MacroCallMark, varStart, varStart + 1), // (
+            elt(Type.PlaceholderMark, contentStart, contentStart + 1), // $
             elt(Type.VariableName, contentStart + 1, contentStart + 1 + paramName.length),
             elt(Type.PlaceholderMark, contentEnd - 1, contentEnd), // $
         ];
@@ -268,7 +268,7 @@ export function createFilterMultiVariable(content, varStart, varEnd) {
         const varName = content.substring(0, sepIndex);
         const separator = content.substring(sepIndex + 2);
         const children = [
-            elt(Type.MacroCallMark, varStart, varStart + 1),
+            elt(Type.MacroCallMark, varStart, varStart + 1), // (
             elt(Type.VariableName, contentStart, contentStart + varName.length),
             elt(Type.MVVSeparatorMark, contentStart + varName.length, contentStart + varName.length + 2), // ||
         ];
@@ -282,7 +282,7 @@ export function createFilterMultiVariable(content, varStart, varEnd) {
     }
     // Regular multi-valued variable reference
     const children = [
-        elt(Type.MacroCallMark, varStart, varStart + 1),
+        elt(Type.MacroCallMark, varStart, varStart + 1), // (
         elt(Type.VariableName, contentStart, contentEnd),
     ];
     if (hasClosingParen) {
@@ -354,7 +354,7 @@ export function parseFilterOperandPlaceholders(content, offset) {
         const paramName = match[1];
         // Add the placeholder node with proper children
         const placeholderChildren = [
-            elt(Type.PlaceholderMark, offset + matchStart, offset + matchStart + 1),
+            elt(Type.PlaceholderMark, offset + matchStart, offset + matchStart + 1), // $
             elt(Type.VariableName, offset + matchStart + 1, offset + matchStart + 1 + paramName.length),
             elt(Type.PlaceholderMark, offset + matchEnd - 1, offset + matchEnd) // $
         ];
@@ -446,7 +446,7 @@ export function parseFilterExpressionDetailed(filterContent, offset) {
                         const varEnd = offset + pos + 1; // Include >
                         const innerStart = offset + operandStart;
                         const nameChildren = [
-                            elt(Type.SubstitutedParamMark, innerStart, innerStart + 2),
+                            elt(Type.SubstitutedParamMark, innerStart, innerStart + 2), // __
                             elt(Type.SubstitutedParamName, innerStart + 2, innerStart + 2 + paramName.length),
                             elt(Type.SubstitutedParamMark, innerStart + 2 + paramName.length, offset + pos), // __
                         ];
@@ -559,7 +559,7 @@ export function parseFilterExpressionDetailed(filterContent, offset) {
                         const paramName = placeholderMatch[1];
                         const matchEnd = pos + placeholderMatch[0].length;
                         const placeholderChildren = [
-                            elt(Type.PlaceholderMark, offset + pos, offset + pos + 1),
+                            elt(Type.PlaceholderMark, offset + pos, offset + pos + 1), // $
                             elt(Type.VariableName, offset + pos + 1, offset + pos + 1 + paramName.length),
                             elt(Type.PlaceholderMark, offset + matchEnd - 1, offset + matchEnd) // $
                         ];
@@ -622,7 +622,7 @@ export function parseFilterExpressionDetailed(filterContent, offset) {
                 const paramName = placeholderMatch[1];
                 const matchEnd = pos + placeholderMatch[0].length;
                 const placeholderChildren = [
-                    elt(Type.PlaceholderMark, offset + pos, offset + pos + 1),
+                    elt(Type.PlaceholderMark, offset + pos, offset + pos + 1), // $
                     elt(Type.VariableName, offset + pos + 1, offset + pos + 1 + paramName.length),
                     elt(Type.PlaceholderMark, offset + matchEnd - 1, offset + matchEnd) // $
                 ];
@@ -751,7 +751,7 @@ export function parseTransclusionTarget(target, offset) {
                 // $(variable)$ - variable substitution
                 const varName = match[2];
                 children.push(elt(Type.Variable, partOffset + matchStart, partOffset + matchEnd, [
-                    elt(Type.PlaceholderMark, partOffset + matchStart, partOffset + matchStart + 2),
+                    elt(Type.PlaceholderMark, partOffset + matchStart, partOffset + matchStart + 2), // $(
                     elt(Type.VariableName, partOffset + matchStart + 2, partOffset + matchStart + 2 + varName.length),
                     elt(Type.PlaceholderMark, partOffset + matchEnd - 2, partOffset + matchEnd) // )$
                 ]));
@@ -760,7 +760,7 @@ export function parseTransclusionTarget(target, offset) {
                 // $param$ - parameter substitution
                 const paramName = match[3];
                 children.push(elt(Type.Placeholder, partOffset + matchStart, partOffset + matchEnd, [
-                    elt(Type.PlaceholderMark, partOffset + matchStart, partOffset + matchStart + 1),
+                    elt(Type.PlaceholderMark, partOffset + matchStart, partOffset + matchStart + 1), // $
                     elt(Type.VariableName, partOffset + matchStart + 1, partOffset + matchStart + 1 + paramName.length),
                     elt(Type.PlaceholderMark, partOffset + matchEnd - 1, partOffset + matchEnd) // $
                 ]));
@@ -1032,7 +1032,7 @@ export function parseFilterExpression(content, offset, options = {}) {
                 const paramName = placeholderMatch[1];
                 const matchEnd = pos + placeholderMatch[0].length;
                 const placeholderChildren = [
-                    elt(Type.PlaceholderMark, offset + pos, offset + pos + 1),
+                    elt(Type.PlaceholderMark, offset + pos, offset + pos + 1), // $
                     elt(Type.VariableName, offset + pos + 1, offset + pos + 1 + paramName.length),
                     elt(Type.PlaceholderMark, offset + matchEnd - 1, offset + matchEnd) // $
                 ];
@@ -1103,7 +1103,7 @@ function parseFilterStep(content, offset) {
                 if (substitutedMatch) {
                     const paramName = substitutedMatch[1];
                     const children = [
-                        elt(Type.SubstitutedParamMark, innerStart, innerStart + 2),
+                        elt(Type.SubstitutedParamMark, innerStart, innerStart + 2), // __
                         elt(Type.SubstitutedParamName, innerStart + 2, innerStart + 2 + paramName.length),
                         elt(Type.SubstitutedParamMark, innerStart + 2 + paramName.length, innerEnd), // __
                     ];
@@ -1298,7 +1298,7 @@ export function parseMacroParams(paramsStr, offset) {
                 const filterOffset = offset + valueStart + 3;
                 const filterChildren = parseFilterExpressionDetailed(filterContent, filterOffset);
                 const valueChildren = [
-                    elt(Type.FilteredTransclusionMark, offset + valueStart, offset + valueStart + 3),
+                    elt(Type.FilteredTransclusionMark, offset + valueStart, offset + valueStart + 3), // {{{
                     elt(Type.FilterExpression, filterOffset, filterOffset + filterContent.length, filterChildren),
                     elt(Type.FilteredTransclusionMark, offset + valueEnd - 3, offset + valueEnd), // }}}
                 ];
@@ -1317,7 +1317,7 @@ export function parseMacroParams(paramsStr, offset) {
                 const targetOffset = offset + valueStart + 2;
                 const targetChildren = parseTransclusionTarget(targetContent, targetOffset);
                 const valueChildren = [
-                    elt(Type.TransclusionMark, offset + valueStart, offset + valueStart + 2),
+                    elt(Type.TransclusionMark, offset + valueStart, offset + valueStart + 2), // {{
                     ...targetChildren,
                     elt(Type.TransclusionMark, offset + valueEnd - 2, offset + valueEnd), // }}
                 ];
@@ -1379,7 +1379,7 @@ export function parseMacroParams(paramsStr, offset) {
                     if (placeholderElements.length > 0 && placeholderElements.some(el => el.type === Type.Placeholder)) {
                         // Has placeholders - create value with children
                         const valueChildren = [
-                            elt(Type.Mark, offset + valueStart, offset + valueStart + 1),
+                            elt(Type.Mark, offset + valueStart, offset + valueStart + 1), // opening quote
                             ...placeholderElements,
                             elt(Type.Mark, offset + valueEnd - 1, offset + valueEnd) // closing quote
                         ];
@@ -1448,7 +1448,7 @@ export function parseMacroParams(paramsStr, offset) {
                 if (placeholderElements.length > 0 && placeholderElements.some(el => el.type === Type.Placeholder)) {
                     // Has placeholders - create value with children
                     const valueChildren = [
-                        elt(Type.Mark, offset + valueStart, offset + valueStart + 1),
+                        elt(Type.Mark, offset + valueStart, offset + valueStart + 1), // opening quote
                         ...placeholderElements,
                         elt(Type.Mark, offset + pos - 1, offset + pos) // closing quote
                     ];

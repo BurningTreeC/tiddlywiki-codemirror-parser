@@ -63,11 +63,11 @@ export const ACTION_IMPLICIT_VARIABLES = {
     "$linkcatcher": ["navigateTo", "modifier"],
     "$messagecatcher": ["modifier", "event-*", "event-paramObject-*", "list-event", "list-event-paramObject"],
     "$eventcatcher": [
-        "dom-*",
+        "dom-*", // All DOM attributes with dom- prefix (from collectDOMVariables)
         "modifier",
         "event-mousebutton",
         "event-type",
-        "event-detail-*",
+        "event-detail-*", // Properties in event.detail with event-detail- prefix
         "tv-popup-coords",
         "tv-popup-abs-coords",
         "tv-widgetnode-width",

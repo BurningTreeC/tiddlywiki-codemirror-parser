@@ -14,13 +14,13 @@ import { createDelimiterParser, parseTransclusionTarget, parseMacroParams as par
 // These are wiki syntax characters that might need escaping
 const escapableChars = new Set([
     // Formatting characters
-    "'".charCodeAt(0),
-    "/".charCodeAt(0),
-    "_".charCodeAt(0),
-    "^".charCodeAt(0),
-    ",".charCodeAt(0),
-    "~".charCodeAt(0),
-    "`".charCodeAt(0),
+    "'".charCodeAt(0), // Bold
+    "/".charCodeAt(0), // Italic
+    "_".charCodeAt(0), // Underscore
+    "^".charCodeAt(0), // Superscript
+    ",".charCodeAt(0), // Subscript
+    "~".charCodeAt(0), // Strikethrough / CamelCase suppression
+    "`".charCodeAt(0), // Code
     // Brackets and delimiters
     "[".charCodeAt(0),
     "]".charCodeAt(0),
@@ -132,7 +132,7 @@ export const InlineCode = {
 // ============================================================================
 export const InlineKaTeX = {
     name: "InlineKaTeX",
-    after: "InlineCode",
+    after: "InlineCode", // Position after InlineCode
     parse(cx, next, pos) {
         // Check for $$ (but not $$$)
         if (next !== Ch.Dollar)
@@ -775,7 +775,7 @@ export const MVVDisplayInline = {
             const varName = varMatch[1];
             const separator = varMatch[2];
             const children = [
-                cx.elt(Type.MVVDisplayMark, pos, pos + 2),
+                cx.elt(Type.MVVDisplayMark, pos, pos + 2), // ((
                 cx.elt(Type.VariableName, pos + 2, pos + 2 + varName.length),
             ];
             if (separator !== undefined) {
@@ -872,7 +872,7 @@ export const MacroCall = {
             const paramName = substitutedMatch[1];
             const nameStart = pos + 2;
             const nameChildren = [
-                cx.elt(Type.SubstitutedParamMark, nameStart, nameStart + 2),
+                cx.elt(Type.SubstitutedParamMark, nameStart, nameStart + 2), // __
                 cx.elt(Type.SubstitutedParamName, nameStart + 2, nameStart + 2 + paramName.length),
                 cx.elt(Type.SubstitutedParamMark, nameStart + 2 + paramName.length, nameStart + name.length), // __
             ];
@@ -897,7 +897,7 @@ export const MacroCall = {
                 const paramName = placeholderMatch[1];
                 const nameStart = pos + 2;
                 const placeholderChildren = [
-                    cx.elt(Type.PlaceholderMark, nameStart, nameStart + 1),
+                    cx.elt(Type.PlaceholderMark, nameStart, nameStart + 1), // $
                     cx.elt(Type.VariableName, nameStart + 1, nameStart + 1 + paramName.length),
                     cx.elt(Type.PlaceholderMark, nameStart + name.length - 1, nameStart + name.length), // $
                 ];
@@ -1188,7 +1188,7 @@ function parsePlaceholdersInString(cx, content, offset) {
         }
         // Add the placeholder node with proper children
         const placeholderChildren = [
-            cx.elt(Type.PlaceholderMark, offset + matchStart, offset + matchStart + 1),
+            cx.elt(Type.PlaceholderMark, offset + matchStart, offset + matchStart + 1), // $
             cx.elt(Type.VariableName, offset + matchStart + 1, offset + matchStart + 1 + paramName.length),
             cx.elt(Type.PlaceholderMark, offset + matchEnd - 1, offset + matchEnd) // $
         ];
@@ -1310,7 +1310,7 @@ function parseInlineAttributes(cx, attrString, offset) {
                 const filterContent = attrString.slice(stringStart, stringEnd);
                 const filterChildren = parseFilterExpressionDetailed(filterContent, offset + stringStart);
                 const valueChildren = [
-                    cx.elt(Type.Mark, offset + valueStart, offset + stringStart),
+                    cx.elt(Type.Mark, offset + valueStart, offset + stringStart), // Opening quote
                     cx.elt(Type.FilterExpression, offset + stringStart, offset + stringEnd, filterChildren),
                     cx.elt(Type.Mark, offset + stringEnd, offset + valueEnd) // Closing quote
                 ];
@@ -1328,7 +1328,7 @@ function parseInlineAttributes(cx, attrString, offset) {
                     // Use parseContent for full document parsing (including pragmas like \procedure, \define, etc.)
                     const wikitextElements = cx.parser.parseContent(stringContent, offset + stringStart);
                     const valueChildren = [
-                        cx.elt(Type.Mark, offset + valueStart, offset + stringStart),
+                        cx.elt(Type.Mark, offset + valueStart, offset + stringStart), // Opening quote
                         ...wikitextElements,
                         cx.elt(Type.Mark, offset + stringEnd, offset + valueEnd) // Closing quote
                     ];
@@ -1347,7 +1347,7 @@ function parseInlineAttributes(cx, attrString, offset) {
                 const placeholderChildren = parsePlaceholdersInString(cx, stringContent, offset + stringStart);
                 if (placeholderChildren.length > 0) {
                     const valueChildren = [
-                        cx.elt(Type.Mark, offset + valueStart, offset + stringStart),
+                        cx.elt(Type.Mark, offset + valueStart, offset + stringStart), // Opening quote
                         ...placeholderChildren,
                         cx.elt(Type.Mark, offset + stringEnd, offset + valueEnd) // Closing quote
                     ];
@@ -1471,7 +1471,7 @@ function parseInlineAttributes(cx, attrString, offset) {
                 const paramName = substitutedMatch[1];
                 const nameStart2 = offset + macroContentStart;
                 const nameChildren = [
-                    cx.elt(Type.SubstitutedParamMark, nameStart2, nameStart2 + 2),
+                    cx.elt(Type.SubstitutedParamMark, nameStart2, nameStart2 + 2), // __
                     cx.elt(Type.SubstitutedParamName, nameStart2 + 2, nameStart2 + 2 + paramName.length),
                     cx.elt(Type.SubstitutedParamMark, nameStart2 + 2 + paramName.length, nameStart2 + macroName.length), // __
                 ];
@@ -1498,7 +1498,7 @@ function parseInlineAttributes(cx, attrString, offset) {
                 pos += mvvMatch[0].length;
                 valueEnd = pos;
                 const valueChildren = [
-                    cx.elt(Type.MVVDisplayMark, offset + valueStart, offset + openMarkEnd),
+                    cx.elt(Type.MVVDisplayMark, offset + valueStart, offset + openMarkEnd), // ((
                     cx.elt(Type.VariableName, offset + openMarkEnd, offset + openMarkEnd + varName.length),
                 ];
                 if (separator !== undefined) {
@@ -1678,12 +1678,12 @@ export const Widget = {
                 const placeholderStart = pos + 1; // After <
                 const placeholderNodeEnd = pos + placeholderEnd; // End of $param$
                 const placeholderChildren = [
-                    cx.elt(Type.PlaceholderMark, placeholderStart, placeholderStart + 1),
+                    cx.elt(Type.PlaceholderMark, placeholderStart, placeholderStart + 1), // $
                     cx.elt(Type.VariableName, placeholderStart + 1, placeholderStart + 1 + paramName.length),
                     cx.elt(Type.PlaceholderMark, placeholderNodeEnd - 1, placeholderNodeEnd) // $
                 ];
                 const children = [
-                    cx.elt(Type.TagMark, pos, pos + 1),
+                    cx.elt(Type.TagMark, pos, pos + 1), // <
                     cx.elt(Type.Placeholder, placeholderStart, placeholderNodeEnd, placeholderChildren),
                 ];
                 // Parse attributes if any
@@ -1716,12 +1716,12 @@ export const Widget = {
                         const closePlaceholderStart = closeTagStart + 2; // After </
                         const closePlaceholderEnd = closeTagEnd - 1; // Before >
                         const closePlaceholderChildren = [
-                            cx.elt(Type.PlaceholderMark, closePlaceholderStart, closePlaceholderStart + 1),
+                            cx.elt(Type.PlaceholderMark, closePlaceholderStart, closePlaceholderStart + 1), // $
                             cx.elt(Type.VariableName, closePlaceholderStart + 1, closePlaceholderStart + 1 + paramName.length),
                             cx.elt(Type.PlaceholderMark, closePlaceholderEnd - 1, closePlaceholderEnd) // $
                         ];
                         const closeTagChildren = [
-                            cx.elt(Type.TagMark, closeTagStart, closeTagStart + 2),
+                            cx.elt(Type.TagMark, closeTagStart, closeTagStart + 2), // </
                             cx.elt(Type.Placeholder, closePlaceholderStart, closePlaceholderEnd, closePlaceholderChildren),
                             cx.elt(Type.TagMark, closeTagEnd - 1, closeTagEnd) // >
                         ];
@@ -1736,12 +1736,12 @@ export const Widget = {
             const placeholderStart = pos + 1; // After <
             const placeholderNodeEnd = pos + placeholderEnd; // End of $param$
             const placeholderChildren = [
-                cx.elt(Type.PlaceholderMark, placeholderStart, placeholderStart + 1),
+                cx.elt(Type.PlaceholderMark, placeholderStart, placeholderStart + 1), // $
                 cx.elt(Type.VariableName, placeholderStart + 1, placeholderStart + 1 + paramName.length),
                 cx.elt(Type.PlaceholderMark, placeholderNodeEnd - 1, placeholderNodeEnd) // $
             ];
             const children = [
-                cx.elt(Type.TagMark, pos, pos + 1),
+                cx.elt(Type.TagMark, pos, pos + 1), // <
                 cx.elt(Type.Placeholder, placeholderStart, placeholderNodeEnd, placeholderChildren),
             ];
             return cx.addElement(cx.elt(Type.InlineWidget, pos, placeholderNodeEnd, children));
@@ -1759,8 +1759,8 @@ export const Widget = {
             if (nextChar === '>') {
                 // <$> - complete but undefined widget
                 const children = [
-                    cx.elt(Type.TagMark, pos, pos + 1),
-                    cx.elt(Type.WidgetName, pos + 1, pos + 2),
+                    cx.elt(Type.TagMark, pos, pos + 1), // <
+                    cx.elt(Type.WidgetName, pos + 1, pos + 2), // $
                     cx.elt(Type.TagMark, pos + 2, pos + 3), // >
                 ];
                 return cx.addElement(cx.elt(Type.InlineWidget, pos, pos + 3, children));
@@ -1768,9 +1768,9 @@ export const Widget = {
             else if (nextChar === '/' && text[afterName + 1] === '>') {
                 // <$/> - self-closing but undefined widget
                 const children = [
-                    cx.elt(Type.TagMark, pos, pos + 1),
-                    cx.elt(Type.WidgetName, pos + 1, pos + 2),
-                    cx.elt(Type.SelfClosingMarker, pos + 2, pos + 3),
+                    cx.elt(Type.TagMark, pos, pos + 1), // <
+                    cx.elt(Type.WidgetName, pos + 1, pos + 2), // $
+                    cx.elt(Type.SelfClosingMarker, pos + 2, pos + 3), // /
                     cx.elt(Type.TagMark, pos + 3, pos + 4), // >
                 ];
                 return cx.addElement(cx.elt(Type.InlineWidget, pos, pos + 4, children));
@@ -1790,7 +1790,7 @@ export const Widget = {
             const end = pos + incompleteEnd;
             const attrString = text.slice(afterName, incompleteEnd);
             const children = [
-                cx.elt(Type.TagMark, pos, pos + 1),
+                cx.elt(Type.TagMark, pos, pos + 1), // <
                 cx.elt(Type.WidgetName, pos + 1, pos + 1 + name.length),
             ];
             if (attrString.trim()) {
@@ -1802,7 +1802,7 @@ export const Widget = {
         const openTagEnd = pos + afterName + tagResult.end;
         const attrString = text.slice(afterName, afterName + tagResult.end - (tagResult.selfClose ? 2 : 1));
         const children = [
-            cx.elt(Type.TagMark, pos, pos + 1),
+            cx.elt(Type.TagMark, pos, pos + 1), // <
             cx.elt(Type.WidgetName, pos + 1, pos + 1 + name.length),
         ];
         // Parse attributes
@@ -2035,7 +2035,7 @@ export const Widget = {
         const closeTagStart = contentEnd;
         const closeTagEnd = closeTagStart + closeTagPattern.length;
         const closeTagChildren = [
-            cx.elt(Type.TagMark, closeTagStart, closeTagStart + 2),
+            cx.elt(Type.TagMark, closeTagStart, closeTagStart + 2), // </
             cx.elt(Type.WidgetName, closeTagStart + 2, closeTagEnd - 1),
             cx.elt(Type.TagMark, closeTagEnd - 1, closeTagEnd) // >
         ];
@@ -2069,9 +2069,9 @@ export const WidgetCloseTag = {
             const placeholderStart = pos + 2; // after </
             const placeholderEnd = end - 1; // before >
             const children = [
-                cx.elt(Type.TagMark, pos, pos + 2),
+                cx.elt(Type.TagMark, pos, pos + 2), // </
                 cx.elt(Type.Placeholder, placeholderStart, placeholderEnd, [
-                    cx.elt(Type.PlaceholderMark, placeholderStart, placeholderStart + 1),
+                    cx.elt(Type.PlaceholderMark, placeholderStart, placeholderStart + 1), // $
                     cx.elt(Type.VariableName, placeholderStart + 1, placeholderStart + 1 + paramName.length),
                     cx.elt(Type.PlaceholderMark, placeholderEnd - 1, placeholderEnd) // $
                 ]),
@@ -2107,14 +2107,14 @@ export const WidgetCloseTag = {
                 return -1;
             }
             const children = [
-                cx.elt(Type.TagMark, pos, pos + 2),
-                cx.elt(Type.WidgetName, pos + 2, pos + 3),
+                cx.elt(Type.TagMark, pos, pos + 2), // </
+                cx.elt(Type.WidgetName, pos + 2, pos + 3), // $
                 cx.elt(Type.TagMark, end - 1, end), // >
             ];
             return cx.addElement(cx.elt(Type.WidgetEnd, pos, end, children));
         }
         const children = [
-            cx.elt(Type.TagMark, pos, pos + 2),
+            cx.elt(Type.TagMark, pos, pos + 2), // </
             cx.elt(Type.WidgetName, pos + 2, pos + 2 + name.length),
         ];
         if (hasClosingBracket) {
@@ -2150,7 +2150,7 @@ export const HTMLTag = {
             const end = pos + incompleteEnd;
             const attrString = text.slice(afterName, incompleteEnd);
             const children = [
-                cx.elt(Type.TagMark, pos, pos + 1),
+                cx.elt(Type.TagMark, pos, pos + 1), // <
                 cx.elt(Type.TagName, pos + 1, pos + 1 + name.length),
             ];
             if (attrString.trim()) {
@@ -2162,7 +2162,7 @@ export const HTMLTag = {
         const openTagEnd = pos + afterName + tagResult.end;
         const attrString = text.slice(afterName, afterName + tagResult.end - (tagResult.selfClose ? 2 : 1));
         const openTagChildren = [
-            cx.elt(Type.TagMark, pos, pos + 1),
+            cx.elt(Type.TagMark, pos, pos + 1), // <
             cx.elt(Type.TagName, pos + 1, pos + 1 + name.length),
         ];
         // Parse attributes
@@ -2196,7 +2196,7 @@ export const HTMLTag = {
         const closeTagStart = contentEnd;
         const closeTagEnd = closeTagStart + closeTagPattern.length;
         const closeTagChildren = [
-            cx.elt(Type.TagMark, closeTagStart, closeTagStart + 2),
+            cx.elt(Type.TagMark, closeTagStart, closeTagStart + 2), // </
             cx.elt(Type.TagName, closeTagStart + 2, closeTagEnd - 1),
             cx.elt(Type.TagMark, closeTagEnd - 1, closeTagEnd) // >
         ];
@@ -2237,7 +2237,7 @@ export const HTMLCloseTag = {
         const hasClosingBracket = !!match[2];
         const end = pos + match[0].length;
         const children = [
-            cx.elt(Type.TagMark, pos, pos + 2),
+            cx.elt(Type.TagMark, pos, pos + 2), // </
             cx.elt(Type.TagName, pos + 2, pos + 2 + name.length),
         ];
         if (hasClosingBracket) {
@@ -2269,7 +2269,7 @@ export const InlineComment = {
                 cx.char(searchPos + 2) === 62) { // '>'
                 const end = searchPos + 3;
                 return cx.addElement(cx.elt(Type.CommentBlock, pos, end, [
-                    cx.elt(Type.CommentMarker, pos, pos + 4),
+                    cx.elt(Type.CommentMarker, pos, pos + 4), // <!--
                     cx.elt(Type.CommentMarker, end - 3, end) // -->
                 ]));
             }
@@ -2319,7 +2319,7 @@ export const VariableSubstitution = {
         const varNameStart = pos + 2; // After $(
         const varNameEnd = varNameStart + varName.length;
         const children = [
-            cx.elt(Type.VariableMark, pos, pos + 2),
+            cx.elt(Type.VariableMark, pos, pos + 2), // $(
             cx.elt(Type.VariableName, varNameStart, varNameEnd),
             cx.elt(Type.VariableMark, varNameEnd, end) // )$
         ];
@@ -2344,7 +2344,7 @@ export const PlaceholderParam = {
         const paramNameStart = pos + 1; // After $
         const paramNameEnd = paramNameStart + paramName.length;
         const children = [
-            cx.elt(Type.PlaceholderMark, pos, pos + 1),
+            cx.elt(Type.PlaceholderMark, pos, pos + 1), // $
             cx.elt(Type.VariableName, paramNameStart, paramNameEnd),
             cx.elt(Type.PlaceholderMark, paramNameEnd, end) // $
         ];
@@ -2528,7 +2528,7 @@ export const ConditionalSyntax = {
 // ============================================================================
 export const DefaultInlineParsers = [
     InlineCode,
-    ConditionalSyntax,
+    ConditionalSyntax, // Must come early to catch <%
     Escape,
     Entity,
     Bold,
@@ -2541,20 +2541,20 @@ export const DefaultInlineParsers = [
     WikiLink,
     ExternalLink,
     ImageLink,
-    IncompleteFilterRun,
-    FilteredTransclusion,
+    IncompleteFilterRun, // Must come after WikiLink/ExternalLink/ImageLink - catches [operator... in plain text
+    FilteredTransclusion, // Must come before Transclusion
     Transclusion,
-    MVVDisplayInline,
+    MVVDisplayInline, // ((varname)) / (((filter))) - must come after Transclusion
     MacroCall,
     Widget,
-    WidgetCloseTag,
-    InlineComment,
+    WidgetCloseTag, // Standalone/incomplete closing widget tags
+    InlineComment, // Must come before HTMLTag to catch <!-- before < is matched
     HTMLTag,
-    HTMLCloseTag,
+    HTMLCloseTag, // Standalone/incomplete closing HTML tags
     Dash,
-    VariableSubstitution,
+    VariableSubstitution, // $(var)$ - must come before SystemLink and PlaceholderParam
     SystemLink,
-    PlaceholderParam,
+    PlaceholderParam, // $param$ - must come after VariableSubstitution
     CamelCaseLink,
     URLAutoLink,
 ];

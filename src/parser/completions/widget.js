@@ -92,7 +92,7 @@ export const widgetAttributes = {
     "$edit-text": ["tiddler", "field", "index", "default", "tag", "type", "placeholder", "focusPopup", "focus", "tabindex", "autocomplete", "cancelPopups", "inputActions", "refreshTitle", "disabled", "fileDrop", "rows", "minHeight", "size", "class"],
     "$element": ["tag", "attributes"],
     "$encrypt": ["filter"],
-    "$eventcatcher": ["selector", "matchSelector", "stopPropagation", "tag", "class", "events"],
+    "$eventcatcher": ["selector", "matchSelector", "stopPropagation", "tag", "class", "events"], // DOM events added dynamically
     "$fieldmangler": ["tiddler"],
     "$fill": ["$name"],
     "$genesis": ["$type", "$tag", "$names", "$values", "$mode"],
@@ -105,7 +105,7 @@ export const widgetAttributes = {
     "$list": ["filter", "variable", "counter", "emptyMessage", "storyview", "history", "template", "editTemplate", "join"],
     "$log": ["$$filter", "$$message", "$$all"],
     "$macrocall": ["$name", "$type", "$output"],
-    "$messagecatcher": ["type", "actions"],
+    "$messagecatcher": ["type", "actions"], // tm-* messages added dynamically
     "$navigator": ["story", "history", "openLinkFromInsideRiver", "openLinkFromOutsideRiver", "relinkOnRename"],
     "$password": ["name", "class"],
     "$qualify": ["name"],

@@ -33,7 +33,7 @@ let _currentEngine = null;
  * TiddlyWiki content types that activate this plugin
  */
 const TW_TYPES = [
-    "",
+    "", // Empty = default wikitext
     "text/vnd.tiddlywiki",
     "text/x-tiddlywiki",
     "application/x-tiddler-dictionary"
@@ -71,7 +71,7 @@ const cache = {
     tagNames: null,
     macroNames: null,
     widgetNames: null,
-    globalWidgetDefs: null,
+    globalWidgetDefs: null, // widget name -> params
     filterOperators: null,
     wikiRules: null,
 };
@@ -154,12 +154,13 @@ function installChangeListener() {
  * Get cached data or compute it
  */
 function getCached(key, compute) {
-    const entry = cache[key];
+    const typedCache = cache;
+    const entry = typedCache[key];
     if (entry && entry.valid) {
         return entry.data;
     }
     const data = compute();
-    cache[key] = { data, valid: true };
+    typedCache[key] = { data, valid: true };
     return data;
 }
 /**
@@ -682,8 +683,8 @@ function buildLanguageSupport(context, skipNestedLanguageExtensions = false) {
     // Store engine reference for context-aware completions
     _currentEngine = context.engine;
     return tiddlywiki({
-        addKeymap: false,
-        codeLanguages: getCodeLanguages(),
+        addKeymap: false, // We add our own keymap separately
+        codeLanguages: getCodeLanguages(), // Enable mixed parsing for code blocks (from engine.options.codeLanguages)
         completeHTMLTags: options.completeHTMLTags !== false,
         completeWidgets: options.completeWidgets !== false,
         completeMacros: options.completeMacros !== false,
@@ -692,7 +693,7 @@ function buildLanguageSupport(context, skipNestedLanguageExtensions = false) {
         completeFilterRunPrefixes: options.completeFilterRunPrefixes !== false,
         disableCamelCaseLinks: _disableCamelCaseLinks,
         enableKaTeX: isKaTeXEnabled(),
-        skipNestedLanguageExtensions,
+        skipNestedLanguageExtensions, // Skip nested lang extensions on reconfiguration
         getTiddlerTitles,
         isDraftTiddler,
         getImageTiddlerTitles,

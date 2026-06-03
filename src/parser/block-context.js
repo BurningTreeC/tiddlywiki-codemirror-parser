@@ -29,7 +29,7 @@ class Buffer {
     finish(type, length) {
         return Tree.build({
             buffer: this.content,
-            nodeSet: this.nodeSet,
+            nodeSet: this.nodeSet, // Will be set by context
             topID: type,
             length
         });

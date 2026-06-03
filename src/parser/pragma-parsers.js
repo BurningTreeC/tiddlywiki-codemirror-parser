@@ -88,7 +88,7 @@ function findEnd(cx, name) {
                 if (!endName || endName === name) {
                     return {
                         bodyStart,
-                        bodyEnd: cx.lineStart - 1,
+                        bodyEnd: cx.lineStart - 1, // Before the \end line (exclude newline)
                         endStart: cx.lineStart,
                         endEnd: cx.lineStart + text.length
                     };
@@ -212,7 +212,7 @@ function parseFilterBody(filterContent, offset) {
                         const varEnd = offset + pos + 1; // Include >
                         const innerStart = offset + operandStart;
                         const nameChildren = [
-                            elt(Type.SubstitutedParamMark, innerStart, innerStart + 2),
+                            elt(Type.SubstitutedParamMark, innerStart, innerStart + 2), // __
                             elt(Type.SubstitutedParamName, innerStart + 2, innerStart + 2 + paramName.length),
                             elt(Type.SubstitutedParamMark, innerStart + 2 + paramName.length, offset + pos), // __
                         ];
@@ -644,7 +644,7 @@ export const ImportPragma = {
         const filterElements = parseFilterBody(filter, filterStart);
         const children = [
             elt(Type.PragmaMark, pragmaStart + backslashOffset, pragmaStart + backslashOffset + 1),
-            elt(Type.PragmaKeyword, pragmaStart + backslashOffset + 1, pragmaStart + backslashOffset + 7),
+            elt(Type.PragmaKeyword, pragmaStart + backslashOffset + 1, pragmaStart + backslashOffset + 7), // "import"
             elt(Type.FilterExpression, filterStart, filterStart + filter.length, filterElements),
         ];
         cx.nextLine();

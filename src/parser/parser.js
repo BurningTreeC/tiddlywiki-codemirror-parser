@@ -48,7 +48,7 @@ const defaultStyleTags = styleTags({
     "Superscript/...": twTags.twSuperscript,
     "Subscript/...": twTags.twSubscript,
     "Highlight/...": t.special(t.content),
-    HighlightStyles: t.string,
+    HighlightStyles: t.string, // CSS styles - will be overlaid with CSS parser
     "BoldMark ItalicMark UnderlineMark StrikethroughMark SuperscriptMark SubscriptMark HighlightMark": t.processingInstruction,
     // Code
     "InlineCode FencedCode TypedBlock CodeText": t.monospace,
@@ -67,7 +67,7 @@ const defaultStyleTags = styleTags({
     "WikiLink ExternalLink CamelCaseLink": t.link,
     "WikiLinkMark ExtLinkMark": t.processingInstruction,
     LinkText: t.string,
-    LinkTarget: t.link,
+    LinkTarget: t.link, // Internal wiki link target - same color as CamelCaseLink
     LinkSeparator: t.processingInstruction,
     // Images
     ImageLink: t.link,
@@ -100,21 +100,21 @@ const defaultStyleTags = styleTags({
     // Otherwise all content inside widgets would get widget styling
     WidgetName: t.tagName,
     TagName: t.tagName,
-    InvalidWidget: t.invalid,
-    IncompleteWidget: t.invalid,
-    IncompleteHTMLTag: t.invalid,
-    IncompleteHTMLBlock: t.invalid,
+    InvalidWidget: t.invalid, // <$ followed by space - invalid widget syntax
+    IncompleteWidget: t.invalid, // <$widget ... (missing closing >)
+    IncompleteHTMLTag: t.invalid, // <tag ... (missing closing >) - inline
+    IncompleteHTMLBlock: t.invalid, // <tag ... (missing closing >) - block level
     // TagMark intentionally unstyled - < and > brackets should be default text color
     Attribute: t.attributeName,
     AttributeName: t.attributeName,
     "AttributeValue AttributeString": t.attributeValue,
     AttributeNumber: t.number,
-    AttributeIndirect: t.special(t.link),
-    AttributeFiltered: t.special(t.link),
-    AttributeMacro: t.macroName,
-    AttributeSubstituted: t.special(t.string),
-    AttributeParamRef: t.special(t.variableName),
-    AttributeWikitext: t.attributeValue,
+    AttributeIndirect: t.special(t.link), // Same as Transclusion
+    AttributeFiltered: t.special(t.link), // Same as FilteredTransclusion
+    AttributeMacro: t.macroName, // Same as MacroCall
+    AttributeSubstituted: t.special(t.string), // Substituted strings
+    AttributeParamRef: t.special(t.variableName), // @param reference
+    AttributeWikitext: t.attributeValue, // Attribute containing wikitext (inherits from content)
     SelfClosingMarker: t.processingInstruction,
     // Lists
     "BulletList OrderedList DefinitionList": t.list,
@@ -167,7 +167,7 @@ const defaultStyleTags = styleTags({
     FilterMultiVariable: t.variableName,
     FilterTextRef: t.special(t.string),
     FilterRegexp: t.regexp,
-    IncompleteFilterRun: t.content,
+    IncompleteFilterRun: t.content, // Container for incomplete filter in plain text
     // Multi-valued variable display
     MVVDisplay: t.special(t.link),
     MVVDisplayMark: t.processingInstruction,
