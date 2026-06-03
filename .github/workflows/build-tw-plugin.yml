@@ -31,6 +31,8 @@ jobs:
 
       - name: Build TiddlyWiki plugin
         run: npm run build:all
+        env:
+          TW_PLUGIN_OUTPUT_DIR: dist/tiddlywiki-plugin/plugins/tiddlywiki
 
       - name: Upload plugin artifact
         uses: actions/upload-artifact@v4

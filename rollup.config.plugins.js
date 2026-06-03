@@ -14,11 +14,17 @@ import commonjs from "@rollup/plugin-commonjs";
 import typescript from "@rollup/plugin-typescript";
 import terser from "@rollup/plugin-terser";
 
+const PLUGIN_ROOT = process.env.TW_PLUGIN_OUTPUT_DIR || (
+	process.env.CI
+		? "dist/tiddlywiki-plugin/plugins/tiddlywiki"
+		: "../TiddlyWiki5/plugins/tiddlywiki"
+);
+
 // Output directory for main combined plugin
-const OUTPUT_DIR = "../TiddlyWiki5/plugins/tiddlywiki/codemirror-6";
+const OUTPUT_DIR = `${PLUGIN_ROOT}/codemirror-6`;
 
 // Output directory for separate optional plugins
-const SEPARATE_PLUGINS_DIR = "../TiddlyWiki5/plugins/tiddlywiki";
+const SEPARATE_PLUGINS_DIR = PLUGIN_ROOT;
 
 // TiddlyWiki module paths for external dependencies
 const twPaths = {
