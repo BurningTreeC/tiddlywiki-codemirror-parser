@@ -33,7 +33,7 @@ function isInsideConditionalContext(state: EditorState, pos: number): boolean {
   // Walk up to find a parent that might contain Conditional siblings
   current = node
   while (current && !current.type.isTop) {
-    const parent = current.parent
+    const parent = current.parent as SyntaxNode | null
     if (parent) {
       // Collect Conditional siblings in this parent
       const conditionals: Array<{ type: string, from: number, to: number }> = []

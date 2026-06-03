@@ -28,7 +28,7 @@ function isInsideConditionalContext(state: EditorState, pos: number): boolean {
   // For inline conditionals, check if we're between <%if%> and <%endif%> siblings
   current = node
   while (current && !current.type.isTop) {
-    const parent = current.parent
+    const parent: SyntaxNode | null = current.parent
     if (parent) {
       const conditionals: Array<{ type: string, from: number, to: number }> = []
       let sibling = parent.firstChild
