@@ -2,9 +2,7 @@
  * Pragma completion sources (\define, \procedure, etc.)
  */
 
-// @ts-expect-error TS(2792): Cannot find module '@codemirror/language'. Did you... Remove this comment to see the full error message
 import { syntaxTree } from "@codemirror/language"
-// @ts-expect-error TS(2792): Cannot find module '@codemirror/autocomplete'. Did... Remove this comment to see the full error message
 import { Completion, CompletionContext, CompletionResult } from "@codemirror/autocomplete"
 import { triggerCompletionEffect } from "./common"
 

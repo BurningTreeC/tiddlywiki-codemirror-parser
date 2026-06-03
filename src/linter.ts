@@ -4,13 +4,10 @@
  * Provides lint diagnostics for TiddlyWiki wikitext.
  */
 
-// @ts-expect-error TS(2792): Cannot find module '@codemirror/language'. Did you... Remove this comment to see the full error message
 import { syntaxTree } from "@codemirror/language"
-// @ts-expect-error TS(2792): Cannot find module '@codemirror/lint'. Did you mea... Remove this comment to see the full error message
+// @ts-expect-error TS(2307): Cannot find module '@codemirror/lint' or its corre... Remove this comment to see the full error message
 import { Diagnostic, linter } from "@codemirror/lint"
-// @ts-expect-error TS(2792): Cannot find module '@codemirror/view'. Did you mea... Remove this comment to see the full error message
 import { EditorView } from "@codemirror/view"
-// @ts-expect-error TS(2792): Cannot find module '@lezer/common'. Did you mean t... Remove this comment to see the full error message
 import type { SyntaxNode } from "@lezer/common"
 
 /**

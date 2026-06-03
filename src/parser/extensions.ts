@@ -52,5 +52,4 @@ export {
   coreWikiRules,
   wikiruleCompletion,
   generalContextCompletion,
-// @ts-expect-error TS(2792): Cannot find module './completions'. Did you mean t... Remove this comment to see the full error message
 } from "./completions"

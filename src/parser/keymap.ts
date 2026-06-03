@@ -4,11 +4,8 @@
  * Defines the default keybindings for TiddlyWiki editing.
  */
 
-// @ts-expect-error TS(2792): Cannot find module '@codemirror/view'. Did you mea... Remove this comment to see the full error message
 import { KeyBinding } from "@codemirror/view"
-// @ts-expect-error TS(2792): Cannot find module '@codemirror/commands'. Did you... Remove this comment to see the full error message
 import { indentMore, indentLess, insertTab } from "@codemirror/commands"
-// @ts-expect-error TS(2792): Cannot find module '@codemirror/autocomplete'. Did... Remove this comment to see the full error message
 import { acceptCompletion, completionStatus } from "@codemirror/autocomplete"
 import {
   insertNewlineContinueMarkupCommand,
@@ -82,7 +79,6 @@ export function createTiddlywikiKeymap(config: KeymapConfig = {}): readonly KeyB
    */
   function smartTab(view: Parameters<NonNullable<KeyBinding["run"]>>[0]): boolean {
     // If completion popup is active, accept the completion
-    // @ts-expect-error TS(2571): Object is of type 'unknown'.
     if (completionStatus(view.state) === "active") {
       return acceptCompletion(view)
     }

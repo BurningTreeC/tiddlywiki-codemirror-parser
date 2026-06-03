@@ -2,15 +2,10 @@
  * Common utilities and constants for TiddlyWiki completions
  */
 
-// @ts-expect-error TS(2792): Cannot find module '@codemirror/state'. Did you me... Remove this comment to see the full error message
 import { EditorState, StateEffect } from "@codemirror/state"
-// @ts-expect-error TS(2792): Cannot find module '@codemirror/view'. Did you mea... Remove this comment to see the full error message
 import { EditorView } from "@codemirror/view"
-// @ts-expect-error TS(2792): Cannot find module '@codemirror/autocomplete'. Did... Remove this comment to see the full error message
 import { startCompletion } from "@codemirror/autocomplete"
-// @ts-expect-error TS(2792): Cannot find module '@codemirror/language'. Did you... Remove this comment to see the full error message
 import { syntaxTree } from "@codemirror/language"
-// @ts-expect-error TS(2792): Cannot find module '@lezer/common'. Did you mean t... Remove this comment to see the full error message
 import type { SyntaxNode } from "@lezer/common"
 
 // ============================================================================

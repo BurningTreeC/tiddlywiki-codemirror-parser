@@ -6,11 +6,8 @@
 
 // @ts-expect-error TS(6133): 'Line' is declared but its value is never read.
 import {StateCommand, Text, EditorState, EditorSelection, ChangeSpec, countColumn, Line, Extension} from "@codemirror/state"
-// @ts-expect-error TS(2792): Cannot find module '@codemirror/view'. Did you mea... Remove this comment to see the full error message
 import {EditorView} from "@codemirror/view"
-// @ts-expect-error TS(2792): Cannot find module '@codemirror/language'. Did you... Remove this comment to see the full error message
 import {syntaxTree, indentUnit, getIndentation} from "@codemirror/language"
-// @ts-expect-error TS(2792): Cannot find module '@lezer/common'. Did you mean t... Remove this comment to see the full error message
 import {SyntaxNode, Tree} from "@lezer/common"
 import {tiddlywikiLanguage} from "./parser/language"
 

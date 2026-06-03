@@ -8,9 +8,7 @@ import {
   Parser, Tree, TreeFragment, Input, PartialParse,
   // @ts-expect-error TS(6133): 'NodeProp' is declared but its value is never read... Remove this comment to see the full error message
   NodeType, NodeSet, NodeProp, ParseWrapper
-// @ts-expect-error TS(2792): Cannot find module '@lezer/common'. Did you mean t... Remove this comment to see the full error message
 } from "@lezer/common"
-// @ts-expect-error TS(2792): Cannot find module '@lezer/highlight'. Did you mea... Remove this comment to see the full error message
 import { styleTags, tags as t, Tag } from "@lezer/highlight"
 import { Type } from "./types"
 import {

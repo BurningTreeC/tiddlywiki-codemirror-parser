@@ -5,17 +5,12 @@
  * for CodeMirror 6, similar to markdown() in @codemirror/lang-markdown.
  */
 
-// @ts-expect-error TS(2792): Cannot find module '@codemirror/state'. Did you me... Remove this comment to see the full error message
 import { Prec } from "@codemirror/state"
-// @ts-expect-error TS(2792): Cannot find module '@codemirror/view'. Did you mea... Remove this comment to see the full error message
 import { keymap, EditorView } from "@codemirror/view"
 // @ts-expect-error TS(6133): 'LanguageDescription' is declared but its value is... Remove this comment to see the full error message
 import { Language, LanguageSupport, LanguageDescription, syntaxHighlighting, indentOnInput, syntaxTree } from "@codemirror/language"
-// @ts-expect-error TS(2792): Cannot find module '@codemirror/autocomplete'. Did... Remove this comment to see the full error message
 import { autocompletion, completionKeymap, completionStatus, startCompletion } from "@codemirror/autocomplete"
-// @ts-expect-error TS(2792): Cannot find module '@codemirror/lang-html'. Did yo... Remove this comment to see the full error message
 import { html, htmlCompletionSource } from "@codemirror/lang-html"
-// @ts-expect-error TS(2792): Cannot find module '@codemirror/autocomplete'. Did... Remove this comment to see the full error message
 import type { CompletionContext } from "@codemirror/autocomplete"
 
 import { TiddlyWikiParser } from "./parser"
@@ -63,7 +58,6 @@ import {
   styledSpanClassCompletion,
   styledSpanPropertyCompletion,
   closingTagCompletion,
-// @ts-expect-error TS(2792): Cannot find module './completions'. Did you mean t... Remove this comment to see the full error message
 } from "./completions"
 
 // Note: tiddlywikiLanguage and headerIndent are exported from ./language (via index.ts)

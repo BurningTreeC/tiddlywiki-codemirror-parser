@@ -3,9 +3,7 @@
  * Provides completions for fenced code blocks (```) and typed blocks ($$$)
  */
 
-// @ts-expect-error TS(2792): Cannot find module '@codemirror/autocomplete'. Did... Remove this comment to see the full error message
 import { Completion, CompletionContext, CompletionResult } from "@codemirror/autocomplete"
-// @ts-expect-error TS(2792): Cannot find module '@codemirror/language'. Did you... Remove this comment to see the full error message
 import { LanguageDescription } from "@codemirror/language"
 
 /**

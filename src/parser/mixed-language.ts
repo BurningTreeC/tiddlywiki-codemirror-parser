@@ -6,7 +6,6 @@
 
 // @ts-expect-error TS(6133): 'LanguageSupport' is declared but its value is nev... Remove this comment to see the full error message
 import { Language, LanguageSupport, LanguageDescription } from "@codemirror/language"
-// @ts-expect-error TS(2792): Cannot find module '@lezer/common'. Did you mean t... Remove this comment to see the full error message
 import { parseMixed, SyntaxNodeRef, Input, Parser } from "@lezer/common"
 import { TiddlyWikiParser } from "./parser"
 import { getCodeParser } from "./language"

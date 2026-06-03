@@ -2,14 +2,10 @@
  * Filter completion sources
  */
 
-// @ts-expect-error TS(2792): Cannot find module '@codemirror/language'. Did you... Remove this comment to see the full error message
 import { syntaxTree } from "@codemirror/language"
-// @ts-expect-error TS(2792): Cannot find module '@codemirror/autocomplete'. Did... Remove this comment to see the full error message
 import { Completion, CompletionContext, CompletionResult } from "@codemirror/autocomplete"
-// @ts-expect-error TS(2792): Cannot find module '@codemirror/state'. Did you me... Remove this comment to see the full error message
 import { EditorState } from "@codemirror/state"
 import { defaultFieldNames, extractLocalDefinitions, getTiddlerBoost } from "./common"
-// @ts-expect-error TS(2792): Cannot find module '@lezer/common'. Did you mean t... Remove this comment to see the full error message
 import type { SyntaxNode } from "@lezer/common"
 
 /**
@@ -32,6 +28,7 @@ function isInsideConditionalContext(state: EditorState, pos: number): boolean {
   // For inline conditionals, check if we're between <%if%> and <%endif%> siblings
   current = node
   while (current && !current.type.isTop) {
+    // @ts-expect-error TS(7022): 'parent' implicitly has type 'any' because it does... Remove this comment to see the full error message
     const parent = current.parent
     if (parent) {
       const conditionals: Array<{ type: string, from: number, to: number }> = []

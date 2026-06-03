@@ -10,9 +10,7 @@ import {
   indentNodeProp, foldService, syntaxTree, LanguageDescription, ParseContext,
   // @ts-expect-error TS(6133): 'getIndentUnit' is declared but its value is never... Remove this comment to see the full error message
   TreeIndentContext, getIndentUnit
-// @ts-expect-error TS(2792): Cannot find module '@codemirror/language'. Did you... Remove this comment to see the full error message
 } from "@codemirror/language"
-// @ts-expect-error TS(2792): Cannot find module '@lezer/common'. Did you mean t... Remove this comment to see the full error message
 import { SyntaxNode, NodeType, NodeProp } from "@lezer/common"
 import { TiddlyWikiParser, parser as baseParser } from "./parser"
 // @ts-expect-error TS(6133): 'Type' is declared but its value is never read.

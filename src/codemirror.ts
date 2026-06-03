@@ -4,15 +4,12 @@
  * CodeMirror 6 Language Support für TiddlyWiki5 Wikitext.
  */
 
-// @ts-expect-error TS(2792): Cannot find module '@codemirror/view'. Did you mea... Remove this comment to see the full error message
 import { EditorView } from "@codemirror/view"
-// @ts-expect-error TS(2792): Cannot find module '@codemirror/language'. Did you... Remove this comment to see the full error message
 import { syntaxTree } from "@codemirror/language"
 
 // Re-export everything from the parser index
 export * from "./index"
 
-// @ts-expect-error TS(2792): Cannot find module './parser'. Did you mean to set... Remove this comment to see the full error message
 import { tiddlywikiLanguage } from "./parser"
 
 // Re-export commands
