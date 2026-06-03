@@ -1,0 +1,22 @@
+name: Trigger tiddlywiki-codemirror update
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  trigger-update:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Trigger tiddlywiki-codemirror update
+        env:
+          GH_TOKEN: ${{ secrets.CODEMIRROR_UPDATE_TOKEN }}
+        run: |
+          gh api \
+            --method POST \
+            repos/BurningTreeC/tiddlywiki-codemirror/dispatches \
+            -f event_type=update-from-parser \
+            -f client_payload[parser_ref]="${GITHUB_SHA}" \
+            -f client_payload[parser_branch]="${GITHUB_REF_NAME}"
