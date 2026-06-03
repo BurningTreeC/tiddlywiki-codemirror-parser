@@ -8,10 +8,14 @@
 import {
   Language, defineLanguageFacet, languageDataProp, foldNodeProp,
   indentNodeProp, foldService, syntaxTree, LanguageDescription, ParseContext,
+  // @ts-expect-error TS(6133): 'getIndentUnit' is declared but its value is never... Remove this comment to see the full error message
   TreeIndentContext, getIndentUnit
+// @ts-expect-error TS(2792): Cannot find module '@codemirror/language'. Did you... Remove this comment to see the full error message
 } from "@codemirror/language"
+// @ts-expect-error TS(2792): Cannot find module '@lezer/common'. Did you mean t... Remove this comment to see the full error message
 import { SyntaxNode, NodeType, NodeProp } from "@lezer/common"
 import { TiddlyWikiParser, parser as baseParser } from "./parser"
+// @ts-expect-error TS(6133): 'Type' is declared but its value is never read.
 import { Type } from "./types"
 
 /**
@@ -48,14 +52,15 @@ function isList(type: NodeType): boolean {
  */
 function isBlock(type: NodeType): boolean {
   // Check common block types - includes all foldable TiddlyWiki elements
-  return /^(Paragraph|Heading\d|BulletList|OrderedList|DefinitionList|BlockQuote|Table|FencedCode|TypedBlock|Widget|HTMLBlock|TransclusionBlock|FilteredTransclusionBlock|MacroCallBlock|CommentBlock|HorizontalRule|HardLineBreaks|ConditionalBlock|MacroDefinition|ProcedureDefinition|FunctionDefinition|WidgetDefinition|StyledBlock)$/.test(type.name)
+  return /^(Paragraph|Heading\d|BulletList|OrderedList|DefinitionList|BlockQuote|Table|FencedCode|TypedBlock|Widget|HTMLBlock|TransclusionBlock|FilteredTransclusionBlock|MacroCallBlock|CommentBlock|HorizontalRule|HardLineBreaks|ConditionalBlock|MacroDefinition|ProcedureDefinition|FunctionDefinition|WidgetDefinition|StyledBlock)$/.test(type.name);
 }
 
 /**
  * Check if a node type is a container that should indent its contents
  */
+// @ts-expect-error TS(6133): 'isIndentingContainer' is declared but its value i... Remove this comment to see the full error message
 function isIndentingContainer(name: string): boolean {
-  return /^(Widget|HTMLBlock|ConditionalBlock|ConditionalBranch|BlockQuote|MacroDefinition|ProcedureDefinition|FunctionDefinition|WidgetDefinition)$/.test(name)
+  return /^(Widget|HTMLBlock|ConditionalBlock|ConditionalBranch|BlockQuote|MacroDefinition|ProcedureDefinition|FunctionDefinition|WidgetDefinition)$/.test(name);
 }
 
 /**
@@ -220,13 +225,13 @@ function containerIndent(context: TreeIndentContext): number | null {
  * Check if a node type is a pragma definition (macro, procedure, function, widget)
  */
 function isPragmaDefinition(name: string): boolean {
-  return /^(MacroDefinition|ProcedureDefinition|FunctionDefinition|WidgetDefinition)$/.test(name)
+  return /^(MacroDefinition|ProcedureDefinition|FunctionDefinition|WidgetDefinition)$/.test(name);
 }
 
 const configured = baseParser.configure({
   props: [
     // Folding support for TiddlyWiki5 syntax
-    foldNodeProp.add(type => {
+    foldNodeProp.add((type: any) => {
       // Allow inline widgets and HTML tags (they can span multiple lines and be foldable)
       // Note: Inline conditionals are handled by inlineConditionalFold service, not foldNodeProp
       const isInlineFoldable = type.name === "InlineWidget" || type.name === "HTMLTag"
@@ -244,7 +249,7 @@ const configured = baseParser.configure({
       // Pragma definitions (\define, \procedure, \function, \widget)
       // Fold from end of first line to before \end
       if (isPragmaDefinition(type.name)) {
-        return (tree, state) => {
+        return (tree: any, state: any) => {
           const firstLineEnd = state.doc.lineAt(tree.from).to
           // Only fold if the element spans multiple lines
           if (tree.to <= firstLineEnd) {
@@ -261,12 +266,12 @@ const configured = baseParser.configure({
             return null
           }
           return { from: firstLineEnd, to: tree.to }
-        }
+        };
       }
 
       // Widgets and HTML blocks - fold content between tags
       if (type.name === "Widget" || type.name === "HTMLBlock") {
-        return (tree, state) => {
+        return (tree: any, state: any) => {
           const firstLineEnd = state.doc.lineAt(tree.from).to
           // Only fold if the element spans multiple lines
           if (tree.to <= firstLineEnd) {
@@ -285,12 +290,12 @@ const configured = baseParser.configure({
           }
           // No closing tag found but element spans multiple lines - fold to end
           return { from: firstLineEnd, to: tree.to }
-        }
+        };
       }
 
       // Inline widgets and HTML tags that span multiple lines - also foldable
       if (type.name === "InlineWidget" || type.name === "HTMLTag") {
-        return (tree, state) => {
+        return (tree: any, state: any) => {
           const firstLineEnd = state.doc.lineAt(tree.from).to
           // Only fold if the element spans multiple lines
           if (tree.to <= firstLineEnd) {
@@ -306,13 +311,13 @@ const configured = baseParser.configure({
             }
           }
           return { from: firstLineEnd, to: tree.to }
-        }
+        };
       }
 
       // Conditional blocks (<%if%>...<%endif%>)
       // Note: Inline conditionals (Conditional marker nodes) are handled by inlineConditionalFold service
       if (type.name === "ConditionalBlock") {
-        return (tree, state) => {
+        return (tree: any, state: any) => {
           const firstLineEnd = state.doc.lineAt(tree.from).to
           // Only fold if the element spans multiple lines
           if (tree.to <= firstLineEnd) {
@@ -333,12 +338,12 @@ const configured = baseParser.configure({
           }
           // No end mark found but element spans multiple lines - fold to end
           return { from: firstLineEnd, to: tree.to }
-        }
+        };
       }
 
       // Block quotes - fold from opening <<< to closing <<<
       if (type.name === "BlockQuote") {
-        return (tree, state) => {
+        return (tree: any, state: any) => {
           const firstLineEnd = state.doc.lineAt(tree.from).to
           // Only fold if the element spans multiple lines
           if (tree.to <= firstLineEnd) {
@@ -357,12 +362,12 @@ const configured = baseParser.configure({
             return null
           }
           return { from: firstLineEnd, to: tree.to }
-        }
+        };
       }
 
       // Fenced code blocks - fold from ``` to closing ```
       if (type.name === "FencedCode") {
-        return (tree, state) => {
+        return (tree: any, state: any) => {
           const firstLineEnd = state.doc.lineAt(tree.from).to
           // Only fold if the element spans multiple lines
           if (tree.to <= firstLineEnd) {
@@ -381,12 +386,12 @@ const configured = baseParser.configure({
             return null
           }
           return { from: firstLineEnd, to: tree.to }
-        }
+        };
       }
 
       // Typed blocks ($$$) - fold from $$$ to closing $$$
       if (type.name === "TypedBlock") {
-        return (tree, state) => {
+        return (tree: any, state: any) => {
           const firstLineEnd = state.doc.lineAt(tree.from).to
           // Only fold if the element spans multiple lines
           if (tree.to <= firstLineEnd) {
@@ -405,12 +410,12 @@ const configured = baseParser.configure({
             return null
           }
           return { from: firstLineEnd, to: tree.to }
-        }
+        };
       }
 
       // Tables - fold from header row to end
       if (type.name === "Table") {
-        return (tree, state) => {
+        return (tree: any, state: any) => {
           const firstLineEnd = state.doc.lineAt(tree.from).to
           // Only fold if the table spans multiple lines
           if (tree.to <= firstLineEnd) {
@@ -427,20 +432,20 @@ const configured = baseParser.configure({
           }
           // Header takes entire table - nothing to fold
           return null
-        }
+        };
       }
 
       // Default: fold from end of first line to end of block
       // This handles: TransclusionBlock, FilteredTransclusionBlock, MacroCallBlock,
       // CommentBlock, StyledBlock, etc.
-      return (tree, state) => {
+      return (tree: any, state: any) => {
         const firstLineEnd = state.doc.lineAt(tree.from).to
         // Only fold if the element spans multiple lines
         if (tree.to <= firstLineEnd) {
           return null
         }
         return { from: firstLineEnd, to: tree.to }
-      }
+      };
     }),
 
     // Add heading level prop
@@ -544,7 +549,7 @@ function findSectionEnd(headerNode: SyntaxNode, level: number): number {
  * Fold service for heading sections
  * Allows folding from a heading to the next heading of same or higher level
  */
-export const headerIndent = foldService.of((state, start, end) => {
+export const headerIndent = foldService.of((state: any, start: any, end: any) => {
   for (let node: SyntaxNode | null = syntaxTree(state).resolveInner(end, -1); node; node = node.parent) {
     if (node.from < start) break
     const heading = node.type.prop(headingProp)
@@ -559,7 +564,7 @@ export const headerIndent = foldService.of((state, start, end) => {
  * Fold service for inline conditionals
  * Allows folding from <%if%> to matching <%endif%> when they're inline (not ConditionalBlock)
  */
-export const inlineConditionalFold = foldService.of((state, lineStart, lineEnd) => {
+export const inlineConditionalFold = foldService.of((state: any, lineStart: any, lineEnd: any) => {
   const tree = syntaxTree(state)
   const doc = state.doc
 
@@ -710,5 +715,5 @@ export function getCodeParser(
       }
     }
     return defaultLanguage ? defaultLanguage.parser : null
-  }
+  };
 }

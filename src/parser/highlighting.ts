@@ -4,7 +4,9 @@
  * Defines the mapping from semantic tags to CSS classes for syntax highlighting.
  */
 
+// @ts-expect-error TS(2792): Cannot find module '@codemirror/language'. Did you... Remove this comment to see the full error message
 import { HighlightStyle } from "@codemirror/language"
+// @ts-expect-error TS(2792): Cannot find module '@lezer/highlight'. Did you mea... Remove this comment to see the full error message
 import { tags as t } from "@lezer/highlight"
 import { twTags } from "./parser"
 

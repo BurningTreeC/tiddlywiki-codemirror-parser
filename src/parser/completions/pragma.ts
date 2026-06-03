@@ -2,7 +2,9 @@
  * Pragma completion sources (\define, \procedure, etc.)
  */
 
+// @ts-expect-error TS(2792): Cannot find module '@codemirror/language'. Did you... Remove this comment to see the full error message
 import { syntaxTree } from "@codemirror/language"
+// @ts-expect-error TS(2792): Cannot find module '@codemirror/autocomplete'. Did... Remove this comment to see the full error message
 import { Completion, CompletionContext, CompletionResult } from "@codemirror/autocomplete"
 import { triggerCompletionEffect } from "./common"
 
@@ -55,7 +57,7 @@ export function pragmaCompletion(context: CompletionContext): CompletionResult |
       type: "keyword",
       detail: kw.detail,
       apply: shouldTrigger
-        ? (view, _completion, from, to) => {
+        ? (view: any, _completion: any, from: any, to: any) => {
             view.dispatch({
               changes: { from, to, insert: insertText },
               selection: { anchor: from + insertText.length },
@@ -63,7 +65,7 @@ export function pragmaCompletion(context: CompletionContext): CompletionResult |
             })
           }
         : insertText,
-    }
+    };
   })
 
   return {
@@ -71,7 +73,7 @@ export function pragmaCompletion(context: CompletionContext): CompletionResult |
     to: pos,
     options,
     validFor: /^\w*$/
-  }
+  };
 }
 
 /**
@@ -101,7 +103,7 @@ export function rulesKeywordCompletion(context: CompletionContext): CompletionRe
     to: pos,
     options,
     validFor: /^\w*$/
-  }
+  };
 }
 
 /**
@@ -131,7 +133,7 @@ export function whitespaceValueCompletion(context: CompletionContext): Completio
     to: pos,
     options,
     validFor: /^\w*$/
-  }
+  };
 }
 
 /**
@@ -161,7 +163,7 @@ export function parsermodeValueCompletion(context: CompletionContext): Completio
     to: pos,
     options,
     validFor: /^\w*$/
-  }
+  };
 }
 
 /**
@@ -183,7 +185,7 @@ export function pragmaEndNameCompletion(context: CompletionContext): CompletionR
   const openPragmas: { name: string; type: string }[] = []
 
   tree.iterate({
-    enter: (node) => {
+    enter: (node: any) => {
       const nodeType = node.name
       if (nodeType === "MacroDefinition" ||
           nodeType === "ProcedureDefinition" ||
@@ -225,5 +227,5 @@ export function pragmaEndNameCompletion(context: CompletionContext): CompletionR
     to: pos,
     options,
     validFor: /^\S*$/
-  }
+  };
 }

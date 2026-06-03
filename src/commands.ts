@@ -4,9 +4,13 @@
  * TiddlyWiki-spezifische Editor-Befehle für CodeMirror 6.
  */
 
+// @ts-expect-error TS(6133): 'Line' is declared but its value is never read.
 import {StateCommand, Text, EditorState, EditorSelection, ChangeSpec, countColumn, Line, Extension} from "@codemirror/state"
+// @ts-expect-error TS(2792): Cannot find module '@codemirror/view'. Did you mea... Remove this comment to see the full error message
 import {EditorView} from "@codemirror/view"
+// @ts-expect-error TS(2792): Cannot find module '@codemirror/language'. Did you... Remove this comment to see the full error message
 import {syntaxTree, indentUnit, getIndentation} from "@codemirror/language"
+// @ts-expect-error TS(2792): Cannot find module '@lezer/common'. Did you mean t... Remove this comment to see the full error message
 import {SyntaxNode, Tree} from "@lezer/common"
 import {tiddlywikiLanguage} from "./parser/language"
 
@@ -37,6 +41,7 @@ class Context {
     }
   }
 
+  // @ts-expect-error TS(6133): 'add' is declared but its value is never read.
   marker(doc: Text, add: number): string {
     let marker = ""
     if (this.node.name == "OrderedList" || this.node.name == "BulletList") {
@@ -87,6 +92,7 @@ function getContext(node: SyntaxNode, doc: Text): Context[] {
   for (let i = nodes.length - 1; i >= 0; i--) {
     let node = nodes[i]
     let line = doc.lineAt(node.from)
+    // @ts-expect-error TS(6133): 'startPos' is declared but its value is never read... Remove this comment to see the full error message
     let startPos = node.from - line.from
     let match: RegExpExecArray | null
 
@@ -158,13 +164,16 @@ export const insertNewlineContinueMarkupCommand = (config: {
   nonTightLists?: boolean
   /// Fallback behavior when not in a list (default: "smart")
   fallbackBehavior?: EnterFallbackBehavior
-} = {}): StateCommand => ({state, dispatch}) => {
+} = {}): StateCommand => ({
+  state,
+  dispatch
+}: any) => {
   const fallbackBehavior = config.fallbackBehavior || "smart"
   let tree = syntaxTree(state)
   let {doc} = state
   let dont = null
 
-  let changes = state.changeByRange(range => {
+  let changes = state.changeByRange((range: any) => {
     if (!range.empty || !tiddlywikiLanguage.isActiveAt(state, range.from, -1) &&
         !tiddlywikiLanguage.isActiveAt(state, range.from, 1)) {
       return dont = {range}
@@ -470,11 +479,14 @@ function contextNodeForDelete(tree: Tree, pos: number): SyntaxNode {
 }
 
 /// Befehl zum Löschen von Markup rückwärts
-export const deleteMarkupBackward: StateCommand = ({state, dispatch}) => {
+export const deleteMarkupBackward: StateCommand = ({
+  state,
+  dispatch
+}: any) => {
   let tree = syntaxTree(state)
   let dont = null
   
-  let changes = state.changeByRange(range => {
+  let changes = state.changeByRange((range: any) => {
     let pos = range.from
     let {doc} = state
     
@@ -541,7 +553,10 @@ const bracketPairs: Record<string, string> = {
  * Delete matching bracket pair when cursor is between empty brackets.
  * For example: "" -> (empty), [] -> (empty), () -> (empty)
  */
-export const deleteBracketPair: StateCommand = ({state, dispatch}) => {
+export const deleteBracketPair: StateCommand = ({
+  state,
+  dispatch
+}: any) => {
   let changes: ChangeSpec[] = []
   let newSelections: {anchor: number}[] = []
 
@@ -583,7 +598,7 @@ export const deleteBracketPair: StateCommand = ({state, dispatch}) => {
 // ============================================================================
 
 function toggleInlineFormat(state: EditorState, dispatch: (tr: any) => void, marker: string): boolean {
-  let changes = state.changeByRange(range => {
+  let changes = state.changeByRange((range: any) => {
     if (range.empty) {
       // Bei leerer Selektion: Marker einfügen und Cursor dazwischen
       return {
@@ -619,37 +634,58 @@ function toggleInlineFormat(state: EditorState, dispatch: (tr: any) => void, mar
 }
 
 /// Toggle Bold formatierung ('' '')
-export const toggleBold: StateCommand = ({state, dispatch}) => {
+export const toggleBold: StateCommand = ({
+  state,
+  dispatch
+}: any) => {
   return toggleInlineFormat(state, dispatch, "''")
 }
 
 /// Toggle Italic formatierung (// //)
-export const toggleItalic: StateCommand = ({state, dispatch}) => {
+export const toggleItalic: StateCommand = ({
+  state,
+  dispatch
+}: any) => {
   return toggleInlineFormat(state, dispatch, "//")
 }
 
 /// Toggle Underline formatierung (__ __)
-export const toggleUnderline: StateCommand = ({state, dispatch}) => {
+export const toggleUnderline: StateCommand = ({
+  state,
+  dispatch
+}: any) => {
   return toggleInlineFormat(state, dispatch, "__")
 }
 
 /// Toggle Strikethrough formatierung (~~ ~~)
-export const toggleStrikethrough: StateCommand = ({state, dispatch}) => {
+export const toggleStrikethrough: StateCommand = ({
+  state,
+  dispatch
+}: any) => {
   return toggleInlineFormat(state, dispatch, "~~")
 }
 
 /// Toggle Superscript formatierung (^^ ^^)
-export const toggleSuperscript: StateCommand = ({state, dispatch}) => {
+export const toggleSuperscript: StateCommand = ({
+  state,
+  dispatch
+}: any) => {
   return toggleInlineFormat(state, dispatch, "^^")
 }
 
 /// Toggle Subscript formatierung (,, ,,)
-export const toggleSubscript: StateCommand = ({state, dispatch}) => {
+export const toggleSubscript: StateCommand = ({
+  state,
+  dispatch
+}: any) => {
   return toggleInlineFormat(state, dispatch, ",,")
 }
 
 /// Toggle Inline Code formatierung (` `)
-export const toggleInlineCode: StateCommand = ({state, dispatch}) => {
+export const toggleInlineCode: StateCommand = ({
+  state,
+  dispatch
+}: any) => {
   return toggleInlineFormat(state, dispatch, "`")
 }
 
@@ -658,8 +694,11 @@ export const toggleInlineCode: StateCommand = ({state, dispatch}) => {
 // ============================================================================
 
 /// Fügt einen WikiLink ein
-export const insertWikiLink: StateCommand = ({state, dispatch}) => {
-  let changes = state.changeByRange(range => {
+export const insertWikiLink: StateCommand = ({
+  state,
+  dispatch
+}: any) => {
+  let changes = state.changeByRange((range: any) => {
     if (range.empty) {
       return {
         range: EditorSelection.cursor(range.from + 2),
@@ -679,8 +718,11 @@ export const insertWikiLink: StateCommand = ({state, dispatch}) => {
 }
 
 /// Fügt eine Transclusion ein
-export const insertTransclusion: StateCommand = ({state, dispatch}) => {
-  let changes = state.changeByRange(range => {
+export const insertTransclusion: StateCommand = ({
+  state,
+  dispatch
+}: any) => {
+  let changes = state.changeByRange((range: any) => {
     if (range.empty) {
       return {
         range: EditorSelection.cursor(range.from + 2),
@@ -700,8 +742,11 @@ export const insertTransclusion: StateCommand = ({state, dispatch}) => {
 }
 
 /// Fügt einen Macro-Aufruf ein
-export const insertMacroCall: StateCommand = ({state, dispatch}) => {
-  let changes = state.changeByRange(range => {
+export const insertMacroCall: StateCommand = ({
+  state,
+  dispatch
+}: any) => {
+  let changes = state.changeByRange((range: any) => {
     if (range.empty) {
       return {
         range: EditorSelection.cursor(range.from + 2),
@@ -728,7 +773,7 @@ function setHeadingLevel(state: EditorState, dispatch: (tr: any) => void, level:
   let {doc} = state
   let processedLines = new Set<number>()
 
-  let changes = state.changeByRange(range => {
+  let changes = state.changeByRange((range: any) => {
     let line = doc.lineAt(range.from)
 
     // Skip if we already processed this line (for multiple cursors on same line)
@@ -762,25 +807,46 @@ function setHeadingLevel(state: EditorState, dispatch: (tr: any) => void, level:
 }
 
 /// Setzt Heading Level 1
-export const setHeading1: StateCommand = ({state, dispatch}) => setHeadingLevel(state, dispatch, 1)
+export const setHeading1: StateCommand = ({
+  state,
+  dispatch
+}: any) => setHeadingLevel(state, dispatch, 1)
 
 /// Setzt Heading Level 2
-export const setHeading2: StateCommand = ({state, dispatch}) => setHeadingLevel(state, dispatch, 2)
+export const setHeading2: StateCommand = ({
+  state,
+  dispatch
+}: any) => setHeadingLevel(state, dispatch, 2)
 
 /// Setzt Heading Level 3
-export const setHeading3: StateCommand = ({state, dispatch}) => setHeadingLevel(state, dispatch, 3)
+export const setHeading3: StateCommand = ({
+  state,
+  dispatch
+}: any) => setHeadingLevel(state, dispatch, 3)
 
 /// Setzt Heading Level 4
-export const setHeading4: StateCommand = ({state, dispatch}) => setHeadingLevel(state, dispatch, 4)
+export const setHeading4: StateCommand = ({
+  state,
+  dispatch
+}: any) => setHeadingLevel(state, dispatch, 4)
 
 /// Setzt Heading Level 5
-export const setHeading5: StateCommand = ({state, dispatch}) => setHeadingLevel(state, dispatch, 5)
+export const setHeading5: StateCommand = ({
+  state,
+  dispatch
+}: any) => setHeadingLevel(state, dispatch, 5)
 
 /// Setzt Heading Level 6
-export const setHeading6: StateCommand = ({state, dispatch}) => setHeadingLevel(state, dispatch, 6)
+export const setHeading6: StateCommand = ({
+  state,
+  dispatch
+}: any) => setHeadingLevel(state, dispatch, 6)
 
 /// Entfernt Heading
-export const removeHeading: StateCommand = ({state, dispatch}) => setHeadingLevel(state, dispatch, 0)
+export const removeHeading: StateCommand = ({
+  state,
+  dispatch
+}: any) => setHeadingLevel(state, dispatch, 0)
 
 // ============================================================================
 // List Commands
@@ -790,7 +856,7 @@ function toggleListMarker(state: EditorState, dispatch: (tr: any) => void, marke
   let {doc} = state
   let processedLines = new Set<number>()
 
-  let changes = state.changeByRange(range => {
+  let changes = state.changeByRange((range: any) => {
     let line = doc.lineAt(range.from)
 
     // Skip if we already processed this line (for multiple cursors on same line)
@@ -843,12 +909,18 @@ function toggleListMarker(state: EditorState, dispatch: (tr: any) => void, marke
 }
 
 /// Toggle Bullet List (* )
-export const toggleBulletList: StateCommand = ({state, dispatch}) => {
+export const toggleBulletList: StateCommand = ({
+  state,
+  dispatch
+}: any) => {
   return toggleListMarker(state, dispatch, "*")
 }
 
 /// Toggle Numbered List (# )
-export const toggleNumberedList: StateCommand = ({state, dispatch}) => {
+export const toggleNumberedList: StateCommand = ({
+  state,
+  dispatch
+}: any) => {
   return toggleListMarker(state, dispatch, "#")
 }
 
@@ -857,8 +929,11 @@ export const toggleNumberedList: StateCommand = ({state, dispatch}) => {
 // ============================================================================
 
 /// Fügt einen Code-Block ein oder wickelt Selektion in Code-Block
-export const insertCodeBlock: StateCommand = ({state, dispatch}) => {
-  let changes = state.changeByRange(range => {
+export const insertCodeBlock: StateCommand = ({
+  state,
+  dispatch
+}: any) => {
+  let changes = state.changeByRange((range: any) => {
     if (range.empty) {
       let line = state.doc.lineAt(range.from)
       // Füge Code-Block mit leerer Zeile ein
@@ -885,7 +960,10 @@ export const insertCodeBlock: StateCommand = ({state, dispatch}) => {
 }
 
 /// Fügt eine horizontale Linie ein
-export const insertHorizontalRule: StateCommand = ({state, dispatch}) => {
+export const insertHorizontalRule: StateCommand = ({
+  state,
+  dispatch
+}: any) => {
   let line = state.doc.lineAt(state.selection.main.from)
   dispatch(state.update({
     changes: {from: line.to, insert: "\n---\n"},
@@ -952,7 +1030,10 @@ export const listMarkerUpgradeHandler: Extension = EditorView.inputHandler.of(
  * - "** " + backspace → "* "
  * - "### " + backspace → "## "
  */
-export const listMarkerDowngrade: StateCommand = ({state, dispatch}) => {
+export const listMarkerDowngrade: StateCommand = ({
+  state,
+  dispatch
+}: any) => {
   let {doc, selection} = state
   let range = selection.main
 
@@ -1000,7 +1081,10 @@ export const listMarkerDowngrade: StateCommand = ({state, dispatch}) => {
  * - "*#* text" → "*#** text" (duplicates the last marker *)
  * Supports multi-line selections - all list lines in selection are indented
  */
-export const indentList: StateCommand = ({state, dispatch}) => {
+export const indentList: StateCommand = ({
+  state,
+  dispatch
+}: any) => {
   let {doc, selection} = state
   let changes: ChangeSpec[] = []
   let processedLines = new Set<number>()
@@ -1062,7 +1146,10 @@ export const indentList: StateCommand = ({state, dispatch}) => {
  * - "* text" → "text" (removes single marker, converting to paragraph)
  * Supports multi-line selections - all list lines in selection are outdented
  */
-export const outdentList: StateCommand = ({state, dispatch}) => {
+export const outdentList: StateCommand = ({
+  state,
+  dispatch
+}: any) => {
   let {doc, selection} = state
   let changes: ChangeSpec[] = []
   let processedLines = new Set<number>()

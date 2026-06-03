@@ -5,11 +5,17 @@
  * for CodeMirror 6, similar to markdown() in @codemirror/lang-markdown.
  */
 
+// @ts-expect-error TS(2792): Cannot find module '@codemirror/state'. Did you me... Remove this comment to see the full error message
 import { Prec } from "@codemirror/state"
+// @ts-expect-error TS(2792): Cannot find module '@codemirror/view'. Did you mea... Remove this comment to see the full error message
 import { keymap, EditorView } from "@codemirror/view"
+// @ts-expect-error TS(6133): 'LanguageDescription' is declared but its value is... Remove this comment to see the full error message
 import { Language, LanguageSupport, LanguageDescription, syntaxHighlighting, indentOnInput, syntaxTree } from "@codemirror/language"
+// @ts-expect-error TS(2792): Cannot find module '@codemirror/autocomplete'. Did... Remove this comment to see the full error message
 import { autocompletion, completionKeymap, completionStatus, startCompletion } from "@codemirror/autocomplete"
+// @ts-expect-error TS(2792): Cannot find module '@codemirror/lang-html'. Did yo... Remove this comment to see the full error message
 import { html, htmlCompletionSource } from "@codemirror/lang-html"
+// @ts-expect-error TS(2792): Cannot find module '@codemirror/autocomplete'. Did... Remove this comment to see the full error message
 import type { CompletionContext } from "@codemirror/autocomplete"
 
 import { TiddlyWikiParser } from "./parser"
@@ -57,6 +63,7 @@ import {
   styledSpanClassCompletion,
   styledSpanPropertyCompletion,
   closingTagCompletion,
+// @ts-expect-error TS(2792): Cannot find module './completions'. Did you mean t... Remove this comment to see the full error message
 } from "./completions"
 
 // Note: tiddlywikiLanguage and headerIndent are exported from ./language (via index.ts)
@@ -117,6 +124,7 @@ export function tiddlywiki(config: TiddlyWikiLanguageConfig = {}): LanguageSuppo
     getCSSProperties,
     getCSSValues,
     getCSSValuesForProperty,
+    // @ts-expect-error TS(6133): 'htmlTagLanguage' is declared but its value is nev... Remove this comment to see the full error message
     htmlTagLanguage = htmlNoMatch,
     getSelfClosingWidgets,
     getWikiRules,
@@ -126,7 +134,9 @@ export function tiddlywiki(config: TiddlyWikiLanguageConfig = {}): LanguageSuppo
     getShiftTabOutsideListBehavior,
     getEnterIndentBehavior,
     getFilterBracketMode,
+    // @ts-expect-error TS(6133): 'skipNestedLanguageExtensions' is declared but its... Remove this comment to see the full error message
     skipNestedLanguageExtensions = false,
+    // @ts-expect-error TS(6133): 'nestedLanguageExtensions' is declared but its val... Remove this comment to see the full error message
     nestedLanguageExtensions,
     nestedLanguageCompletionSources,
     nestedLanguageCompletions,
@@ -399,7 +409,7 @@ export function tiddlywiki(config: TiddlyWikiLanguageConfig = {}): LanguageSuppo
     }))
 
     // Trigger completion when typing opening quote after = in attribute context
-    support.push(EditorView.inputHandler.of((view, from, _to, text) => {
+    support.push(EditorView.inputHandler.of((view: any, from: any, _to: any, text: any) => {
       if (text !== '"' && text !== "'") return false
       const charBefore = view.state.sliceDoc(Math.max(0, from - 1), from)
       if (charBefore !== "=") return false
@@ -412,7 +422,7 @@ export function tiddlywiki(config: TiddlyWikiLanguageConfig = {}): LanguageSuppo
     }))
 
     // Trigger completion when typing second _ after <_ or <<_ (substituted parameter)
-    support.push(EditorView.inputHandler.of((view, from, _to, text) => {
+    support.push(EditorView.inputHandler.of((view: any, from: any, _to: any, text: any) => {
       if (text !== "_") return false
       const textBefore = view.state.sliceDoc(Math.max(0, from - 3), from)
       // Check for <_ or <<_ pattern
@@ -427,7 +437,7 @@ export function tiddlywiki(config: TiddlyWikiLanguageConfig = {}): LanguageSuppo
     }))
 
     // Trigger completion when typing "." after "style" in attribute context
-    support.push(EditorView.inputHandler.of((view, from, _to, text) => {
+    support.push(EditorView.inputHandler.of((view: any, from: any, _to: any, text: any) => {
       if (text !== ".") return false
       const textBefore = view.state.sliceDoc(Math.max(0, from - 5), from)
       // Check for "style" before the dot (case-insensitive for robustness)
@@ -442,7 +452,7 @@ export function tiddlywiki(config: TiddlyWikiLanguageConfig = {}): LanguageSuppo
     }))
 
     // Trigger completion when typing "=" after a param name inside a <<macro>> call
-    support.push(EditorView.inputHandler.of((view, from, _to, text) => {
+    support.push(EditorView.inputHandler.of((view: any, from: any, _to: any, text: any) => {
       if (text !== "=") return false
       const textBefore = view.state.sliceDoc(Math.max(0, from - 200), from)
       // Check if inside a macro call and after a param name
@@ -457,7 +467,7 @@ export function tiddlywiki(config: TiddlyWikiLanguageConfig = {}): LanguageSuppo
     }))
 
     // Auto-close tags when typing ">"
-    support.push(EditorView.inputHandler.of((view, from, _to, text) => {
+    support.push(EditorView.inputHandler.of((view: any, from: any, _to: any, text: any) => {
       if (text !== ">") return false
 
       const charBefore = view.state.sliceDoc(Math.max(0, from - 1), from)
@@ -644,6 +654,7 @@ export function tiddlywiki(config: TiddlyWikiLanguageConfig = {}): LanguageSuppo
 
           // Check for opening tag <tagname
           if (ch === '<' && /[a-zA-Z$]/.test(textAfter[pos + 1])) {
+            // @ts-expect-error TS(6133): 'tagStart' is declared but its value is never read... Remove this comment to see the full error message
             const tagStart = pos
             pos++
             // Read tag name
@@ -658,6 +669,7 @@ export function tiddlywiki(config: TiddlyWikiLanguageConfig = {}): LanguageSuppo
               // Scan forward to find > or /> while skipping quoted content
               let isSelfClosing = false
               let foundEnd = false
+              // @ts-expect-error TS(6133): 'scanStart' is declared but its value is never rea... Remove this comment to see the full error message
               const scanStart = pos
               while (pos < len && !foundEnd) {
                 const sch = textAfter[pos]

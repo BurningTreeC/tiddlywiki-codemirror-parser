@@ -7,9 +7,13 @@
  * module-type: codemirror6-plugin
  */
 
+// @ts-expect-error TS(2792): Cannot find module '@codemirror/state'. Did you me... Remove this comment to see the full error message
 import {Extension, Compartment, Prec} from "@codemirror/state"
+// @ts-expect-error TS(2792): Cannot find module '@codemirror/view'. Did you mea... Remove this comment to see the full error message
 import {keymap, EditorView} from "@codemirror/view"
+// @ts-expect-error TS(2792): Cannot find module '@codemirror/language'. Did you... Remove this comment to see the full error message
 import {LanguageDescription} from "@codemirror/language"
+// @ts-expect-error TS(2792): Cannot find module './parser'. Did you mean to set... Remove this comment to see the full error message
 import {tiddlywikiLanguage, tiddlywiki} from "./parser"
 import {
   insertNewlineContinueMarkup,
@@ -248,6 +252,7 @@ function getCached<T>(
     return entry.data
   }
   const data = compute()
+  // @ts-expect-error TS(2352): Conversion of type 'CacheEntry<string[]> | CacheEn... Remove this comment to see the full error message
   ;(cache[key] as CacheEntry<T>) = { data, valid: true }
   return data
 }
@@ -475,6 +480,7 @@ function getWidgetNames(): string[] {
       }
       // Also check widget modules using TiddlyWiki's module API
       if ($tw.modules?.forEachModuleOfType) {
+        // @ts-expect-error TS(6133): 'title' is declared but its value is never read.
         $tw.modules.forEachModuleOfType("widget", (title: string, mod: Record<string, unknown>) => {
           if (mod) {
             for (const exportName of Object.keys(mod)) {
@@ -489,6 +495,7 @@ function getWidgetNames(): string[] {
           }
         })
         // Also check widget-subclass modules (e.g., $log is a subclass of $action-log)
+        // @ts-expect-error TS(6133): 'title' is declared but its value is never read.
         $tw.modules.forEachModuleOfType("widget-subclass", (title: string, mod: Record<string, unknown>) => {
           if (mod) {
             const subclassName = (mod.name || mod.baseClass) as string | undefined

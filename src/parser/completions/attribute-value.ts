@@ -2,7 +2,9 @@
  * Attribute value completion source
  */
 
+// @ts-expect-error TS(2792): Cannot find module '@codemirror/language'. Did you... Remove this comment to see the full error message
 import { syntaxTree } from "@codemirror/language"
+// @ts-expect-error TS(2792): Cannot find module '@codemirror/autocomplete'. Did... Remove this comment to see the full error message
 import { Completion, CompletionContext, CompletionResult } from "@codemirror/autocomplete"
 import {
   defaultFieldNames,
@@ -304,7 +306,7 @@ export function attributeValueCompletion(
           type: "keyword",
           detail: "CSS value",
           boost: 2,
-          apply: (view, _completion, from, to) => {
+          apply: (view: any, _completion: any, from: any, to: any) => {
             const textAfter = view.state.sliceDoc(to, to + 1)
             const suffix = textAfter === quoteChar ? "" : quoteChar
             const insert = value + suffix
@@ -395,7 +397,7 @@ export function attributeValueCompletion(
         type,
         detail,
         boost: 2,
-        apply: (view, _completion, from, to) => {
+        apply: (view: any, _completion: any, from: any, to: any) => {
           const textAfter = view.state.sliceDoc(to, to + 1)
           const suffix = textAfter === quoteChar ? "" : quoteChar
           const insert = name + suffix
@@ -417,7 +419,7 @@ export function attributeValueCompletion(
         detail: "tiddler",
         boost: getTiddlerBoost(title, isDraftTiddler),
         sortText: getTiddlerSortText(title, isDraftTiddler),
-        apply: (view, _completion, from, to) => {
+        apply: (view: any, _completion: any, from: any, to: any) => {
           const textAfter = view.state.sliceDoc(to, to + 1)
           const suffix = textAfter === quoteChar ? "" : quoteChar
           const insert = title + suffix
@@ -439,7 +441,7 @@ export function attributeValueCompletion(
         detail: "tiddler",
         boost: getTiddlerBoost(title, isDraftTiddler),
         sortText: getTiddlerSortText(title, isDraftTiddler),
-        apply: (view, _completion, from, to) => {
+        apply: (view: any, _completion: any, from: any, to: any) => {
           const textAfter = view.state.sliceDoc(to, to + 1)
           const suffix = textAfter === quoteChar ? "" : quoteChar
           const insert = title + suffix
@@ -484,7 +486,7 @@ export function attributeValueCompletion(
           type: "keyword",
           detail: "message",
           boost: 2,
-          apply: (view, _completion, from, to) => {
+          apply: (view: any, _completion: any, from: any, to: any) => {
             const textAfter = view.state.sliceDoc(to, to + 1)
             const suffix = textAfter === quoteChar ? "" : quoteChar
             const insert = msg + suffix
@@ -507,7 +509,7 @@ export function attributeValueCompletion(
         type: "property",
         detail: "field",
         boost: 2,
-        apply: (view, _completion, from, to) => {
+        apply: (view: any, _completion: any, from: any, to: any) => {
           const textAfter = view.state.sliceDoc(to, to + 1)
           const suffix = textAfter === quoteChar ? "" : quoteChar
           const insert = fieldName + suffix
@@ -536,7 +538,7 @@ export function attributeValueCompletion(
               type: "property",
               detail: "index",
               boost: 2,
-              apply: (view, _completion, from, to) => {
+              apply: (view: any, _completion: any, from: any, to: any) => {
                 const textAfter = view.state.sliceDoc(to, to + 1)
                 const suffix = textAfter === quoteChar ? "" : quoteChar
                 const insert = indexName + suffix
@@ -561,7 +563,7 @@ export function attributeValueCompletion(
         type: "keyword",
         detail: "storyview",
         boost: 2,
-        apply: (view, _completion, from, to) => {
+        apply: (view: any, _completion: any, from: any, to: any) => {
           const textAfter = view.state.sliceDoc(to, to + 1)
           const suffix = textAfter === quoteChar ? "" : quoteChar
           const insert = storyview + suffix
@@ -583,7 +585,7 @@ export function attributeValueCompletion(
         type: "keyword",
         detail: "deserializer",
         boost: 2,
-        apply: (view, _completion, from, to) => {
+        apply: (view: any, _completion: any, from: any, to: any) => {
           const textAfter = view.state.sliceDoc(to, to + 1)
           const suffix = textAfter === quoteChar ? "" : quoteChar
           const insert = deserializer + suffix
@@ -619,7 +621,7 @@ export function attributeValueCompletion(
             type: "class",
             detail: "class",
             boost: 2,
-            apply: (view, _completion, _from, to) => {
+            apply: (view: any, _completion: any, _from: any, to: any) => {
               const textAfter = view.state.sliceDoc(to, to + 1)
               // Add space after class to allow adding more classes
               // Only skip if closing quote is already there
@@ -642,7 +644,7 @@ export function attributeValueCompletion(
               to: pos,
               options,
               validFor: /^[\w\-]*$/
-            }
+            };
           }
         }
       }
@@ -701,7 +703,7 @@ export function attributeValueCompletion(
         type: "function",
         detail,
         boost: 2,
-        apply: (view, _completion, from, to) => {
+        apply: (view: any, _completion: any, from: any, to: any) => {
           const textAfter = view.state.sliceDoc(to, to + 1)
           const suffix = textAfter === quoteChar ? "" : quoteChar
           const insert = name + suffix
@@ -721,8 +723,8 @@ export function attributeValueCompletion(
       to: pos,
       options,
       validFor: /^[\w\-$:\/. ]*$/
-    }
-  }
+    };
+  };
 }
 
 // Attribute names that should have their content parsed as wikitext
@@ -962,6 +964,7 @@ export function wikitextAttributeCompletion(
   getMacroParams?: (name: string) => string[] | null
 ) {
   // Use module-level cached constants (avoid circular deps by not importing)
+  // @ts-expect-error TS(6133): 'coreWidgets' is declared but its value is never r... Remove this comment to see the full error message
   const coreWidgets = CORE_WIDGETS_LIST
   const commonHtmlTags = COMMON_HTML_TAGS_LIST
 
@@ -1030,7 +1033,7 @@ export function wikitextAttributeCompletion(
           to: pos,
           options,
           validFor: /^<<__[\w]*$/
-        }
+        };
       }
     }
 
@@ -1059,7 +1062,7 @@ export function wikitextAttributeCompletion(
           to: pos,
           options,
           validFor: /^<__[\w]*$/
-        }
+        };
       }
     }
 
@@ -1116,7 +1119,7 @@ export function wikitextAttributeCompletion(
           type: "variable",
           detail: v.detail,
           boost: 5,
-          apply: (view, _completion, from, to) => {
+          apply: (view: any, _completion: any, from: any, to: any) => {
             const textAfter = view.state.sliceDoc(to, to + 2)
             let adjustedTo = to
             if (textAfter === ")$") adjustedTo = to + 2
@@ -1135,7 +1138,7 @@ export function wikitextAttributeCompletion(
           to: pos,
           options,
           validFor: /^\$\([\w]*$/
-        }
+        };
       }
     }
 
@@ -1166,7 +1169,7 @@ export function wikitextAttributeCompletion(
           to: pos,
           options,
           validFor: /^\$[\w]+$/
-        }
+        };
       }
     }
 
@@ -1213,7 +1216,7 @@ export function wikitextAttributeCompletion(
                 label: param,
                 type: "property",
                 detail: "parameter",
-                apply: (view, _completion, from, to) => {
+                apply: (view: any, _completion: any, from: any, to: any) => {
                   const textAfter = view.state.sliceDoc(to, to + 1)
                   const suffix = textAfter === ":" ? "" : ":"
                   view.dispatch({
@@ -1230,7 +1233,7 @@ export function wikitextAttributeCompletion(
                 to: pos,
                 options,
                 validFor: /^[$\w\-]*$/
-              }
+              };
             }
           }
         }
@@ -1312,7 +1315,7 @@ export function wikitextAttributeCompletion(
           type: v.detail === "parameter" ? "variable" : "function",
           detail: v.detail,
           boost: v.boost,
-          apply: (view, _completion, from, to) => {
+          apply: (view: any, _completion: any, from: any, to: any) => {
             const textAfter = view.state.sliceDoc(to, to + 1)
             const hasClosingAngle = textAfter === ">"
             const suffix = hasClosingAngle ? "" : ">"
@@ -1332,7 +1335,7 @@ export function wikitextAttributeCompletion(
           to: pos,
           options,
           validFor: /^[\[\]}>][\w\-:!]*<[\w\-\.]*$/
-        }
+        };
       }
     }
 
@@ -1370,7 +1373,7 @@ export function wikitextAttributeCompletion(
           type: "type",
           detail: "widget",
           boost: 2,
-          apply: (view, _completion, from, to) => {
+          apply: (view: any, _completion: any, from: any, to: any) => {
             // Insert widget with closing tag
             const insert = `<$${name}></$${name}>`
             const cursorPos = from + name.length + 3
@@ -1388,7 +1391,7 @@ export function wikitextAttributeCompletion(
           to: pos,
           options,
           validFor: /^<\$[\w\-\.]*$/
-        }
+        };
       }
     }
 
@@ -1408,7 +1411,7 @@ export function wikitextAttributeCompletion(
           type: "keyword",
           detail: "html",
           boost: 1,
-          apply: (view, _completion, from, to) => {
+          apply: (view: any, _completion: any, from: any, to: any) => {
             const insert = `<${tag}></${tag}>`
             const cursorPos = from + tag.length + 2
             view.dispatch({
@@ -1425,7 +1428,7 @@ export function wikitextAttributeCompletion(
           to: pos,
           options,
           validFor: /^<[a-zA-Z][\w\-]*$/
-        }
+        };
       }
     }
 
@@ -1446,7 +1449,7 @@ export function wikitextAttributeCompletion(
             type: "variable",
             detail: "parameter",
             boost: 10,
-            apply: (view, _completion, from, to) => {
+            apply: (view: any, _completion: any, from: any, to: any) => {
               const insert = `<<${param}>>`
               view.dispatch({
                 changes: { from, to, insert },
@@ -1489,7 +1492,7 @@ export function wikitextAttributeCompletion(
           type: "function",
           detail: "macro",
           boost: 2,
-          apply: (view, _completion, from, to) => {
+          apply: (view: any, _completion: any, from: any, to: any) => {
             const insert = `<<${macro}>>`
             const cursorPos = from + insert.length - 2
             view.dispatch({
@@ -1506,7 +1509,7 @@ export function wikitextAttributeCompletion(
           to: pos,
           options,
           validFor: /^<<[\w\-]*$/
-        }
+        };
       }
     }
 
@@ -1528,7 +1531,7 @@ export function wikitextAttributeCompletion(
           detail: "tiddler",
           boost: getTiddlerBoost(title, isDraftTiddler),
           sortText: getTiddlerSortText(title, isDraftTiddler),
-          apply: (view, _completion, from, to) => {
+          apply: (view: any, _completion: any, from: any, to: any) => {
             const insert = `[[${title}]]`
             view.dispatch({
               changes: { from, to, insert },
@@ -1544,7 +1547,7 @@ export function wikitextAttributeCompletion(
           to: pos,
           options,
           validFor: /^\[\[[^\]|]*$/
-        }
+        };
       }
     }
 
@@ -1566,7 +1569,7 @@ export function wikitextAttributeCompletion(
           detail: "transclusion",
           boost: getTiddlerBoost(title, isDraftTiddler),
           sortText: getTiddlerSortText(title, isDraftTiddler),
-          apply: (view, _completion, from, to) => {
+          apply: (view: any, _completion: any, from: any, to: any) => {
             const insert = `{{${title}}}`
             view.dispatch({
               changes: { from, to, insert },
@@ -1582,7 +1585,7 @@ export function wikitextAttributeCompletion(
           to: pos,
           options,
           validFor: /^(?<!\{)\{\{[^{}|]*$/
-        }
+        };
       }
     }
 
@@ -1604,7 +1607,7 @@ export function wikitextAttributeCompletion(
             type: "keyword",
             detail: "conditional",
             boost: 2,
-            apply: (view, _completion, from, to) => {
+            apply: (view: any, _completion: any, from: any, to: any) => {
               const insert = `<%${cond} %>`
               const cursorPos = from + cond.length + 3
               view.dispatch({
@@ -1619,7 +1622,7 @@ export function wikitextAttributeCompletion(
             type: "keyword",
             detail: "conditional",
             boost: 2,
-            apply: (view, _completion, from, to) => {
+            apply: (view: any, _completion: any, from: any, to: any) => {
               const insert = `<%${cond}%>`
               view.dispatch({
                 changes: { from, to, insert },
@@ -1636,7 +1639,7 @@ export function wikitextAttributeCompletion(
           to: pos,
           options,
           validFor: /^<%[\w]*$/
-        }
+        };
       }
     }
 
@@ -1670,7 +1673,7 @@ export function wikitextAttributeCompletion(
           type: "keyword",
           detail: kw.detail,
           boost: 2,
-          apply: (view, _completion, from, to) => {
+          apply: (view: any, _completion: any, from: any, to: any) => {
             // Don't add space after \end
             const insert = kw.label === "end" ? kw.label : kw.label + " "
             view.dispatch({
@@ -1687,7 +1690,7 @@ export function wikitextAttributeCompletion(
           to: pos,
           options,
           validFor: /^\w*$/
-        }
+        };
       }
     }
 
@@ -1721,7 +1724,7 @@ export function wikitextAttributeCompletion(
           to: pos,
           options,
           validFor: /^\w*$/
-        }
+        };
       }
     }
 
@@ -1755,7 +1758,7 @@ export function wikitextAttributeCompletion(
           to: pos,
           options,
           validFor: /^\w*$/
-        }
+        };
       }
     }
 
@@ -1789,7 +1792,7 @@ export function wikitextAttributeCompletion(
           to: pos,
           options,
           validFor: /^\w*$/
-        }
+        };
       }
     }
 
@@ -1803,7 +1806,7 @@ export function wikitextAttributeCompletion(
         type: "type",
         detail: "widget",
         boost: 5,
-        apply: (view, _completion, from, to) => {
+        apply: (view: any, _completion: any, from: any, to: any) => {
           view.dispatch({
             changes: { from, to, insert: "<$" },
             selection: { anchor: from + 2 },
@@ -1817,7 +1820,7 @@ export function wikitextAttributeCompletion(
         type: "function",
         detail: "macro",
         boost: 4,
-        apply: (view, _completion, from, to) => {
+        apply: (view: any, _completion: any, from: any, to: any) => {
           view.dispatch({
             changes: { from, to, insert: "<<" },
             selection: { anchor: from + 2 },
@@ -1831,7 +1834,7 @@ export function wikitextAttributeCompletion(
         type: "variable",
         detail: "link",
         boost: 3,
-        apply: (view, _completion, from, to) => {
+        apply: (view: any, _completion: any, from: any, to: any) => {
           view.dispatch({
             changes: { from, to, insert: "[[" },
             selection: { anchor: from + 2 },
@@ -1845,7 +1848,7 @@ export function wikitextAttributeCompletion(
         type: "variable",
         detail: "transclusion",
         boost: 2,
-        apply: (view, _completion, from, to) => {
+        apply: (view: any, _completion: any, from: any, to: any) => {
           view.dispatch({
             changes: { from, to, insert: "{{" },
             selection: { anchor: from + 2 },
@@ -1859,7 +1862,7 @@ export function wikitextAttributeCompletion(
         type: "variable",
         detail: "filtered transclusion",
         boost: 1,
-        apply: (view, _completion, from, to) => {
+        apply: (view: any, _completion: any, from: any, to: any) => {
           view.dispatch({
             changes: { from, to, insert: "{{{" },
             selection: { anchor: from + 3 },
@@ -1873,7 +1876,7 @@ export function wikitextAttributeCompletion(
         type: "keyword",
         detail: "conditional",
         boost: 1,
-        apply: (view, _completion, from, to) => {
+        apply: (view: any, _completion: any, from: any, to: any) => {
           const insert = "<%if %>"
           view.dispatch({
             changes: { from, to, insert },
@@ -1888,7 +1891,7 @@ export function wikitextAttributeCompletion(
         type: "keyword",
         detail: "pragma",
         boost: 1,
-        apply: (view, _completion, from, to) => {
+        apply: (view: any, _completion: any, from: any, to: any) => {
           view.dispatch({
             changes: { from, to, insert: "\\procedure " },
             selection: { anchor: from + 11 }
@@ -1901,7 +1904,7 @@ export function wikitextAttributeCompletion(
         type: "keyword",
         detail: "pragma",
         boost: 1,
-        apply: (view, _completion, from, to) => {
+        apply: (view: any, _completion: any, from: any, to: any) => {
           view.dispatch({
             changes: { from, to, insert: "\\function " },
             selection: { anchor: from + 10 }
@@ -1914,7 +1917,7 @@ export function wikitextAttributeCompletion(
         type: "keyword",
         detail: "pragma",
         boost: 1,
-        apply: (view, _completion, from, to) => {
+        apply: (view: any, _completion: any, from: any, to: any) => {
           view.dispatch({
             changes: { from, to, insert: "\\define " },
             selection: { anchor: from + 8 }
@@ -1927,7 +1930,7 @@ export function wikitextAttributeCompletion(
         type: "keyword",
         detail: "pragma",
         boost: 1,
-        apply: (view, _completion, from, to) => {
+        apply: (view: any, _completion: any, from: any, to: any) => {
           view.dispatch({
             changes: { from, to, insert: "\\widget " },
             selection: { anchor: from + 8 }
@@ -1940,9 +1943,9 @@ export function wikitextAttributeCompletion(
         to: pos,
         options,
         validFor: /^$/
-      }
+      };
     }
 
     return null
-  }
+  };
 }

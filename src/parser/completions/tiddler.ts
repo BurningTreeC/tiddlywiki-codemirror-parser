@@ -2,7 +2,9 @@
  * Tiddler title and transclusion completion sources
  */
 
+// @ts-expect-error TS(2792): Cannot find module '@codemirror/language'. Did you... Remove this comment to see the full error message
 import { syntaxTree } from "@codemirror/language"
+// @ts-expect-error TS(2792): Cannot find module '@codemirror/autocomplete'. Did... Remove this comment to see the full error message
 import { Completion, CompletionContext, CompletionResult } from "@codemirror/autocomplete"
 import { buildMultiSelectionChanges, getTiddlerBoost, getTiddlerSortText } from "./common"
 import { filterOperatorMeta } from "./filter"
@@ -98,11 +100,12 @@ export function tiddlerCompletion(
         detail,
         boost: getTiddlerBoost(title, isDraftTiddler),
         sortText: getTiddlerSortText(title, isDraftTiddler),
-        apply: (view, _completion, from, to) => {
+        apply: (view: any, _completion: any, from: any, to: any) => {
           const textAfter = view.state.sliceDoc(to, to + 2)
           const hasClosingBrace = textAfter[0] === "}"
           const hasOuterBracket = textAfter[1] === "]" || textAfter[0] === "]"
 
+          // @ts-expect-error TS(6133): 'suffix' is declared but its value is never read.
           let suffix = "}"
           if (hasClosingBrace) suffix = ""
           if (!hasClosingBrace && !hasOuterBracket) suffix = "}]"
@@ -156,7 +159,7 @@ export function tiddlerCompletion(
         detail,
         boost: getTiddlerBoost(title, isDraftTiddler),
         sortText: getTiddlerSortText(title, isDraftTiddler),
-        apply: (view, _completion, from, to) => {
+        apply: (view: any, _completion: any, from: any, to: any) => {
           const textAfter = view.state.sliceDoc(to, to + 2)
           const hasFirstBracket = textAfter[0] === "]"
           const hasSecondBracket = textAfter[1] === "]"
@@ -211,7 +214,7 @@ export function tiddlerCompletion(
       detail,
       boost: getTiddlerBoost(title, isDraftTiddler),
       sortText: getTiddlerSortText(title, isDraftTiddler),
-      apply: (view, _completion, from, to) => {
+      apply: (view: any, _completion: any, from: any, to: any) => {
         const textAfter = view.state.sliceDoc(to, to + suffix.length)
         let actualSuffix = suffix
         let skipChars = 0
@@ -243,7 +246,7 @@ export function tiddlerCompletion(
       options,
       validFor
     }
-  }
+  };
 }
 
 /**
@@ -302,8 +305,8 @@ export function systemTiddlerCompletion(
       to: pos,
       options,
       validFor: /^\$:\/[\w\-\/\.]*$/
-    }
-  }
+    };
+  };
 }
 
 /**
@@ -390,7 +393,7 @@ export function transclusionFieldCompletion(
       label: prefix + value,
       type: "property",
       detail,
-      apply: (view, _completion, from, to) => {
+      apply: (view: any, _completion: any, from: any, to: any) => {
         const textAfter = view.state.sliceDoc(to, to + 2)
         let suffix = closingSuffix
         if (isTransclusion) {
@@ -432,5 +435,5 @@ export function transclusionFieldCompletion(
       options,
       validFor: validForPattern
     }
-  }
+  };
 }

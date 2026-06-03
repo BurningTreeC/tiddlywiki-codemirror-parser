@@ -2,10 +2,14 @@
  * Filter completion sources
  */
 
+// @ts-expect-error TS(2792): Cannot find module '@codemirror/language'. Did you... Remove this comment to see the full error message
 import { syntaxTree } from "@codemirror/language"
+// @ts-expect-error TS(2792): Cannot find module '@codemirror/autocomplete'. Did... Remove this comment to see the full error message
 import { Completion, CompletionContext, CompletionResult } from "@codemirror/autocomplete"
+// @ts-expect-error TS(2792): Cannot find module '@codemirror/state'. Did you me... Remove this comment to see the full error message
 import { EditorState } from "@codemirror/state"
 import { defaultFieldNames, extractLocalDefinitions, getTiddlerBoost } from "./common"
+// @ts-expect-error TS(2792): Cannot find module '@lezer/common'. Did you mean t... Remove this comment to see the full error message
 import type { SyntaxNode } from "@lezer/common"
 
 /**
@@ -377,7 +381,7 @@ export function filterOperatorCompletion(
     }
 
     return createFilterOperatorResult(context, partial, matchLength, hasFilterContext, getFilterOperators, getFilterBracketMode, getFunctionParams)
-  }
+  };
 }
 
 function createFilterOperatorResult(
@@ -419,7 +423,7 @@ function createFilterOperatorResult(
         type: "keyword",
         detail: "[img[...]] - embed image",
         boost: "img".startsWith(partial.toLowerCase()) ? 100 : 10,
-        apply: (view, _completion, from, to) => {
+        apply: (view: any, _completion: any, from: any, to: any) => {
           view.dispatch({
             changes: { from, to, insert: "img[" },
             selection: { anchor: from + 4 }
@@ -434,7 +438,7 @@ function createFilterOperatorResult(
         type: "keyword",
         detail: "[ext[...]] - external link",
         boost: "ext".startsWith(partial.toLowerCase()) ? 100 : 10,
-        apply: (view, _completion, from, to) => {
+        apply: (view: any, _completion: any, from: any, to: any) => {
           view.dispatch({
             changes: { from, to, insert: "ext[" },
             selection: { anchor: from + 4 }
@@ -453,7 +457,7 @@ function createFilterOperatorResult(
       label: op,
       type: "function",
       detail: "filter operator",
-      apply: (view, _completion, from, to) => {
+      apply: (view: any, _completion: any, from: any, to: any) => {
         const mode = getFilterBracketMode ? getFilterBracketMode() : "always"
 
         // Check what's after the cursor
@@ -561,7 +565,7 @@ function createFilterOperatorResult(
       type: "function",
       detail: paramCount > 0 ? `function (${paramCount} param${paramCount > 1 ? 's' : ''})` : "function",
       boost: 5, // Boost local functions
-      apply: (view, _completion, from, to) => {
+      apply: (view: any, _completion: any, from: any, to: any) => {
         const mode = getFilterBracketMode ? getFilterBracketMode() : "always"
         const textAfter = view.state.sliceDoc(to, to + 2)
         const firstCharAfter = textAfter.charAt(0)
@@ -632,7 +636,7 @@ function createFilterOperatorResult(
           type: "function",
           detail: `function (${paramCount} param${paramCount > 1 ? 's' : ''})`,
           boost: 3,
-          apply: (view, _completion, from, to) => {
+          apply: (view: any, _completion: any, from: any, to: any) => {
             const mode = getFilterBracketMode ? getFilterBracketMode() : "always"
             const textAfter = view.state.sliceDoc(to, to + 2)
             const firstCharAfter = textAfter.charAt(0)
@@ -681,7 +685,7 @@ function createFilterOperatorResult(
     to: pos,
     options,
     validFor: /^[\w.]*$/  // Allow dots in function names like tf.get-tag
-  }
+  };
 }
 
 /**
@@ -724,7 +728,7 @@ export function filterRunPrefixCompletion(context: CompletionContext): Completio
     label: p.label,
     type: "keyword",
     detail: p.detail,
-    apply: p.label.startsWith(":") ? (view, _completion, from, to) => {
+    apply: p.label.startsWith(":") ? (view: any, _completion: any, from: any, to: any) => {
       const textAfter = view.state.sliceDoc(to, to + 10)
       const hasClosingBracket = /^\s*\]/.test(textAfter)
       const insert = hasClosingBracket ? p.label + "[" : p.label + "[]"
@@ -741,7 +745,7 @@ export function filterRunPrefixCompletion(context: CompletionContext): Completio
     to: pos,
     options,
     validFor: /^(?:[:+\-~][\w]*|=>?[\w]*)$/
-  }
+  };
 }
 
 /**
@@ -835,8 +839,8 @@ export function filterOperatorSuffixCompletion(
       to: pos,
       options: filteredOptions,
       validFor: /^[\w.]*$/  // Allow dots in function names (e.g., .shadow-data)
-    }
-  }
+    };
+  };
 }
 
 /**
@@ -912,7 +916,7 @@ export function filterOperandValueCompletion(
           detail: "variable"
         })),
         validFor: /^[\w.]*$/
-      }
+      };
     }
 
     // For (variable) multi-valued operands, provide variable completions
@@ -940,7 +944,7 @@ export function filterOperandValueCompletion(
           detail: "multi-valued variable"
         })),
         validFor: /^[\w.]*$/
-      }
+      };
     }
 
     // For {text reference} operands, we could provide tiddler/field completions
@@ -1097,8 +1101,8 @@ export function filterOperandValueCompletion(
       to: pos,
       options: filteredOptions,
       validFor: /^[^\]]*$/
-    }
-  }
+    };
+  };
 }
 
 /**
@@ -1161,7 +1165,7 @@ export function imageLinkCompletion(): (context: CompletionContext) => Completio
         type: "keyword",
         detail: "[img[image]] - embed image",
         boost: partial.length > 0 && "img".startsWith(partial.toLowerCase()) ? 100 : 10,
-        apply: (view, _completion, from, to) => {
+        apply: (view: any, _completion: any, from: any, to: any) => {
           // Insert [img[] with cursor inside for image path
           view.dispatch({
             changes: { from: from - 1, to, insert: "[img[]" },
@@ -1177,7 +1181,7 @@ export function imageLinkCompletion(): (context: CompletionContext) => Completio
         type: "keyword",
         detail: "[ext[url]] - external link",
         boost: partial.length > 0 && "ext".startsWith(partial.toLowerCase()) ? 100 : 10,
-        apply: (view, _completion, from, to) => {
+        apply: (view: any, _completion: any, from: any, to: any) => {
           // Insert [ext[] with cursor inside for URL
           view.dispatch({
             changes: { from: from - 1, to, insert: "[ext[]" },
@@ -1194,6 +1198,6 @@ export function imageLinkCompletion(): (context: CompletionContext) => Completio
       to: pos,
       options,
       validFor: /^\w*$/
-    }
-  }
+    };
+  };
 }

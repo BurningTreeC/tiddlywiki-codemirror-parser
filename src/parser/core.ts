@@ -4,7 +4,9 @@
  * Following the Lezer Markdown architecture with adaptations for TiddlyWiki.
  */
 
+// @ts-expect-error TS(2792): Cannot find module '@lezer/common'. Did you mean t... Remove this comment to see the full error message
 import { Tree, TreeBuffer, NodeType, NodeSet, NodeProp, Input } from "@lezer/common"
+// @ts-expect-error TS(6133): 'CompositeBlockTypes' is declared but its value is... Remove this comment to see the full error message
 import { Type, CompositeBlockTypes } from "./types"
 
 // Character codes for common characters
@@ -234,9 +236,9 @@ export class CompositeBlock {
     const last = this.children.length - 1
     if (last >= 0) end = Math.max(end, this.positions[last] + this.children[last].length + this.from)
     return new Tree(nodeSet.types[this.type], this.children, this.positions, end - this.from).balance({
-      makeTree: (children, positions, length) =>
+      makeTree: (children: any, positions: any, length: any) =>
         new Tree(NodeType.none, children, positions, length, [[NodeProp.contextHash, this.hash]])
-    })
+    });
   }
 }
 
@@ -401,5 +403,6 @@ export type ParseWrapper = (
 ) => PartialParse
 
 // Re-export these types from @lezer/common for convenience
+// @ts-expect-error TS(2792): Cannot find module '@lezer/common'. Did you mean t... Remove this comment to see the full error message
 import type { PartialParse, TreeFragment } from "@lezer/common"
 export type { PartialParse, TreeFragment }

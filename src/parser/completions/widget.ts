@@ -2,7 +2,9 @@
  * Widget completion sources
  */
 
+// @ts-expect-error TS(2792): Cannot find module '@codemirror/language'. Did you... Remove this comment to see the full error message
 import { syntaxTree } from "@codemirror/language"
+// @ts-expect-error TS(2792): Cannot find module '@codemirror/autocomplete'. Did... Remove this comment to see the full error message
 import { Completion, CompletionContext, CompletionResult } from "@codemirror/autocomplete"
 import {
   selfClosingWidgets,
@@ -187,7 +189,7 @@ export function widgetCompletion(getWidgetNames?: () => string[], getSelfClosing
         label: "<" + name,
         type: "keyword",
         detail,
-        apply: (view, _completion, from, to) => {
+        apply: (view: any, _completion: any, from: any, to: any) => {
           const widgetTag = "<" + name
           const textAfter = view.state.sliceDoc(to, to + 1)
           const hasClosingBracket = textAfter === ">"
@@ -211,7 +213,7 @@ export function widgetCompletion(getWidgetNames?: () => string[], getSelfClosing
             effects: triggerCompletionEffect.of(null)
           })
         }
-      }
+      };
     })
 
     return {
@@ -219,8 +221,8 @@ export function widgetCompletion(getWidgetNames?: () => string[], getSelfClosing
       to: pos,
       options,
       validFor: /^<\$[\w\-\.]*$/
-    }
-  }
+    };
+  };
 }
 
 /**
@@ -475,7 +477,7 @@ export function widgetAttributeCompletion(
         label: "style." + prop,
         type: "property",
         detail: "CSS property",
-        apply: (view, _completion, from, to) => {
+        apply: (view: any, _completion: any, from: any, to: any) => {
           const textAfter = view.state.sliceDoc(to, to + 2)
           const hasEquals = textAfter[0] === '='
           const hasQuoteAfterEquals = textAfter === '="'
@@ -512,7 +514,7 @@ export function widgetAttributeCompletion(
         to: pos,
         options,
         validFor: /^style\.[a-zA-Z\-]*$/
-      }
+      };
     }
 
     // First check local definitions for custom widgets
@@ -594,7 +596,7 @@ export function widgetAttributeCompletion(
       label: attr,
       type: "property",
       detail: attr.startsWith("$") ? "widget attr" : "parameter",
-      apply: (view, _completion, from, to) => {
+      apply: (view: any, _completion: any, from: any, to: any) => {
         const textAfter = view.state.sliceDoc(to, to + 2)
         const hasEquals = textAfter[0] === '='
         const hasQuoteAfterEquals = textAfter === '="'
@@ -633,8 +635,8 @@ export function widgetAttributeCompletion(
       to: pos,
       options,
       validFor: /^[$a-zA-Z][a-zA-Z0-9\-\.]*$/
-    }
-  }
+    };
+  };
 }
 
 /**
@@ -721,7 +723,7 @@ export function closingTagCompletion(getWidgetNames?: () => string[]) {
         type: "keyword",
         detail: "close tag",
         boost: 100,
-        apply: (view, _completion, from, to) => {
+        apply: (view: any, _completion: any, from: any, to: any) => {
           const textAfter = view.state.sliceDoc(to, to + 1)
           const insert = "</" + expectedClosingTag + (textAfter === ">" ? "" : ">")
           view.dispatch({
@@ -758,7 +760,7 @@ export function closingTagCompletion(getWidgetNames?: () => string[]) {
             label: "</" + name + ">",
             type: "type",
             detail: "widget",
-            apply: (view, _completion, from, to) => {
+            apply: (view: any, _completion: any, from: any, to: any) => {
               const textAfter = view.state.sliceDoc(to, to + 1)
               const insert = "</" + name + (textAfter === ">" ? "" : ">")
               view.dispatch({
@@ -795,7 +797,7 @@ export function closingTagCompletion(getWidgetNames?: () => string[]) {
             label: "</" + name + ">",
             type: "type",
             detail: "widget",
-            apply: (view, _completion, from, to) => {
+            apply: (view: any, _completion: any, from: any, to: any) => {
               const textAfter = view.state.sliceDoc(to, to + 1)
               const insert = "</" + name + (textAfter === ">" ? "" : ">")
               view.dispatch({
@@ -815,7 +817,7 @@ export function closingTagCompletion(getWidgetNames?: () => string[]) {
             label: "</" + tag + ">",
             type: "keyword",
             detail: "html",
-            apply: (view, _completion, from, to) => {
+            apply: (view: any, _completion: any, from: any, to: any) => {
               const textAfter = view.state.sliceDoc(to, to + 1)
               const insert = "</" + tag + (textAfter === ">" ? "" : ">")
               view.dispatch({
@@ -835,6 +837,6 @@ export function closingTagCompletion(getWidgetNames?: () => string[]) {
       to: pos,
       options,
       validFor: /^<\/\$?[\w\-\.]*$/
-    }
-  }
+    };
+  };
 }

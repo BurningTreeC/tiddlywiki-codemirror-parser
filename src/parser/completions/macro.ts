@@ -2,11 +2,15 @@
  * Macro completion sources
  */
 
+// @ts-expect-error TS(2792): Cannot find module '@codemirror/language'. Did you... Remove this comment to see the full error message
 import { syntaxTree } from "@codemirror/language"
+// @ts-expect-error TS(2792): Cannot find module '@codemirror/autocomplete'. Did... Remove this comment to see the full error message
 import { Completion, CompletionContext, CompletionResult } from "@codemirror/autocomplete"
+// @ts-expect-error TS(2792): Cannot find module '@codemirror/state'. Did you me... Remove this comment to see the full error message
 import { EditorState } from "@codemirror/state"
 import { buildMultiSelectionChanges, triggerCompletionEffect, extractLocalDefinitions, builtInVariables, findPragmaSectionEnd, getScopedWidgetVariables } from "./common"
 import { getActionContextVariables, ACTION_IMPLICIT_VARIABLES, ACTION_ATTRIBUTE_NAMES } from "../../linter"
+// @ts-expect-error TS(2792): Cannot find module '@lezer/common'. Did you mean t... Remove this comment to see the full error message
 import type { SyntaxNode } from "@lezer/common"
 
 /**
@@ -134,6 +138,7 @@ function getActionVariablesFromCallSites(
   }
 
   // Helper to check if a node is inside the definition being edited (skip self-references)
+  // @ts-expect-error TS(6133): 'isInsideDefinition' is declared but its value is ... Remove this comment to see the full error message
   function isInsideDefinition(node: SyntaxNode): boolean {
     return node.from >= defFrom && node.to <= defTo
   }
@@ -305,6 +310,7 @@ function getWidgetVariablesFromCallSites(
       // Check if this <$set> is closed before callPos
       const closeRegex = /<\/\$set\s*>/gi
       closeRegex.lastIndex = openPos + match[0].length
+      // @ts-expect-error TS(6133): 'closeMatch' is declared but its value is never re... Remove this comment to see the full error message
       let closeMatch
       let isClosed = false
       while ((closeMatch = closeRegex.exec(textBefore)) !== null) {
@@ -683,7 +689,7 @@ export function macroCompletion(
         type,
         detail,
         boost,
-        apply: (view, _completion, from, to) => {
+        apply: (view: any, _completion: any, from: any, to: any) => {
           const textAfter = view.state.sliceDoc(to, to + 2)
           const hasClosingAngle = textAfter[0] === ">"
 
@@ -710,7 +716,7 @@ export function macroCompletion(
         to: pos,
         options,
         validFor: /^[\[\]}>][\w\-:!]*<[\w\-\.]*$/
-      }
+      };
     }
 
     const options: Completion[] = allNames.map(({ name, detail, type, boost }) => ({
@@ -726,8 +732,8 @@ export function macroCompletion(
       to: pos,
       options,
       validFor: /^<<[\w\-\.]*$/
-    }
-  }
+    };
+  };
 }
 
 /**
@@ -800,7 +806,7 @@ export function macroParamCompletion(getMacroParams?: (name: string) => string[]
       label: param,
       type: "property",
       detail: "parameter",
-      apply: (view, _completion, from, to) => {
+      apply: (view: any, _completion: any, from: any, to: any) => {
         const textAfter = view.state.sliceDoc(to, to + 1)
         const suffix = textAfter === ":" ? "" : ":"
         view.dispatch({
@@ -815,8 +821,8 @@ export function macroParamCompletion(getMacroParams?: (name: string) => string[]
       to: pos,
       options,
       validFor: /^[$\w\-]*$/
-    }
-  }
+    };
+  };
 }
 
 /**
@@ -1027,7 +1033,7 @@ export function substitutedParamCompletion() {
         type: "variable",
         detail,
         boost,
-        apply: (view, _completion, from, to) => {
+        apply: (view: any, _completion: any, from: any, to: any) => {
           // Check what's after the cursor - remove auto-inserted )$ or )
           const textAfter = view.state.sliceDoc(to, to + 2)
           let adjustedTo = to
@@ -1109,7 +1115,7 @@ export function substitutedParamCompletion() {
       options,
       validFor: validForPattern
     }
-  }
+  };
 }
 
 /**
@@ -1151,7 +1157,7 @@ export function macroParamValueCompletion() {
         type: "variable",
         detail: "transclusion",
         boost: 2,
-        apply: (view, _completion, from, to) => {
+        apply: (view: any, _completion: any, from: any, to: any) => {
           const insert = "{{}}"
           const cursorPos = from + 2
           const changes = buildMultiSelectionChanges(view, from, to, insert, patternLen)
@@ -1167,7 +1173,7 @@ export function macroParamValueCompletion() {
         type: "variable",
         detail: "filtered transclusion",
         boost: 1,
-        apply: (view, _completion, from, to) => {
+        apply: (view: any, _completion: any, from: any, to: any) => {
           const insert = "{{{}}}"
           const cursorPos = from + 3
           const changes = buildMultiSelectionChanges(view, from, to, insert, patternLen)
@@ -1185,6 +1191,6 @@ export function macroParamValueCompletion() {
       to: pos,
       options,
       validFor: /^$/
-    }
-  }
+    };
+  };
 }

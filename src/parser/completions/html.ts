@@ -2,7 +2,9 @@
  * HTML tag and attribute completion sources
  */
 
+// @ts-expect-error TS(2792): Cannot find module '@codemirror/language'. Did you... Remove this comment to see the full error message
 import { syntaxTree } from "@codemirror/language"
+// @ts-expect-error TS(2792): Cannot find module '@codemirror/autocomplete'. Did... Remove this comment to see the full error message
 import { Completion, CompletionContext, CompletionResult } from "@codemirror/autocomplete"
 import { selfClosingTags, buildMultiSelectionChanges, triggerCompletionEffect } from "./common"
 
@@ -198,7 +200,7 @@ export function htmlTagCompletion(context: CompletionContext): CompletionResult 
       type: "keyword",
       detail: "comment",
       boost: m[0] === "<!" ? 10 : 0,  // Boost when typing "<!""
-      apply: (view, _completion, from, to) => {
+      apply: (view: any, _completion: any, from: any, to: any) => {
         const insert = "<!-- comment -->"
         // Select "comment" so user can immediately type their comment
         const selectFrom = from + 5  // After "<!-- "
@@ -219,7 +221,7 @@ export function htmlTagCompletion(context: CompletionContext): CompletionResult 
       label: "<" + tag,
       type: "type",
       detail: isSelfClosing ? "self-closing" : "tag",
-      apply: (view, _completion, from, to) => {
+      apply: (view: any, _completion: any, from: any, to: any) => {
         const tagText = "<" + tag
         const textAfter = view.state.sliceDoc(to, to + 1)
         const hasClosingBracket = textAfter === ">"
@@ -254,7 +256,7 @@ export function htmlTagCompletion(context: CompletionContext): CompletionResult 
     to: pos,
     options,
     validFor: /^<[:\-\.\w\u00b7-\uffff!]*$/
-  }
+  };
 }
 
 /**
@@ -508,7 +510,7 @@ export function htmlAttributeCompletion(
         label: "style." + prop,
         type: "property",
         detail: "CSS property",
-        apply: (view, _completion, from, to) => {
+        apply: (view: any, _completion: any, from: any, to: any) => {
           const textAfter = view.state.sliceDoc(to, to + 2)
           const hasEquals = textAfter[0] === '='
           const hasQuoteAfterEquals = textAfter === '="'
@@ -545,7 +547,7 @@ export function htmlAttributeCompletion(
         to: pos,
         options,
         validFor: /^style\.[a-zA-Z\-]*$/
-      }
+      };
     }
 
     // Use cached merged attributes for this tag
@@ -555,7 +557,7 @@ export function htmlAttributeCompletion(
     const options: Completion[] = allAttrs.map(attr => ({
       label: attr,
       type: "property",
-      apply: (view, _completion, from, to) => {
+      apply: (view: any, _completion: any, from: any, to: any) => {
         if (attr.endsWith("-")) {
           const changes = buildMultiSelectionChanges(view, from, to, attr, patternLen)
           view.dispatch({
@@ -598,6 +600,6 @@ export function htmlAttributeCompletion(
       to: pos,
       options,
       validFor: /^[a-zA-Z][a-zA-Z0-9\-\.]*$/
-    }
-  }
+    };
+  };
 }

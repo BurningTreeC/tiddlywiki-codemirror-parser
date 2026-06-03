@@ -3,10 +3,13 @@
  * Provides completions when pressing Ctrl+Space in plain text
  */
 
+// @ts-expect-error TS(2792): Cannot find module '@codemirror/autocomplete'. Did... Remove this comment to see the full error message
 import { Completion, CompletionContext, CompletionResult } from "@codemirror/autocomplete"
+// @ts-expect-error TS(2792): Cannot find module '@codemirror/language'. Did you... Remove this comment to see the full error message
 import { syntaxTree } from "@codemirror/language"
 import { coreWidgets } from "./widget"
 import { commonMacros } from "./macro"
+// @ts-expect-error TS(6133): 'htmlGlobalAttributes' is declared but its value i... Remove this comment to see the full error message
 import { commonHtmlTags, htmlGlobalAttributes } from "./html"
 import { builtInVariables, selfClosingTags, extractLocalDefinitions, getTiddlerBoost, getTiddlerSortText } from "./common"
 
@@ -84,7 +87,7 @@ export function generalContextCompletion(
           detail: "tiddler",
           boost: getTiddlerBoost(title, isDraftTiddler),
           sortText: getTiddlerSortText(title, isDraftTiddler),
-          apply: (view, _completion, from, to) => {
+          apply: (view: any, _completion: any, from: any, to: any) => {
             const insert = `[[${title}]]`
             view.dispatch({
               changes: { from, to, insert },
@@ -119,7 +122,7 @@ export function generalContextCompletion(
         type: "function",
         detail: "macro",
         boost: 2,
-        apply: (view, _completion, from, to) => {
+        apply: (view: any, _completion: any, from: any, to: any) => {
           const insert = `<<${name}>>`
           view.dispatch({
             changes: { from, to, insert },
@@ -149,7 +152,7 @@ export function generalContextCompletion(
         type: "type",
         detail: "widget",
         boost: 1,
-        apply: (view, _completion, from, to) => {
+        apply: (view: any, _completion: any, from: any, to: any) => {
           const insert = `<$${name}></$${name}>`
           const cursorPos = from + name.length + 3
           view.dispatch({
@@ -178,7 +181,7 @@ export function generalContextCompletion(
           type: "function",
           detail: "function",
           boost: 2,
-          apply: (view, _completion, from, to) => {
+          apply: (view: any, _completion: any, from: any, to: any) => {
             const insert = `<<${name}>>`
             view.dispatch({
               changes: { from, to, insert },
@@ -210,7 +213,7 @@ export function generalContextCompletion(
           type: "variable",
           detail: "variable",
           boost: 1,
-          apply: (view, _completion, from, to) => {
+          apply: (view: any, _completion: any, from: any, to: any) => {
             const insert = `<<${name}>>`
             view.dispatch({
               changes: { from, to, insert },
@@ -229,7 +232,7 @@ export function generalContextCompletion(
         type: "keyword",
         detail: isSelfClosing ? "html (self-closing)" : "html",
         boost: 0,
-        apply: (view, _completion, from, to) => {
+        apply: (view: any, _completion: any, from: any, to: any) => {
           let insert: string
           let cursorPos: number
           if (isSelfClosing) {
@@ -254,6 +257,6 @@ export function generalContextCompletion(
       to: pos,
       options,
       validFor: /^\w*$/
-    }
-  }
+    };
+  };
 }

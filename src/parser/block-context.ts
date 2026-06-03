@@ -4,11 +4,15 @@
  * Handles block-level parsing following the Lezer Markdown architecture.
  */
 
+// @ts-expect-error TS(6133): 'TreeCursor' is declared but its value is never re... Remove this comment to see the full error message
 import { Tree, TreeBuffer, TreeCursor, NodeSet, NodeProp, Input, TreeFragment, PartialParse } from "@lezer/common"
+// @ts-expect-error TS(6133): 'CompositeBlockTypes' is declared but its value is... Remove this comment to see the full error message
 import { Type, CompositeBlockTypes } from "./types"
 import {
   Line, Element, elt, CompositeBlock, LeafBlock,
+  // @ts-expect-error TS(6133): 'LeafBlockParser' is declared but its value is nev... Remove this comment to see the full error message
   BlockParser, LeafBlockParser, PragmaParser, BlockResult,
+  // @ts-expect-error TS(6133): 'space' is declared but its value is never read.
   space, lineEnd, Ch
 } from "./core"
 import type { TiddlyWikiParser } from "./parser"
@@ -53,8 +57,11 @@ export class BlockContext implements PartialParse {
   private dontInject = new Set<Tree>()
 
   // Fragment parsing (for incremental updates)
+  // @ts-expect-error TS(6133): 'fragments' is declared but its value is never rea... Remove this comment to see the full error message
   private fragments: readonly TreeFragment[] | null = null
+  // @ts-expect-error TS(6133): 'fragmentIndex' is declared but its value is never... Remove this comment to see the full error message
   private fragmentIndex = 0
+  // @ts-expect-error TS(6133): 'fragmentEnd' is declared but its value is never r... Remove this comment to see the full error message
   private fragmentEnd = -1
   private to: number
 
@@ -773,7 +780,7 @@ export class BlockContext implements PartialParse {
     if (from >= to) return false
     const content = this.input.read(from, Math.min(from + 20, to))
     // Check for blank line: newline followed by another newline (with optional spaces/tabs between)
-    return /^[\t ]*[\r\n][\t ]*[\r\n]/.test(content)
+    return /^[\t ]*[\r\n][\t ]*[\r\n]/.test(content);
   }
 
   /**
@@ -823,6 +830,7 @@ export class BlockContext implements PartialParse {
    * @param parsePragmasFirst Whether to parse pragmas at the start of the range
    * @returns Array of parsed elements
    */
+  // @ts-expect-error TS(6133): 'parsePragmasFirst' is declared but its value is n... Remove this comment to see the full error message
   parseContentRange(from: number, to: number, parsePragmasFirst: boolean = true): Element[] {
     if (from >= to) return []
 

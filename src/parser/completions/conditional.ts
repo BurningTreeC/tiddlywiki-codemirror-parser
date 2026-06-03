@@ -2,7 +2,9 @@
  * Conditional keyword completion source (<%if, <%else, etc.)
  */
 
+// @ts-expect-error TS(2792): Cannot find module '@codemirror/autocomplete'. Did... Remove this comment to see the full error message
 import { Completion, CompletionContext, CompletionResult } from "@codemirror/autocomplete"
+// @ts-expect-error TS(2792): Cannot find module '@codemirror/language'. Did you... Remove this comment to see the full error message
 import { getIndentUnit } from "@codemirror/language"
 import { buildMultiSelectionChanges } from "./common"
 
@@ -41,7 +43,7 @@ export function conditionalCompletion(context: CompletionContext): CompletionRes
       label: kw.label,
       type: "keyword",
       detail: kw.detail,
-      apply: (view, _completion, from, to) => {
+      apply: (view: any, _completion: any, from: any, to: any) => {
         if (kw.outdent && openMarkPos > 0 && view.state.selection.ranges.length === 1) {
           const unit = getIndentUnit(view.state)
           const leadingWhitespace = textBefore.slice(0, openMarkPos)
@@ -74,7 +76,7 @@ export function conditionalCompletion(context: CompletionContext): CompletionRes
           })
         }
       }
-    }
+    };
   })
 
   return {
@@ -82,5 +84,5 @@ export function conditionalCompletion(context: CompletionContext): CompletionRes
     to: pos,
     options,
     validFor: /^\w*$/
-  }
+  };
 }

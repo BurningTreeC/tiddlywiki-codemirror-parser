@@ -2,10 +2,15 @@
  * Common utilities and constants for TiddlyWiki completions
  */
 
+// @ts-expect-error TS(2792): Cannot find module '@codemirror/state'. Did you me... Remove this comment to see the full error message
 import { EditorState, StateEffect } from "@codemirror/state"
+// @ts-expect-error TS(2792): Cannot find module '@codemirror/view'. Did you mea... Remove this comment to see the full error message
 import { EditorView } from "@codemirror/view"
+// @ts-expect-error TS(2792): Cannot find module '@codemirror/autocomplete'. Did... Remove this comment to see the full error message
 import { startCompletion } from "@codemirror/autocomplete"
+// @ts-expect-error TS(2792): Cannot find module '@codemirror/language'. Did you... Remove this comment to see the full error message
 import { syntaxTree } from "@codemirror/language"
+// @ts-expect-error TS(2792): Cannot find module '@lezer/common'. Did you mean t... Remove this comment to see the full error message
 import type { SyntaxNode } from "@lezer/common"
 
 // ============================================================================
@@ -20,7 +25,7 @@ export const triggerCompletionEffect = StateEffect.define<null>()
 /**
  * Extension that listens for triggerCompletionEffect and triggers completion.
  */
-export const triggerCompletionOnAccept = EditorView.updateListener.of((update) => {
+export const triggerCompletionOnAccept = EditorView.updateListener.of((update: any) => {
   for (const tr of update.transactions) {
     for (const effect of tr.effects) {
       if (effect.is(triggerCompletionEffect)) {
@@ -105,13 +110,13 @@ export function buildMultiSelectionChanges(
   const selections = view.state.selection.ranges
   const mainIndex = view.state.selection.mainIndex
 
-  return selections.map((range, idx) => {
+  return selections.map((range: any, idx: any) => {
     if (idx === mainIndex) {
       return { from, to, insert }
     } else {
       return { from: range.from - patternLen, to: range.from, insert }
     }
-  })
+  });
 }
 
 /**

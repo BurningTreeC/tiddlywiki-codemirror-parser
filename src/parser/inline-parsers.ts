@@ -5,21 +5,29 @@
  */
 
 import { Type } from "./types"
+// @ts-expect-error TS(6133): 'elt' is declared but its value is never read.
 import { Element, elt, InlineParser, DelimiterType, Ch, space, Punctuation } from "./core"
 import type { InlineContext } from "./inline-context"
 import {
   createDelimiterParser,
   parseTransclusionTarget,
+  // @ts-expect-error TS(6133): 'findTagEndUtil' is declared but its value is neve... Remove this comment to see the full error message
   findTagEnd as findTagEndUtil,
   parseMacroParams as parseMacroParamsUtil,
+  // @ts-expect-error TS(6133): 'Patterns' is declared but its value is never read... Remove this comment to see the full error message
   Patterns,
+  // @ts-expect-error TS(6133): 'isWhitespaceOrEmpty' is declared but its value is... Remove this comment to see the full error message
   isWhitespaceOrEmpty,
+  // @ts-expect-error TS(6133): 'createFilterTextRef' is declared but its value is... Remove this comment to see the full error message
   createFilterTextRef,
+  // @ts-expect-error TS(6133): 'createFilterVariable' is declared but its value i... Remove this comment to see the full error message
   createFilterVariable,
+  // @ts-expect-error TS(6133): 'createFilterMultiVariable' is declared but its va... Remove this comment to see the full error message
   createFilterMultiVariable,
   createAttributeNameElement,
   createImageSourceElement,
   createURLLinkElement,
+  // @ts-expect-error TS(6133): 'parseFilterOperandPlaceholders' is declared but i... Remove this comment to see the full error message
   parseFilterOperandPlaceholders,
   parseFilterExpressionDetailed,
   skipBracedBlock,
