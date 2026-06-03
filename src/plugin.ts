@@ -240,17 +240,20 @@ function installChangeListener(): void {
  * Get cached data or compute it
  */
 function getCached<T>(
-  key: keyof typeof cache,
-  compute: () => T
+	key: keyof typeof cache,
+	compute: () => T
 ): T {
-  const entry = cache[key] as CacheEntry<T> | null
-  if (entry && entry.valid) {
-    return entry.data
-  }
-  const data = compute()
-  // @ts-expect-error TS(2352): Conversion of type 'CacheEntry<string[]> | CacheEn... Remove this comment to see the full error message
-  ;(cache[key] as CacheEntry<T>) = { data, valid: true }
-  return data
+	const typedCache = cache as Record<string, CacheEntry<T> | null>
+	const entry = typedCache[key]
+
+	if (entry && entry.valid) {
+		return entry.data
+	}
+
+	const data = compute()
+	typedCache[key] = { data, valid: true }
+
+	return data
 }
 
 /**
