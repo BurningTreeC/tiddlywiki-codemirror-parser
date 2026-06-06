@@ -217,6 +217,22 @@ const keymapConfigs = keymaps.map((keymap) => ({
 }));
 
 // =============================================================================
+// Minimap plugin (no banner)
+// =============================================================================
+const minimapConfig = {
+  input: "@replit/codemirror-minimap",
+  external: Object.keys(twPaths),
+  output: {
+    file: `${SEPARATE_PLUGINS_DIR}/codemirror-6-minimap/files/codemirror-minimap.js`,
+    format: "cjs",
+    exports: "named",
+    paths: twPaths,
+    esModule: false
+  },
+  plugins: libraryPlugins
+};
+
+// =============================================================================
 // Search module (no banner)
 // =============================================================================
 const searchConfig = {
@@ -257,6 +273,7 @@ export default [
   ...combinedLanguageConfigs,
   ...separateLanguageConfigs,
   ...keymapConfigs,
+  minimapConfig,
   searchConfig,
   lintConfig
 ];
