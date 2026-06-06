@@ -199,7 +199,8 @@ const separateLanguageConfigs = separateLanguages.map((lang) => ({
 // Keymap plugins (no banner)
 // =============================================================================
 const keymaps = [
-  { name: "vim", input: "@replit/codemirror-vim" }
+  { name: "vim", input: "@replit/codemirror-vim" },
+  { name: "emacs", input: "@replit/codemirror-emacs" }
 ];
 
 const keymapConfigs = keymaps.map((keymap) => ({
