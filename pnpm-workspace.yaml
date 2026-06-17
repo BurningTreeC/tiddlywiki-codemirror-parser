@@ -1,2 +1,4 @@
 minimumReleaseAgeExclude:
   - '@types/node@25.9.2'
+patchedDependencies:
+  '@replit/codemirror-minimap@0.5.2': patches/@replit__codemirror-minimap@0.5.2.patch

@@ -30,7 +30,7 @@
     "lint:fix": "eslint ../TiddlyWiki5/plugins/tiddlywiki/codemirror-6/ --fix",
     "format": "npx js-beautify --config .jsbeautifyrc -r $(find ../TiddlyWiki5/plugins/tiddlywiki/codemirror-6 -name '*.js' -not -path '*/lib/*' -not -name 'lang-tiddlywiki.js' -not -name 'codemirror-*.js' -not -name 'lezer-*.js' ! \\( -path '*/lang-*/files/*' -name 'lang-*.js' \\))",
     "build": "rollup -c rollup.config.js",
-    "build:plugins": "rollup -c rollup.config.plugins.js",
+    "build:plugins": "node scripts/apply-patches.js && rollup -c rollup.config.plugins.js",
     "build:all": "npm run build && npm run build:plugins",
     "rebuild": "npm run clean:all && npm run build:all",
     "rebuild:plugins": "npm run clean:plugins && npm run build:plugins",
