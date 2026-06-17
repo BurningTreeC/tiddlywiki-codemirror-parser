@@ -4,18 +4,13 @@
 
 This project is the **parser and language** at the heart of *CodeMirror 6 for TiddlyWiki*. It implements a custom, incremental, [Lezer](https://lezer.codemirror.net/)-compatible parser for TiddlyWiki's wikitext, together with the CodeMirror integration that turns it into syntax highlighting, context‑aware autocompletion, code folding and linting.
 
-It ships in two forms, both built from the source in this repository:
-
-1. **An npm package** — `@BurningTreeC/lang-tiddlywiki` — so you can use TiddlyWiki wikitext as a language in any CodeMirror 6 application.
-2. **A set of TiddlyWiki plugins** — the `lang-tiddlywiki` plugin plus the bundled CodeMirror 6 libraries, language packs, keymaps, minimap, search and lint modules that the TiddlyWiki plugin suite loads.
+From the source in this repository it builds the **TiddlyWiki plugins** — the `lang-tiddlywiki` plugin plus the bundled CodeMirror 6 libraries, language packs, keymaps, minimap, search and lint modules that the TiddlyWiki plugin suite loads.
 
 > Looking for the full editor (themes, keymaps, zen mode, click‑navigate, control‑panel settings, …)? Those plugins live in the TiddlyWiki tree this repository builds into — see [Part of CodeMirror 6 for TiddlyWiki](#part-of-codemirror-6-for-tiddlywiki).
 
 ## Table of Contents
 
 - [Features](#features)
-- [Installation](#installation)
-- [Usage](#usage)
 - [What the parser understands](#what-the-parser-understands)
 - [Autocompletion](#autocompletion)
 - [Linting](#linting)
@@ -36,56 +31,6 @@ It ships in two forms, both built from the source in this repository:
 - **Linting** — wikitext validation (missing links, undefined macros, unknown/unclosed widgets, filter syntax, pragma context, …).
 - **Nested / mixed languages** — fenced code blocks and typed blocks are highlighted with the embedded language when the matching language pack is available.
 - **Optional KaTeX/LaTeX support** — `$$…$$` math blocks and `<$latex>` content are parsed and highlighted when KaTeX is present.
-
----
-
-## Installation
-
-```bash
-npm install @BurningTreeC/lang-tiddlywiki
-# or
-pnpm add @BurningTreeC/lang-tiddlywiki
-```
-
-Peer dependencies are the standard CodeMirror 6 packages (`@codemirror/state`, `@codemirror/view`, `@codemirror/language`, `@codemirror/autocomplete`, `@codemirror/commands`, `@codemirror/lint`, `@codemirror/lang-html`).
-
----
-
-## Usage
-
-### Full language support (default entry)
-
-The package's main entry provides the complete CodeMirror integration: the language, highlighting, completion, the editor commands and the linter.
-
-```javascript
-import { EditorView, basicSetup } from "codemirror"
-import { tiddlywiki } from "@BurningTreeC/lang-tiddlywiki"
-
-const view = new EditorView({
-  parent: document.body,
-  doc: "! Hello TiddlyWiki\n\nThis is ''bold'' text.",
-  extensions: [basicSetup, tiddlywiki()]
-})
-```
-
-`tiddlywiki(config?)` returns a CodeMirror `LanguageSupport`. Also exported from the main entry: `tiddlywikiLanguage`, `tiddlywikiHighlightStyle`, `tiddlywikiKeymap`, the formatting/structure commands (`toggleBold`, `insertWikiLink`, `setHeading1`, …), and the linters (`tiddlywikiLinter`, `substitutedParamLinter`).
-
-### Parser only (sub‑path entry)
-
-If you only need the parser/language without the editor commands and extras, import from the `./parser` sub‑path:
-
-```javascript
-import { parser, tiddlywikiLanguage } from "@BurningTreeC/lang-tiddlywiki/parser"
-```
-
-### Package entry points
-
-| Import | Built from | Output |
-|--------|-----------|--------|
-| `@BurningTreeC/lang-tiddlywiki` | `src/codemirror.ts` | `dist/index.js` · `dist/index.cjs` · `dist/index.d.ts` |
-| `@BurningTreeC/lang-tiddlywiki/parser` | `src/index.ts` | `dist/parser.js` · `dist/parser.cjs` · `dist/parser.d.ts` |
-
-Both ESM and CommonJS builds ship with TypeScript type definitions.
 
 ---
 
@@ -194,7 +139,7 @@ It understands action‑attribute implicit variables (e.g. `actionTiddler`), wil
 # Install dependencies
 npm install            # or: pnpm install
 
-# Build the npm package (ESM + CJS + type declarations -> dist/)
+# Build the standalone library bundle (ESM + CJS + type declarations -> dist/)
 npm run build
 
 # Build the TiddlyWiki plugins (applies patches, then bundles)
@@ -205,7 +150,7 @@ npm run build:all
 
 # Watch modes
 npm run dev            # watch the TiddlyWiki plugin build
-npm run watch          # watch the npm package build
+npm run watch          # watch the standalone library build
 
 # Quality
 npm run typecheck      # tsc --noEmit
@@ -245,8 +190,8 @@ Some bundled dependencies carry local fixes (e.g. wrap‑aware scrolling in `@re
 ```
 parser/
 ├── src/
-│   ├── codemirror.ts          # npm main entry — full CodeMirror integration
-│   ├── index.ts               # npm "./parser" entry — parser only
+│   ├── codemirror.ts          # library main entry — full CodeMirror integration
+│   ├── index.ts               # library parser-only entry
 │   ├── plugin.ts              # TiddlyWiki plugin entry (lang-tiddlywiki)
 │   ├── commands.ts            # editor commands (formatting, structure)
 │   ├── linter.ts              # wikitext linter
@@ -266,12 +211,12 @@ parser/
 │       ├── tiddlywiki.ts      # tiddlywiki() LanguageSupport factory
 │       ├── config.ts, core.ts, types.ts, utils.ts
 │       └── completions/       # autocompletion sources
-├── rollup.config.js           # builds the npm package
+├── rollup.config.js           # builds the standalone library bundle
 ├── rollup.config.plugins.js   # builds the TiddlyWiki plugins
 ├── scripts/apply-patches.js   # build-time patch applier
 ├── patches/                   # dependency patches
 ├── tsconfig.json · tsconfig.ci.json · eslint.config.js
-└── .github/workflows/         # CI (npm package + pnpm plugin build)
+└── .github/workflows/         # CI (library build + pnpm plugin build)
 ```
 
 ---
@@ -289,7 +234,7 @@ The parser is a custom Lezer‑style incremental parser rather than a grammar‑
 
 ## Part of CodeMirror 6 for TiddlyWiki
 
-This package is one piece of the larger *CodeMirror 6 for TiddlyWiki* project. The build here emits the `lang-tiddlywiki` plugin and the bundled CodeMirror libraries; the rest of the editor — the engine, folding, snippets, click‑navigate, link/image preview, color and emoji pickers, zen mode, toolbars, themes and control‑panel settings — is authored as TiddlyWiki plugins in the TiddlyWiki tree that this repository builds into. End users typically install the assembled plugin suite into a wiki rather than this npm package directly.
+This repository is one piece of the larger *CodeMirror 6 for TiddlyWiki* project. The build here emits the `lang-tiddlywiki` plugin and the bundled CodeMirror libraries; the rest of the editor — the engine, folding, snippets, click‑navigate, link/image preview, color and emoji pickers, zen mode, toolbars, themes and control‑panel settings — is authored as TiddlyWiki plugins in the TiddlyWiki tree that this repository builds into. End users install the assembled plugin suite into a wiki.
 
 ---
 
