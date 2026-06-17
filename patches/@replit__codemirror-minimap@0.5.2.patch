@@ -1,34 +1,62 @@
 diff --git a/dist/index.js b/dist/index.js
-index c7c9a0406e1cfa2277ab6324fe47f70dd577e7c1..89178cde92623bf40b07d1d9974d9b9268f7e45e 100644
+index c7c9a0406e1cfa2277ab6324fe47f70dd577e7c1..a1f27d9b67ee1b807b9c7540c07c9fc085094ec5 100644
 --- a/dist/index.js
 +++ b/dist/index.js
-@@ -87,6 +87,72 @@ const Theme$1 = /*@__PURE__*/EditorView.theme({
+@@ -87,6 +87,100 @@ const Theme$1 = /*@__PURE__*/EditorView.theme({
      },
  });
  const SCALE = Scale.PixelMultiplier * Scale.SizeRatio;
 +
 +/**
-+ * Returns the range of document line numbers (1-based) currently visible in the
-+ * editor viewport, using the editor's real layout geometry. This is wrap-aware
-+ * and stays correct when lines do not all have the same height (e.g. wrapped
-+ * lines), unlike a pixel-based scroll ratio.
++ * Returns the visible portion of the document as *fractional, 0-based* logical
++ * line positions (`first`/`last`), using the editor's real layout geometry.
++ *
++ * Fractional positions give sub-line precision: while scrolling through a single
++ * wrapped logical line (which spans several visual rows), `first` advances
++ * smoothly from e.g. 4.0 to 5.0 instead of snapping between integer lines. This
++ * is wrap-aware and stays correct when lines have different heights.
 + */
 +function getVisibleLineRange(view) {
 +    const { scrollTop, clientHeight } = view.scrollDOM;
 +    const doc = view.state.doc;
++    const lineCount = doc.lines;
 +    let first, last;
 +    try {
-+        first = doc.lineAt(view.lineBlockAtHeight(scrollTop).from).number;
-+        last = doc.lineAt(view.lineBlockAtHeight(scrollTop + clientHeight).from).number;
++        const topBlock = view.lineBlockAtHeight(scrollTop);
++        const bottomBlock = view.lineBlockAtHeight(scrollTop + clientHeight);
++        const topNumber = doc.lineAt(topBlock.from).number;
++        const bottomNumber = doc.lineAt(bottomBlock.from).number;
++        // Fraction scrolled through the (possibly wrapped) line at each edge.
++        const topFraction = topBlock.height > 0
++            ? (scrollTop - topBlock.top) / topBlock.height
++            : 0;
++        const bottomFraction = bottomBlock.height > 0
++            ? (scrollTop + clientHeight - bottomBlock.top) / bottomBlock.height
++            : 0;
++        first = (topNumber - 1) + Math.min(Math.max(topFraction, 0), 1);
++        last = (bottomNumber - 1) + Math.min(Math.max(bottomFraction, 0), 1);
 +    }
 +    catch (e) {
-+        first = 1;
-+        last = doc.lines;
++        // Layout not measured yet: estimate from the default line height rather
++        // than assuming the whole document is visible (which would size the
++        // overlay to the full minimap height on first render).
++        const lineHeight = view.defaultLineHeight || 16;
++        first = scrollTop / lineHeight;
++        last = (scrollTop + clientHeight) / lineHeight;
 +    }
-+    if (last < first) {
++    if (!isFinite(first) || first < 0) {
++        first = 0;
++    }
++    if (!isFinite(last) || last < first) {
 +        last = first;
 +    }
-+    return { first, last, lineCount: doc.lines };
++    if (first > lineCount) {
++        first = lineCount;
++    }
++    if (last > lineCount) {
++        last = lineCount;
++    }
++    return { first, last, lineCount };
 +}
 +
 +/**
@@ -39,9 +67,9 @@ index c7c9a0406e1cfa2277ab6324fe47f70dd577e7c1..89178cde92623bf40b07d1d9974d9b92
 + */
 +function getLineScrollPercent(view) {
 +    const range = getVisibleLineRange(view);
-+    const visibleLines = Math.max(1, range.last - range.first + 1);
++    const visibleLines = Math.max(0.000001, range.last - range.first);
 +    const denom = Math.max(1, range.lineCount - visibleLines);
-+    let percent = (range.first - 1) / denom;
++    let percent = range.first / denom;
 +    if (!isFinite(percent) || percent < 0) {
 +        percent = 0;
 +    }
@@ -75,7 +103,29 @@ index c7c9a0406e1cfa2277ab6324fe47f70dd577e7c1..89178cde92623bf40b07d1d9974d9b92
  const OverlayView = /*@__PURE__*/ViewPlugin.fromClass(class {
      constructor(view) {
          this.view = view;
-@@ -140,26 +206,47 @@ const OverlayView = /*@__PURE__*/ViewPlugin.fromClass(class {
+@@ -112,6 +206,13 @@ const OverlayView = /*@__PURE__*/ViewPlugin.fromClass(class {
+         this.computeShowOverlay();
+         this.computeHeight();
+         this.computeTop();
++        // On first render the editor may not be measured yet, so the geometry
++        // reads above can be wrong (e.g. sizing the overlay to the full height).
++        // Recompute once the layout has settled.
++        requestAnimationFrame(() => {
++            this.computeShowOverlay();
++            this.computeTop();
++        });
+     }
+     remove() {
+         if (this.container) {
+@@ -133,33 +234,55 @@ const OverlayView = /*@__PURE__*/ViewPlugin.fromClass(class {
+         }
+         if (now) {
+             this.computeShowOverlay();
+-            if (update.geometryChanged) {
++            if (update.geometryChanged || update.viewportChanged || update.docChanged) {
+                 this.computeHeight();
+                 this.computeTop();
+             }
          }
      }
      computeHeight() {
@@ -113,10 +163,11 @@ index c7c9a0406e1cfa2277ab6324fe47f70dd577e7c1..89178cde92623bf40b07d1d9974d9b92
 +        const range = getVisibleLineRange(view);
 +        // Position and size the overlay in the canvas coordinate space, mirroring
 +        // exactly what Minimap.canvasStartAndEndIndex draws, then convert to
-+        // screen pixels. This keeps the overlay aligned with the rendered text
-+        // regardless of varying line heights.
-+        const boxTopCanvas = win.offsetY + (range.first - 1 - win.startIndex) * win.lineHeight;
-+        const boxHeightCanvas = Math.max(1, range.last - range.first + 1) * win.lineHeight;
++        // screen pixels. `range.first`/`range.last` are fractional 0-based line
++        // positions, so the box tracks the text smoothly and reflects the real
++        // visible fraction regardless of varying line heights.
++        const boxTopCanvas = win.offsetY + (range.first - win.startIndex) * win.lineHeight;
++        const boxHeightCanvas = Math.max(1, (range.last - range.first) * win.lineHeight);
 +        this.dom.style.top = boxTopCanvas / win.PixelMultiplier + "px";
 +        this.dom.style.height = boxHeightCanvas / win.PixelMultiplier + "px";
 +    }
@@ -140,7 +191,7 @@ index c7c9a0406e1cfa2277ab6324fe47f70dd577e7c1..89178cde92623bf40b07d1d9974d9b92
      }
      computeShowOverlay() {
          if (!this.container) {
-@@ -196,16 +283,18 @@ const OverlayView = /*@__PURE__*/ViewPlugin.fromClass(class {
+@@ -196,16 +319,18 @@ const OverlayView = /*@__PURE__*/ViewPlugin.fromClass(class {
              this.container.classList.add("cm-minimap-overlay-active");
              return;
          }
@@ -169,7 +220,7 @@ index c7c9a0406e1cfa2277ab6324fe47f70dd577e7c1..89178cde92623bf40b07d1d9974d9b92
      }
      onMouseUp(_event) {
          // Stop dragging on mouseup
-@@ -251,25 +340,27 @@ const OverlayView = /*@__PURE__*/ViewPlugin.fromClass(class {
+@@ -251,25 +376,27 @@ const OverlayView = /*@__PURE__*/ViewPlugin.fromClass(class {
              (atBottom && event.clientY > canvasAbsBot)) {
              return;
          }
@@ -201,7 +252,7 @@ index c7c9a0406e1cfa2277ab6324fe47f70dd577e7c1..89178cde92623bf40b07d1d9974d9b92
 +        const clampedTop = Math.min(Math.max(0, change), maxTop);
 +        const fraction = clampedTop / maxTop;
 +        const range = getVisibleLineRange(view);
-+        const visibleLines = Math.max(1, range.last - range.first + 1);
++        const visibleLines = Math.max(0.000001, range.last - range.first);
 +        const scrollableLines = Math.max(0, range.lineCount - visibleLines);
 +        let targetLine = Math.round(fraction * scrollableLines) + 1;
 +        if (targetLine < 1)
@@ -215,7 +266,7 @@ index c7c9a0406e1cfa2277ab6324fe47f70dd577e7c1..89178cde92623bf40b07d1d9974d9b92
      }
      destroy() {
          this.remove();
-@@ -1109,11 +1200,10 @@ const minimapClass = /*@__PURE__*/ViewPlugin.fromClass(class {
+@@ -1109,11 +1236,10 @@ const minimapClass = /*@__PURE__*/ViewPlugin.fromClass(class {
          let { top: pTop, bottom: pBottom } = this.view.documentPadding;
          (pTop /= Scale.SizeRatio), (pBottom /= Scale.SizeRatio);
          const canvasHeight = context.canvas.height;
