@@ -1,109 +1,123 @@
 diff --git a/dist/index.js b/dist/index.js
-index c7c9a0406e1cfa2277ab6324fe47f70dd577e7c1..a1f27d9b67ee1b807b9c7540c07c9fc085094ec5 100644
+index c7c9a0406e1cfa2277ab6324fe47f70dd577e7c1..1b26d65603fc310b760118d84f8ef40a1eb6bd8d 100644
 --- a/dist/index.js
 +++ b/dist/index.js
-@@ -87,6 +87,100 @@ const Theme$1 = /*@__PURE__*/EditorView.theme({
+@@ -87,6 +87,92 @@
      },
  });
  const SCALE = Scale.PixelMultiplier * Scale.SizeRatio;
 +
 +/**
-+ * Returns the visible portion of the document as *fractional, 0-based* logical
-+ * line positions (`first`/`last`), using the editor's real layout geometry.
++ * Geometry mapping between the editor's real layout and the minimap canvas.
 + *
-+ * Fractional positions give sub-line precision: while scrolling through a single
-+ * wrapped logical line (which spans several visual rows), `first` advances
-+ * smoothly from e.g. 4.0 to 5.0 instead of snapping between integer lines. This
-+ * is wrap-aware and stays correct when lines have different heights.
++ * The minimap is a vertically-scaled copy of the editor's content, so all
++ * mapping is done in pixels against `view.contentHeight` - which already
++ * includes the extra height taken up by *wrapped* lines. Measuring in pixels
++ * (rather than counting logical lines) is what keeps the minimap, its overlay
++ * box and the click/drag handlers precise when line wrapping makes a single
++ * logical line span several visual rows of differing height.
++ *
++ * Coordinate spaces:
++ *   - editor px:    the scroll space of view.scrollDOM (same space as block.top)
++ *   - canvas units: what the minimap draws into; canvas.height === domHeight *
++ *                   PixelMultiplier. One editor px === `scale` canvas units.
++ *   - screen px:    canvas units / PixelMultiplier (overlay/dom positions).
 + */
-+function getVisibleLineRange(view) {
-+    const { scrollTop, clientHeight } = view.scrollDOM;
-+    const doc = view.state.doc;
-+    const lineCount = doc.lines;
-+    let first, last;
-+    try {
-+        const topBlock = view.lineBlockAtHeight(scrollTop);
-+        const bottomBlock = view.lineBlockAtHeight(scrollTop + clientHeight);
-+        const topNumber = doc.lineAt(topBlock.from).number;
-+        const bottomNumber = doc.lineAt(bottomBlock.from).number;
-+        // Fraction scrolled through the (possibly wrapped) line at each edge.
-+        const topFraction = topBlock.height > 0
-+            ? (scrollTop - topBlock.top) / topBlock.height
-+            : 0;
-+        const bottomFraction = bottomBlock.height > 0
-+            ? (scrollTop + clientHeight - bottomBlock.top) / bottomBlock.height
-+            : 0;
-+        first = (topNumber - 1) + Math.min(Math.max(topFraction, 0), 1);
-+        last = (bottomNumber - 1) + Math.min(Math.max(bottomFraction, 0), 1);
-+    }
-+    catch (e) {
-+        // Layout not measured yet: estimate from the default line height rather
-+        // than assuming the whole document is visible (which would size the
-+        // overlay to the full minimap height on first render).
-+        const lineHeight = view.defaultLineHeight || 16;
-+        first = scrollTop / lineHeight;
-+        last = (scrollTop + clientHeight) / lineHeight;
-+    }
-+    if (!isFinite(first) || first < 0) {
-+        first = 0;
-+    }
-+    if (!isFinite(last) || last < first) {
-+        last = first;
-+    }
-+    if (first > lineCount) {
-+        first = lineCount;
-+    }
-+    if (last > lineCount) {
-+        last = lineCount;
-+    }
-+    return { first, last, lineCount };
-+}
-+
-+/**
-+ * Fraction (0..1) describing how far the document is scrolled, measured in
-+ * logical lines rather than pixels. Using lines keeps the minimap aligned with
-+ * the actual text even when individual lines have different heights, which the
-+ * pixel-based scroll ratio cannot do.
-+ */
-+function getLineScrollPercent(view) {
-+    const range = getVisibleLineRange(view);
-+    const visibleLines = Math.max(0.000001, range.last - range.first);
-+    const denom = Math.max(1, range.lineCount - visibleLines);
-+    let percent = range.first / denom;
++function getMinimapMetrics(view) {
++    const { SizeRatio, PixelMultiplier } = Scale;
++    // A line of `lh` editor px is drawn `lh / SizeRatio` canvas units tall, so
++    // the editor-px -> canvas-units vertical scale is simply 1 / SizeRatio.
++    const scale = 1 / SizeRatio;
++    const { scrollTop, clientHeight, scrollHeight } = view.scrollDOM;
++    const contentHeight = view.contentHeight || scrollHeight;
++    const domHeight = view.dom.getBoundingClientRect().height;
++    const canvasHeight = domHeight * PixelMultiplier;
++    const totalCanvas = contentHeight * scale;
++    const maxScroll = Math.max(1, scrollHeight - clientHeight);
++    let percent = scrollTop / maxScroll;
 +    if (!isFinite(percent) || percent < 0) {
 +        percent = 0;
 +    }
 +    if (percent > 1) {
 +        percent = 1;
 +    }
-+    return percent;
++    // When the document is taller than the minimap canvas the minimap itself
++    // scrolls; canvasTop is how far (canvas units) the drawn content is shifted
++    // up. Otherwise everything fits and there is no shift.
++    const canvasTop = totalCanvas > canvasHeight
++        ? percent * (totalCanvas - canvasHeight)
++        : 0;
++    return {
++        scale,
++        scrollTop,
++        clientHeight,
++        scrollHeight,
++        contentHeight,
++        canvasHeight,
++        totalCanvas,
++        canvasTop,
++        maxScroll,
++        PixelMultiplier,
++    };
 +}
 +
 +/**
-+ * Replicates the canvas windowing math (see Minimap.canvasStartAndEndIndex) so
-+ * the overlay and click/drag handlers can map between minimap pixels and
-+ * document lines consistently with what the canvas actually draws.
++ * Editor scroll-space Y (px) corresponding to a vertical position on the
++ * minimap, given in screen px measured from the top of the minimap.
 + */
-+function getMinimapWindow(view) {
-+    const { SizeRatio, PixelMultiplier } = Scale;
-+    const lineHeight = view.defaultLineHeight / SizeRatio;
-+    const domHeight = view.dom.getBoundingClientRect().height;
-+    const canvasHeight = domHeight * PixelMultiplier;
-+    let { top: pTop, bottom: pBottom } = view.documentPadding;
-+    pTop /= SizeRatio;
-+    pBottom /= SizeRatio;
-+    const lineCount = view.state.doc.lines;
-+    const totalHeight = pTop + pBottom + lineCount * lineHeight;
-+    const percent = getLineScrollPercent(view);
-+    const canvasTop = Math.max(0, percent * (totalHeight - canvasHeight));
-+    const offsetY = Math.max(0, pTop - canvasTop);
-+    const startIndex = Math.round(Math.max(0, canvasTop - pTop) / lineHeight);
-+    return { lineHeight, offsetY, startIndex, lineCount, canvasHeight, PixelMultiplier };
++function minimapScreenYToEditorY(m, screenY) {
++    return (screenY * m.PixelMultiplier + m.canvasTop) / m.scale;
++}
++
++/**
++ * Binary-search the LinesState rows (ordered by document position) for the last
++ * row whose first character is at or before `pos`. Used to find the first row
++ * to draw without scanning the whole document.
++ */
++function findRowIndex(lines, pos) {
++    let lo = 0;
++    let hi = lines.length - 1;
++    let result = 0;
++    while (lo <= hi) {
++        const mid = (lo + hi) >> 1;
++        const row = lines[mid];
++        const from = row && row.length ? row[0].from : 0;
++        if (from <= pos) {
++            result = mid;
++            lo = mid + 1;
++        }
++        else {
++            hi = mid - 1;
++        }
++    }
++    return result;
 +}
  const OverlayView = /*@__PURE__*/ViewPlugin.fromClass(class {
      constructor(view) {
          this.view = view;
-@@ -112,6 +206,13 @@ const OverlayView = /*@__PURE__*/ViewPlugin.fromClass(class {
+@@ -99,10 +185,17 @@
+         this.container = crelt("div", { class: "cm-minimap-overlay-container" });
+         this.dom = crelt("div", { class: "cm-minimap-overlay" });
+         this.container.appendChild(this.dom);
+-        // Attach event listeners for overlay
+-        this.container.addEventListener("mousedown", this.onMouseDown.bind(this));
+-        window.addEventListener("mouseup", this.onMouseUp.bind(this));
+-        window.addEventListener("mousemove", this.onMouseMove.bind(this));
++        // Attach event listeners for overlay. Pointer events cover mouse, touch
++        // and pen with one code path. Bound handlers are stored so remove() can
++        // actually detach them (binding inline would create new functions that
++        // removeEventListener could never match).
++        this._onPointerDown = this.onPointerDown.bind(this);
++        this._onPointerMove = this.onPointerMove.bind(this);
++        this._onPointerUp = this.onPointerUp.bind(this);
++        this.container.addEventListener("pointerdown", this._onPointerDown);
++        window.addEventListener("pointermove", this._onPointerMove);
++        window.addEventListener("pointerup", this._onPointerUp);
++        window.addEventListener("pointercancel", this._onPointerUp);
+         // Attach the overlay elements to the minimap
+         const inner = view.dom.querySelector(".cm-minimap-inner");
+         if (inner) {
+@@ -112,12 +205,20 @@
          this.computeShowOverlay();
          this.computeHeight();
          this.computeTop();
@@ -117,7 +131,17 @@ index c7c9a0406e1cfa2277ab6324fe47f70dd577e7c1..a1f27d9b67ee1b807b9c7540c07c9fc0
      }
      remove() {
          if (this.container) {
-@@ -133,33 +234,55 @@ const OverlayView = /*@__PURE__*/ViewPlugin.fromClass(class {
+-            this.container.removeEventListener("mousedown", this.onMouseDown);
+-            window.removeEventListener("mouseup", this.onMouseUp);
+-            window.removeEventListener("mousemove", this.onMouseMove);
++            this.container.removeEventListener("pointerdown", this._onPointerDown);
++            window.removeEventListener("pointermove", this._onPointerMove);
++            window.removeEventListener("pointerup", this._onPointerUp);
++            window.removeEventListener("pointercancel", this._onPointerUp);
+             this.container.remove();
+         }
+     }
+@@ -133,33 +234,54 @@
          }
          if (now) {
              this.computeShowOverlay();
@@ -130,16 +154,32 @@ index c7c9a0406e1cfa2277ab6324fe47f70dd577e7c1..a1f27d9b67ee1b807b9c7540c07c9fc0
      }
      computeHeight() {
 -        if (!this.dom) {
--            return;
--        }
--        const height = this.view.dom.clientHeight / SCALE;
--        this.dom.style.height = height + "px";
 +        // The overlay height depends on how many (possibly wrapped) lines are
 +        // visible, which changes as you scroll, so it is derived together with
 +        // the top position.
 +        this.computeTop();
++    }
++    computeTop() {
++        if (this._isDragging || !this.dom) {
+             return;
+         }
+-        const height = this.view.dom.clientHeight / SCALE;
+-        this.dom.style.height = height + "px";
++        const m = getMinimapMetrics(this.view);
++        if (!isFinite(m.scale) || m.scale <= 0) {
++            return;
++        }
++        // The overlay marks the visible viewport. Both its top and its height are
++        // measured in editor pixels (which include wrapped-line height), so the
++        // box lines up with the text drawn in the minimap regardless of wrapping:
++        // a viewport full of one heavily-wrapped line yields a tall box, just as
++        // that line occupies many rows in the editor.
++        const topCanvas = m.scrollTop * m.scale - m.canvasTop;
++        const heightCanvas = m.clientHeight * m.scale;
++        this.dom.style.top = Math.max(0, topCanvas) / m.PixelMultiplier + "px";
++        this.dom.style.height = Math.max(1, heightCanvas) / m.PixelMultiplier + "px";
      }
-     computeTop() {
+-    computeTop() {
 -        if (!this._isDragging && this.dom) {
 -            const { clientHeight, scrollHeight, scrollTop } = this.view.scrollDOM;
 -            const maxScrollTop = scrollHeight - clientHeight;
@@ -152,46 +192,45 @@ index c7c9a0406e1cfa2277ab6324fe47f70dd577e7c1..a1f27d9b67ee1b807b9c7540c07c9fc0
 -            const topForOverflowing = maxTop * scrollRatio;
 -            const top = Math.min(topForOverflowing, topForNonOverflowing);
 -            this.dom.style.top = top + "px";
-+        if (this._isDragging || !this.dom) {
-+            return;
-+        }
-+        const view = this.view;
-+        const win = getMinimapWindow(view);
-+        if (!isFinite(win.lineHeight) || win.lineHeight <= 0) {
-+            return;
-         }
-+        const range = getVisibleLineRange(view);
-+        // Position and size the overlay in the canvas coordinate space, mirroring
-+        // exactly what Minimap.canvasStartAndEndIndex draws, then convert to
-+        // screen pixels. `range.first`/`range.last` are fractional 0-based line
-+        // positions, so the box tracks the text smoothly and reflects the real
-+        // visible fraction regardless of varying line heights.
-+        const boxTopCanvas = win.offsetY + (range.first - win.startIndex) * win.lineHeight;
-+        const boxHeightCanvas = Math.max(1, (range.last - range.first) * win.lineHeight);
-+        this.dom.style.top = boxTopCanvas / win.PixelMultiplier + "px";
-+        this.dom.style.height = boxHeightCanvas / win.PixelMultiplier + "px";
-+    }
 +    /**
-+     * Maps a vertical position (relative to the top of the minimap) to the
-+     * document line drawn at that position.
++     * Scrolls only the editor's own scroller so the given editor-space Y is at
++     * the top ("start") or centre ("center") of the viewport. Sets
++     * scrollDOM.scrollTop directly instead of using EditorView.scrollIntoView,
++     * which also scrolls ancestor scrollers and makes the whole page jump.
 +     */
-+    lineAtMinimapY(minimapY) {
-+        const view = this.view;
-+        const win = getMinimapWindow(view);
-+        if (!isFinite(win.lineHeight) || win.lineHeight <= 0) {
-+            return null;
++    scrollEditorToY(editorY, align) {
++        const scrollDOM = this.view.scrollDOM;
++        const clientHeight = scrollDOM.clientHeight;
++        const maxScroll = Math.max(0, scrollDOM.scrollHeight - clientHeight);
++        let top = align === "center" ? editorY - clientHeight / 2 : editorY;
++        if (!isFinite(top) || top < 0) {
++            top = 0;
 +        }
-+        const yCanvas = minimapY * win.PixelMultiplier;
-+        let line = win.startIndex + Math.floor((yCanvas - win.offsetY) / win.lineHeight) + 1;
-+        if (line < 1)
-+            line = 1;
-+        if (line > win.lineCount)
-+            line = win.lineCount;
-+        return line;
++        if (top > maxScroll) {
++            top = maxScroll;
+         }
++        scrollDOM.scrollTop = top;
      }
      computeShowOverlay() {
          if (!this.container) {
-@@ -196,16 +319,18 @@ const OverlayView = /*@__PURE__*/ViewPlugin.fromClass(class {
+@@ -180,12 +302,13 @@
+             this.container.classList.remove("cm-minimap-overlay-off");
+         }
+     }
+-    onMouseDown(event) {
++    onPointerDown(event) {
+         if (!this.container) {
+             return;
+         }
+-        // Ignore right click
+-        if (event.button === 2) {
++        // Only react to the primary pointer (ignore secondary touches and
++        // right/middle buttons).
++        if (event.button > 0 || event.isPrimary === false) {
+             return;
+         }
+         // If target is the overlay start dragging
+@@ -196,26 +319,40 @@
              this.container.classList.add("cm-minimap-overlay-active");
              return;
          }
@@ -205,22 +244,47 @@ index c7c9a0406e1cfa2277ab6324fe47f70dd577e7c1..a1f27d9b67ee1b807b9c7540c07c9fc0
 -        const visibleTop = visibleRange * scrollRatio;
 -        const top = Math.max(0, scrollTop - visibleTop);
 -        this.view.scrollDOM.scrollTop = top + deltaY - clientHeight / 2;
-+        // Scroll the EditorView so the line drawn at the clicked minimap
-+        // position is centered. Mapping by line (rather than pixels) keeps this
-+        // accurate when lines have varying heights.
-+        const minimapY = clientY - this.container.getBoundingClientRect().top;
-+        const line = this.lineAtMinimapY(minimapY);
-+        if (line == null) {
-+            return;
++        // Jump so the clicked minimap position maps to the same proportional
++        // position in the document, centring the viewport (overlay) on the
++        // click. This mirrors the drag handler's full-document mapping: a click
++        // lands exactly where you point - clicking near the bottom of the
++        // minimap goes to the bottom of the document - instead of only nudging
++        // within the slice the minimap currently draws when the document is long
++        // enough that the minimap itself windows.
++        const m = getMinimapMetrics(this.view);
++        const screenY = clientY - this.container.getBoundingClientRect().top;
++        const minimapScreenHeight = m.canvasHeight / m.PixelMultiplier;
++        const contentScreenHeight = m.totalCanvas / m.PixelMultiplier;
++        const visibleScreenHeight = Math.min(minimapScreenHeight, contentScreenHeight);
++        const overlayHeight = this.dom.getBoundingClientRect().height;
++        const maxTop = Math.max(1, visibleScreenHeight - overlayHeight);
++        let overlayTop = screenY - overlayHeight / 2;
++        if (!isFinite(overlayTop) || overlayTop < 0) {
++            overlayTop = 0;
 +        }
-+        const pos = this.view.state.doc.line(line).from;
-+        this.view.dispatch({
-+            effects: EditorView.scrollIntoView(pos, { y: "center" }),
-+        });
++        if (overlayTop > maxTop) {
++            overlayTop = maxTop;
++        }
++        const fraction = overlayTop / maxTop;
++        this.view.scrollDOM.scrollTop = fraction * m.maxScroll;
++        this.dom.style.top = overlayTop + "px";
      }
-     onMouseUp(_event) {
-         // Stop dragging on mouseup
-@@ -251,25 +376,27 @@ const OverlayView = /*@__PURE__*/ViewPlugin.fromClass(class {
+-    onMouseUp(_event) {
+-        // Stop dragging on mouseup
++    onPointerUp(_event) {
++        // Stop dragging on pointerup / pointercancel
+         if (this._isDragging && this.container) {
+             this._dragStartY = undefined;
+             this._isDragging = false;
+             this.container.classList.remove("cm-minimap-overlay-active");
+         }
+     }
+-    onMouseMove(event) {
++    onPointerMove(event) {
+         if (!this._isDragging || !this.dom) {
+             return;
+         }
+@@ -251,25 +388,28 @@
              (atBottom && event.clientY > canvasAbsBot)) {
              return;
          }
@@ -229,12 +293,23 @@ index c7c9a0406e1cfa2277ab6324fe47f70dd577e7c1..a1f27d9b67ee1b807b9c7540c07c9fc0
 -        const clientHeight = this.view.scrollDOM.clientHeight;
 -        const maxTopNonOverflowing = (scrollHeight - clientHeight) / SCALE;
 -        const maxTopOverflowing = clientHeight - clientHeight / SCALE;
-+        // Map the dragged overlay position to a document line and scroll so that
-+        // line is at the top of the viewport. A line-based mapping keeps the drag
-+        // aligned with the text when line heights vary.
-+        const view = this.view;
-+        const clientHeight = view.scrollDOM.clientHeight;
-+        const maxTop = Math.max(1, clientHeight - clientHeight / SCALE);
++        // Map the dragged overlay position to an editor scroll position. The
++        // overlay can travel from the top of the minimap to (minimap height -
++        // overlay height); that fraction maps directly onto the editor's pixel
++        // scroll range (which already accounts for wrapped lines). Driving the
++        // scroll from the fraction - rather than from canvasTop, which itself
++        // depends on the scroll - avoids a feedback loop during the drag.
++        const m = getMinimapMetrics(this.view);
++        const minimapScreenHeight = m.canvasHeight / m.PixelMultiplier;
++        // When the document is short the drawn text fills only the top portion of
++        // the minimap (totalCanvas < canvasHeight); the overlay must travel within
++        // that drawn region, not the full minimap height, or the box detaches from
++        // the text and the scroll position desyncs. Clamp the travel range to the
++        // lesser of the minimap height and the content's drawn height.
++        const contentScreenHeight = m.totalCanvas / m.PixelMultiplier;
++        const visibleScreenHeight = Math.min(minimapScreenHeight, contentScreenHeight);
++        const overlayHeight = this.dom.getBoundingClientRect().height;
++        const maxTop = Math.max(1, visibleScreenHeight - overlayHeight);
          const change = canvasRelTopDouble + deltaY;
 -        /**
 -         * ScrollPosOverflowing is calculated by:
@@ -251,34 +326,88 @@ index c7c9a0406e1cfa2277ab6324fe47f70dd577e7c1..a1f27d9b67ee1b807b9c7540c07c9fc0
 -        this.dom.style.top = top + "px";
 +        const clampedTop = Math.min(Math.max(0, change), maxTop);
 +        const fraction = clampedTop / maxTop;
-+        const range = getVisibleLineRange(view);
-+        const visibleLines = Math.max(0.000001, range.last - range.first);
-+        const scrollableLines = Math.max(0, range.lineCount - visibleLines);
-+        let targetLine = Math.round(fraction * scrollableLines) + 1;
-+        if (targetLine < 1)
-+            targetLine = 1;
-+        if (targetLine > range.lineCount)
-+            targetLine = range.lineCount;
-+        view.dispatch({
-+            effects: EditorView.scrollIntoView(view.state.doc.line(targetLine).from, { y: "start" }),
-+        });
++        this.view.scrollDOM.scrollTop = fraction * m.maxScroll;
 +        this.dom.style.top = clampedTop + "px";
      }
      destroy() {
          this.remove();
-@@ -1109,11 +1236,10 @@ const minimapClass = /*@__PURE__*/ViewPlugin.fromClass(class {
-         let { top: pTop, bottom: pBottom } = this.view.documentPadding;
-         (pTop /= Scale.SizeRatio), (pBottom /= Scale.SizeRatio);
-         const canvasHeight = context.canvas.height;
+@@ -1075,12 +1215,43 @@
+         context.clearRect(0, 0, this.canvas.width, this.canvas.height);
+         /* We need to get the correct font dimensions before this to measure characters */
+         const { charWidth, lineHeight } = this.text.measure(context);
+-        let { startIndex, endIndex, offsetY } = this.canvasStartAndEndIndex(context, lineHeight);
++        const m = getMinimapMetrics(this.view);
++        const lines = this.view.state.field(LinesState);
+         const gutters = this.view.state.facet(Config).gutters;
+-        for (let i = startIndex; i < endIndex; i++) {
+-            const lines = this.view.state.field(LinesState);
+-            if (i >= lines.length)
++        // Find the first LinesState row visible in the (possibly windowed)
++        // minimap. canvasTop is the editor-space Y drawn at the top of the canvas.
++        let startIndex = 0;
++        try {
++            const topEditorY = Math.max(0, m.canvasTop / m.scale);
++            const startPos = this.view.lineBlockAtHeight(topEditorY).from;
++            startIndex = findRowIndex(lines, startPos);
++        }
++        catch (e) {
++            startIndex = 0;
++        }
++        for (let i = startIndex; i < lines.length; i++) {
++            const row = lines[i];
++            if (!row || !row.length) {
++                continue;
++            }
++            let block;
++            try {
++                block = this.view.lineBlockAt(row[0].from);
++            }
++            catch (e) {
++                break;
++            }
++            // Position every row by its real editor geometry: a wrapped line is
++            // taller in the editor, so its block.top is pushed down and the rows
++            // below it are spaced apart accordingly. This is what makes the
++            // minimap track the wrapped text instead of assuming uniform lines.
++            const offsetY = block.top * m.scale - m.canvasTop;
++            if (offsetY > m.canvasHeight) {
+                 break;
++            }
++            if (offsetY + block.height * m.scale < 0) {
++                continue;
++            }
+             const drawContext = {
+                 offsetX: 0,
+                 offsetY,
+@@ -1101,31 +1272,9 @@
+             this.text.drawLine(drawContext, i + 1);
+             this.selection.drawLine(drawContext, i + 1);
+             this.diagnostic.drawLine(drawContext, i + 1);
+-            offsetY += lineHeight;
+         }
+         context.restore();
+     }
+-    canvasStartAndEndIndex(context, lineHeight) {
+-        let { top: pTop, bottom: pBottom } = this.view.documentPadding;
+-        (pTop /= Scale.SizeRatio), (pBottom /= Scale.SizeRatio);
+-        const canvasHeight = context.canvas.height;
 -        const { clientHeight, scrollHeight, scrollTop } = this.view.scrollDOM;
 -        let scrollPercent = scrollTop / (scrollHeight - clientHeight);
 -        if (isNaN(scrollPercent)) {
 -            scrollPercent = 0;
 -        }
-+        // Use a line-based scroll fraction (wrap-aware) rather than a pixel-based
-+        // one so the rendered window tracks the actual text even when lines have
-+        // different heights.
-+        const scrollPercent = getLineScrollPercent(this.view);
-         const lineCount = this.view.state.field(LinesState).length;
-         const totalHeight = pTop + pBottom + lineCount * lineHeight;
-         const canvasTop = Math.max(0, scrollPercent * (totalHeight - canvasHeight));
+-        const lineCount = this.view.state.field(LinesState).length;
+-        const totalHeight = pTop + pBottom + lineCount * lineHeight;
+-        const canvasTop = Math.max(0, scrollPercent * (totalHeight - canvasHeight));
+-        const offsetY = Math.max(0, pTop - canvasTop);
+-        const startIndex = Math.round(Math.max(0, canvasTop - pTop) / lineHeight);
+-        const spaceForLines = Math.round((canvasHeight - offsetY) / lineHeight);
+-        return {
+-            startIndex,
+-            endIndex: startIndex + spaceForLines,
+-            offsetY,
+-        };
+-    }
+     updateBoxShadow() {
+         if (!this.canvas) {
+             return;

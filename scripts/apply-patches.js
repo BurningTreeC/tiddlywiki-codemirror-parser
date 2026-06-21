@@ -28,7 +28,7 @@ const patches = [
 		// Patch file (pnpm format: paths relative to the package root)
 		patch: "patches/@replit__codemirror-minimap@0.5.2.patch",
 		// A token only present once the patch has been applied
-		marker: "getLineScrollPercent",
+		marker: "getMinimapMetrics",
 		// Leading path components to strip (a/dist/index.js -> dist/index.js)
 		strip: 1
 	}
