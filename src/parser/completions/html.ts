@@ -4,7 +4,7 @@
 
 import { syntaxTree } from "@codemirror/language"
 import { Completion, CompletionContext, CompletionResult } from "@codemirror/autocomplete"
-import { selfClosingTags, buildMultiSelectionChanges, triggerCompletionEffect } from "./common"
+import { selfClosingTags, buildMultiSelectionChanges, buildAutoCloseChanges, triggerCompletionEffect } from "./common"
 
 // Common HTML tags for completion - comprehensive list of standard HTML5 tags
 export const commonHtmlTags = [
@@ -225,20 +225,21 @@ export function htmlTagCompletion(context: CompletionContext): CompletionResult 
         const hasClosingBracket = textAfter === ">"
         const endTo = hasClosingBracket ? to + 1 : to
 
-        let insert: string
         let cursorOffset: number
+        let changes
         if (isSelfClosing) {
-          insert = tagText + ">"
+          const insert = tagText + ">"
           cursorOffset = insert.length
+          changes = buildMultiSelectionChanges(view, from, endTo, insert, patternLen)
         } else {
-          // Insert space before > so cursor is positioned for adding attributes
-          // Like widgets: <div |></div>
+          // Insert space before > so cursor is positioned for adding attributes.
+          // The close is placed at the end of the following wikitext block,
+          // balanced: <div |>This is text</div>
+          const openingInsert = tagText + " >"
           const closingTag = "</" + tag + ">"
-          insert = tagText + " >" + closingTag
           cursorOffset = tagText.length + 1  // After space, before >
+          changes = buildAutoCloseChanges(view, from, endTo, openingInsert, closingTag, patternLen)
         }
-
-        const changes = buildMultiSelectionChanges(view, from, endTo, insert, patternLen)
         view.dispatch({
           changes,
           selection: { anchor: from + cursorOffset },

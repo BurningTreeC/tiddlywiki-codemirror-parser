@@ -16,6 +16,7 @@ import { TiddlyWikiParser } from "./parser"
 import { TiddlyWikiConfig } from "./core"
 import { tiddlywikiLanguage, mkLang, headerIndent, inlineConditionalFold } from "./language"
 import { listMarkerUpgradeHandler } from "../commands"
+import { findAutoCloseEnd } from "./auto-close"
 import { KaTeXBlock } from "./block-parsers"
 import { InlineKaTeX } from "./inline-parsers"
 
@@ -759,31 +760,12 @@ export function tiddlywiki(config: TiddlyWikiLanguageConfig = {}): LanguageSuppo
       }
 
       // Find where the closing tag should go. If a block of text follows the
-      // opening tag, close it after that block (the run of non-blank lines,
-      // stopping at a blank line or a structural closer) instead of right at
-      // the cursor. Returns the end position of that block, or -1 if none.
+      // opening tag, close it after that block instead of right at the cursor,
+      // but never cross an enclosing element's closing tag (findAutoCloseEnd is
+      // depth-aware so the result is always balanced). The ">" is inserted at
+      // `from`, so the body text begins at `from` in the original document.
       const doc = view.state.doc
-      const findBlockTextEnd = (startPos: number): number => {
-        const sLine = doc.lineAt(startPos)
-        let lastContentEnd = -1
-        const totalLines = doc.lines
-        for (let n = sLine.number; n <= totalLines; n++) {
-          const line = doc.line(n)
-          if (n === sLine.number) {
-            // The start line holds the opening tag; only count it as body text
-            // if there is content after the cursor on it.
-            if (doc.sliceString(startPos, line.to).trim() !== "") lastContentEnd = line.to
-            continue
-          }
-          const trimmed = line.text.trim()
-          if (trimmed === "") break // blank line ends the block
-          if (/^(<\/|<%\s*(?:end|else|elseif|endif)|\\end\b)/.test(trimmed)) break // structural closer
-          lastContentEnd = line.to
-        }
-        return lastContentEnd
-      }
-
-      const blockEnd = findBlockTextEnd(from)
+      const blockEnd = findAutoCloseEnd(doc, from)
       if (blockEnd > from) {
         const sLine = doc.lineAt(from)
         // Is there content right after the cursor on the opening tag's line?

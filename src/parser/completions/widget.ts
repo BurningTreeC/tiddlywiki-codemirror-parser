@@ -8,6 +8,7 @@ import {
   selfClosingWidgets,
   triggerCompletionEffect,
   buildMultiSelectionChanges,
+  buildAutoCloseChanges,
   extractLocalDefinitions,
 } from "./common"
 import { tiddlyWikiMessages } from "./attribute-value"
@@ -193,18 +194,18 @@ export function widgetCompletion(getWidgetNames?: () => string[], getSelfClosing
           const hasClosingBracket = textAfter === ">"
           const endTo = hasClosingBracket ? to + 1 : to
 
-          let insert: string
           let cursorOffset: number
+          let changes
           if (selfClose) {
-            insert = widgetTag + " />"
+            const insert = widgetTag + " />"
             cursorOffset = widgetTag.length + 1  // After space, before />
+            changes = buildMultiSelectionChanges(view, from, endTo, insert, patternLen)
           } else {
+            const openingInsert = widgetTag + " >"
             const closingTag = "</" + name + ">"
-            insert = widgetTag + " >" + closingTag
             cursorOffset = widgetTag.length + 1  // After space, before >
+            changes = buildAutoCloseChanges(view, from, endTo, openingInsert, closingTag, patternLen)
           }
-
-          const changes = buildMultiSelectionChanges(view, from, endTo, insert, patternLen)
           view.dispatch({
             changes,
             selection: { anchor: from + cursorOffset },

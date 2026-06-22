@@ -2433,11 +2433,24 @@ export const HTMLBlock: BlockParser = {
           }
         }
 
-        // If no closing tag found, restore position and only output the opening tag
-        // Let the content be parsed separately
+        // If no closing tag found, restore position and output the opening tag.
+        // Still parse any same-line content after the opening tag so that nested
+        // or sibling tags (e.g. "<span><div>" with no closing tags) get tokenized
+        // and highlighted instead of being left as raw, uncoloured text.
         if (!foundClose) {
           cx.restorePosition(savedPosForClose)
           blockEnd = openingTagLineEnd
+          if (sameLineContent.trim()) {
+            if (/<[$a-zA-Z]/.test(sameLineContent)) {
+              // Same-line content contains tags: parse recursively (handles nesting)
+              const contentElements = cx.parseContentRange(openingTagEnd, openingTagLineEnd, false)
+              children.push(...contentElements)
+            } else {
+              // Plain inline content after the opening tag
+              const inlineElements = cx.parser.parseInline(sameLineContent, openingTagEnd)
+              children.push(...(inlineElements as Element[]))
+            }
+          }
         }
       }
 

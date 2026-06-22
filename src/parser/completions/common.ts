@@ -7,6 +7,7 @@ import { EditorView } from "@codemirror/view"
 import { startCompletion } from "@codemirror/autocomplete"
 import { syntaxTree } from "@codemirror/language"
 import type { SyntaxNode } from "@lezer/common"
+import { findAutoCloseEnd, ALREADY_CLOSED } from "../auto-close"
 
 // ============================================================================
 // State Effects and Extensions
@@ -112,6 +113,63 @@ export function buildMultiSelectionChanges(
       return { from: range.from - patternLen, to: range.from, insert }
     }
   });
+}
+
+/**
+ * Build changes for inserting an opening tag whose closing tag is placed at the
+ * end of the following wikitext block, instead of glued right after the cursor.
+ *
+ * Uses the same depth-aware scanner as the ">" key handler (findAutoCloseEnd),
+ * so the inserted close is always balanced and never crosses an enclosing
+ * element's closing tag. An inline opener (text on the same line after the
+ * cursor) gets an inline close; an opener alone on its line gets the close on
+ * its own new line, aligned with the opener's indent.
+ *
+ * `openingInsert` replaces from..endTo (e.g. "<div >"); `closingTag` is the
+ * close (e.g. "</div>"). Only the single-cursor case gets block-end placement;
+ * multi-cursor falls back to a glued close (parity with the ">" handler).
+ */
+export function buildAutoCloseChanges(
+  view: { state: EditorState },
+  from: number,
+  endTo: number,
+  openingInsert: string,
+  closingTag: string,
+  patternLen: number
+): { from: number; to: number; insert: string }[] {
+  const state = view.state
+  if (state.selection.ranges.length === 1) {
+    const doc = state.doc
+    // Tag name from "</div>" -> "div" / "</$list>" -> "$list".
+    const tagName = closingTag.replace(/^<\/\s*/, "").replace(/\s*>$/, "")
+    // Body text begins at endTo (after the inserted opening tag).
+    const blockEnd = findAutoCloseEnd(doc, endTo, tagName)
+    if (blockEnd === ALREADY_CLOSED) {
+      // A matching close already exists ahead: insert only the opening tag.
+      return [{ from, to: endTo, insert: openingInsert }]
+    }
+    if (blockEnd > endTo) {
+      const sLine = doc.lineAt(from)
+      const inlineOpener = doc.sliceString(endTo, sLine.to).trim() !== ""
+      let closeInsert: string
+      if (inlineOpener) {
+        // Inline with text: "<div >This is text</div>"
+        closeInsert = closingTag
+      } else {
+        // Opener alone, body below: close on its own new line aligned with opener
+        const openerIndent = /^[ \t]*/.exec(sLine.text)![0]
+        closeInsert = state.lineBreak + openerIndent + closingTag
+      }
+      return [
+        { from, to: endTo, insert: openingInsert },
+        { from: blockEnd, to: blockEnd, insert: closeInsert }
+      ]
+    }
+    // No following block text: glue the close right after the opener.
+    return [{ from, to: endTo, insert: openingInsert + closingTag }]
+  }
+  // Multi-cursor: keep prior glued behavior.
+  return buildMultiSelectionChanges(view, from, endTo, openingInsert + closingTag, patternLen)
 }
 
 /**
