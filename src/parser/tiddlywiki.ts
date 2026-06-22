@@ -508,7 +508,10 @@ export function tiddlywiki(config: TiddlyWikiLanguageConfig = {}): LanguageSuppo
 
           if (!hasClosingMark && nameNode) {
             tagNode = current
-            tagName = view.state.sliceDoc(nameNode.from, nameNode.to)
+            // Clamp the name to the cursor: when the opening tag is immediately
+            // followed by text (e.g. "<divThis is text"), the parser glues that
+            // following text onto the name. The intended name ends at the cursor.
+            tagName = view.state.sliceDoc(nameNode.from, Math.min(nameNode.to, from))
             isWidget = name === "InlineWidget" || name === "Widget" || name === "IncompleteWidget"
             break
           }
@@ -750,6 +753,58 @@ export function tiddlywiki(config: TiddlyWikiLanguageConfig = {}): LanguageSuppo
         // Just insert > without adding closing tag
         view.dispatch({
           changes: { from, to: from, insert: ">" },
+          selection: { anchor: from + 1 }
+        })
+        return true
+      }
+
+      // Find where the closing tag should go. If a block of text follows the
+      // opening tag, close it after that block (the run of non-blank lines,
+      // stopping at a blank line or a structural closer) instead of right at
+      // the cursor. Returns the end position of that block, or -1 if none.
+      const doc = view.state.doc
+      const findBlockTextEnd = (startPos: number): number => {
+        const sLine = doc.lineAt(startPos)
+        let lastContentEnd = -1
+        const totalLines = doc.lines
+        for (let n = sLine.number; n <= totalLines; n++) {
+          const line = doc.line(n)
+          if (n === sLine.number) {
+            // The start line holds the opening tag; only count it as body text
+            // if there is content after the cursor on it.
+            if (doc.sliceString(startPos, line.to).trim() !== "") lastContentEnd = line.to
+            continue
+          }
+          const trimmed = line.text.trim()
+          if (trimmed === "") break // blank line ends the block
+          if (/^(<\/|<%\s*(?:end|else|elseif|endif)|\\end\b)/.test(trimmed)) break // structural closer
+          lastContentEnd = line.to
+        }
+        return lastContentEnd
+      }
+
+      const blockEnd = findBlockTextEnd(from)
+      if (blockEnd > from) {
+        const sLine = doc.lineAt(from)
+        // Is there content right after the cursor on the opening tag's line?
+        const inlineOpener = doc.sliceString(from, sLine.to).trim() !== ""
+        let closeInsert: string
+        if (inlineOpener) {
+          // Opening tag is inline with text: keep the close inline at the block end
+          // e.g. "<div>This is text</div>"
+          closeInsert = closingTag
+        } else {
+          // Opening tag is alone on its line, body on the following lines: put the
+          // closing tag on its own new line, aligned with the opener
+          // e.g. "<div>\nThis is text\n</div>"
+          const openerIndent = /^[ \t]*/.exec(sLine.text)![0]
+          closeInsert = view.state.lineBreak + openerIndent + closingTag
+        }
+        view.dispatch({
+          changes: [
+            { from, to: from, insert: ">" },
+            { from: blockEnd, insert: closeInsert }
+          ],
           selection: { anchor: from + 1 }
         })
         return true
