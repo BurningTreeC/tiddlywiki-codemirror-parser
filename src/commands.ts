@@ -8,7 +8,7 @@ import {StateCommand, Text, EditorState, EditorSelection, ChangeSpec, countColum
 import {EditorView} from "@codemirror/view"
 import {syntaxTree, indentUnit, getIndentation} from "@codemirror/language"
 import {SyntaxNode, Tree} from "@lezer/common"
-import {tiddlywikiLanguage} from "./parser/language"
+import {tiddlywikiLanguage, documentUsesIndentation} from "./parser/language"
 
 // ============================================================================
 // Context Class für List/Quote Continuation
@@ -239,6 +239,10 @@ export const insertNewlineContinueMarkupCommand = (config: {
       // Pattern: text ends with > and next text starts with </
       const betweenTagsMatch = />$/.test(textBeforeCursor) && /^<\//.test(textAfterCursor)
       if (betweenTagsMatch) {
+        // Only open an indented body if the document's style uses indentation;
+        // otherwise keep the inner line flush with the opener.
+        const innerIndentCols = documentUsesIndentation(state) ? baseIndent + unitSize : baseIndent
+
         // Build indentation strings
         let baseIndentStr = ""
         let innerIndentStr = ""
@@ -246,10 +250,12 @@ export const insertNewlineContinueMarkupCommand = (config: {
           baseIndentStr = "\t".repeat(Math.floor(baseIndent / state.tabSize))
           const remainder = baseIndent % state.tabSize
           if (remainder > 0) baseIndentStr += " ".repeat(remainder)
-          innerIndentStr = baseIndentStr + "\t"
+          innerIndentStr = "\t".repeat(Math.floor(innerIndentCols / state.tabSize))
+          const innerRemainder = innerIndentCols % state.tabSize
+          if (innerRemainder > 0) innerIndentStr += " ".repeat(innerRemainder)
         } else {
           baseIndentStr = " ".repeat(baseIndent)
-          innerIndentStr = " ".repeat(baseIndent + unitSize)
+          innerIndentStr = " ".repeat(innerIndentCols)
         }
 
         // Insert: newline + inner indent (cursor here) + newline + base indent (closing tag follows)
@@ -353,11 +359,11 @@ export const insertNewlineContinueMarkupCommand = (config: {
             /^\\end\b/.test(textAfterCursorTrimmed)) {
           indent = baseIndent
         } else if (/<%\s*(if|elseif)\s+.+%>\s*$/.test(trimmed) || /<%\s*else\s*%>\s*$/.test(trimmed)) {
-          // Conditional opener - indent next line
-          indent = baseIndent + unitSize
+          // Conditional opener - indent next line only if the document's style uses indentation
+          indent = documentUsesIndentation(state) ? baseIndent + unitSize : baseIndent
         } else if (/<[$a-zA-Z][^>]*>\s*$/.test(trimmed) && !/<\//.test(trimmed) && !trimmed.endsWith("/>")) {
-          // Opening widget/HTML tag - indent next line
-          indent = baseIndent + unitSize
+          // Opening widget/HTML tag - indent next line only if the document's style uses indentation
+          indent = documentUsesIndentation(state) ? baseIndent + unitSize : baseIndent
         } else if (/<%\s*endif\s*%>\s*$/.test(trimmed) || /<\/[$a-zA-Z][^>]*>\s*$/.test(trimmed)) {
           // Closing tag - keep same indent as current line
           indent = baseIndent

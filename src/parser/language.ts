@@ -74,6 +74,64 @@ function getLineIndent(context: TreeIndentContext, pos: number): number {
 }
 
 /**
+ * Get the indentation (in columns) of the first non-blank, non-closer line that
+ * sits directly inside a container node. Returns null when the container has no
+ * such body line yet (e.g. it was just opened).
+ */
+function firstBodyLineIndent(state: any, node: SyntaxNode, unit: number): number | null {
+  const doc = state.doc
+  const openLine = doc.lineAt(node.from)
+  const endPos = Math.min(node.to, doc.length)
+  const lastLine = doc.lineAt(endPos)
+  for (let n = openLine.number + 1; n <= lastLine.number; n++) {
+    const line = doc.line(n)
+    const text = line.text
+    const trimmed = text.trim()
+    if (trimmed === "") continue // skip blank lines
+    // Skip pure closer / branch lines - they live at the opener's level, not the body's
+    if (/^(<\/|<%\s*(?:end|else|elseif|endif)|\\end\b)/.test(trimmed)) continue
+    let indent = 0
+    for (let i = 0; i < text.length; i++) {
+      const ch = text.charCodeAt(i)
+      if (ch === 32) indent++
+      else if (ch === 9) indent += unit
+      else break
+    }
+    return indent
+  }
+  return null
+}
+
+/**
+ * Whether the document uses indentation anywhere: any non-blank line that begins
+ * with whitespace before its content. Used as a fallback when a container has no
+ * body to sample, so we never force indentation onto a document written flush-left.
+ */
+export function documentUsesIndentation(state: any): boolean {
+  const doc = state.doc
+  const max = Math.min(doc.lines, 4000)
+  for (let n = 1; n <= max; n++) {
+    const text = doc.line(n).text
+    if (!text) continue
+    const first = text.charCodeAt(0)
+    if ((first === 32 || first === 9) && text.trim() !== "") return true
+  }
+  return false
+}
+
+/**
+ * Decide whether content inside a container should be indented one level deeper
+ * than its opener. Honors the existing style: if the container already has flush
+ * body content, keep it flush; if its body is indented, indent. For an empty
+ * container, fall back to whether the document uses indentation at all.
+ */
+function shouldIndentBody(state: any, node: SyntaxNode, baseIndent: number, unit: number): boolean {
+  const bodyIndent = firstBodyLineIndent(state, node, unit)
+  if (bodyIndent != null) return bodyIndent > baseIndent
+  return documentUsesIndentation(state)
+}
+
+/**
  * Calculate indentation for container nodes
  */
 function containerIndent(context: TreeIndentContext): number | null {
@@ -85,6 +143,13 @@ function containerIndent(context: TreeIndentContext): number | null {
   const closeLine = context.state.doc.lineAt(node.to)
   const baseIndent = getLineIndent(context, node.from)
   const cursorLine = context.state.doc.lineAt(context.pos)
+
+  // Indent the body one level deeper only if the document's style calls for it
+  // (existing flush body stays flush; flat documents are never force-indented).
+  const indentBody = (): number =>
+    shouldIndentBody(context.state, node, baseIndent, context.unit)
+      ? baseIndent + context.unit
+      : baseIndent
 
   // For pragma definitions, use tree-based detection for semantic correctness
   if (isPragmaDefinition(node.name)) {
@@ -163,7 +228,7 @@ function containerIndent(context: TreeIndentContext): number | null {
     if (atLineEnd) {
       // Check for <%if%>, <%elseif%>, <%else%> openers - indent content
       if (/<%\s*(if|elseif)\s+.+%>\s*$/.test(lineText) || /<%\s*else\s*%>\s*$/.test(lineText)) {
-        return baseIndent + context.unit
+        return indentBody()
       }
       // Check for <%endif%> - stay at same indent
       if (/<%\s*endif\s*%>\s*$/.test(lineText)) {
@@ -172,7 +237,7 @@ function containerIndent(context: TreeIndentContext): number | null {
       // Check for opening widget/HTML tag - indent content
       // But NOT self-closing tags (ending with />)
       if (/<[$a-zA-Z][^>]*>\s*$/.test(lineText) && !/<\//.test(lineText) && !/\/>\s*$/.test(lineText)) {
-        return baseIndent + context.unit
+        return indentBody()
       }
       // Check for self-closing tags - stay at same indent
       if (/\/>\s*$/.test(lineText)) {
@@ -191,7 +256,7 @@ function containerIndent(context: TreeIndentContext): number | null {
     const prevLine = context.state.doc.line(cursorLine.number - 1)
     const prevText = prevLine.text.trim()
     if (/<%\s*(if|elseif)\s+.+%>\s*$/.test(prevText) || /<%\s*else\s*%>\s*$/.test(prevText)) {
-      return baseIndent + context.unit
+      return indentBody()
     }
   }
 
@@ -206,8 +271,8 @@ function containerIndent(context: TreeIndentContext): number | null {
     return baseIndent // The line itself is at base indent
   }
 
-  // Content inside other containers: indent one level
-  return baseIndent + context.unit
+  // Content inside other containers: indent one level (if the style calls for it)
+  return indentBody()
 }
 
 /**
