@@ -77,7 +77,7 @@ function findEnd(cx: BlockContext, name: string): { bodyStart: number, bodyEnd: 
   // Match any \end (bare or named)
   const endRe = /^\s*\\end(?:\s+(\S+))?\s*$/
 
-  const bodyStart = cx.lineStart + cx.line.text.length + 1 // After the declaration line + newline
+  const bodyStart = cx.nextLineStart // Start of the line after the declaration
   const nestedNames: string[] = [] // Stack of nested definition names
 
   while (cx.nextLine()) {
@@ -101,7 +101,7 @@ function findEnd(cx: BlockContext, name: string): { bodyStart: number, bodyEnd: 
         if (!endName || endName === name) {
           return {
             bodyStart,
-            bodyEnd: cx.lineStart - 1, // Before the \end line (exclude newline)
+            bodyEnd: cx.prevLineEnd(), // Before the \end line (exclude \n or \r\n)
             endStart: cx.lineStart,
             endEnd: cx.lineStart + text.length
           }
@@ -119,7 +119,7 @@ function findEnd(cx: BlockContext, name: string): { bodyStart: number, bodyEnd: 
           // Named \end for our name while nested - closes our definition
           return {
             bodyStart,
-            bodyEnd: cx.lineStart - 1,
+            bodyEnd: cx.prevLineEnd(),
             endStart: cx.lineStart,
             endEnd: cx.lineStart + text.length
           }

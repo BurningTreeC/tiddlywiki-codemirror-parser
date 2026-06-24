@@ -96,8 +96,7 @@ export const FencedCode: BlockParser = {
     }
 
     // Find closing ```
-    let codeContent = ""
-    let codeStart = cx.lineStart + line.text.length + 1
+    let codeStart = cx.nextLineStart
     let foundEnd = false
 
     while (cx.nextLine()) {
@@ -109,8 +108,6 @@ export const FencedCode: BlockParser = {
         foundEnd = true
         break
       }
-      if (codeContent) codeContent += "\n"
-      codeContent += cx.line.text
     }
 
     if (!foundEnd) {
@@ -156,7 +153,7 @@ export const TypedBlock: BlockParser = {
     const contentType = typeName === "text/plain" ? Type.PlainText : Type.CodeText
 
     // Find closing $$$
-    let contentStart = cx.lineStart + line.text.length + 1
+    let contentStart = cx.nextLineStart
     let foundEnd = false
 
     while (cx.nextLine()) {
@@ -203,15 +200,16 @@ export const HardLineBreaks: BlockParser = {
     ]
 
     // Find closing """
-    let contentStart = cx.lineStart + line.text.length + 1
+    let contentStart = cx.nextLineStart
     let foundEnd = false
 
     while (cx.nextLine()) {
       // Closing """ can also have leading whitespace
       if (hardLineBreaksRe.test(cx.line.textAfterIndent)) {
         // Parse content between opening and closing """ as inline content
-        if (cx.lineStart - 1 > contentStart) {
-          const contentText = cx.input.read(contentStart, cx.lineStart - 1)
+        const innerEnd = cx.prevLineEnd() // exclude the (\n or \r\n) terminator
+        if (innerEnd > contentStart) {
+          const contentText = cx.input.read(contentStart, innerEnd)
           const inlineElements = cx.parser.parseInline(contentText, contentStart)
           children.push(...(inlineElements as Element[]))
         }
@@ -278,7 +276,7 @@ export const KaTeXBlock: BlockParser = {
     if (openingContent.trim()) {
       contentStart = start + 2
     } else {
-      contentStart = cx.lineStart + line.text.length + 1
+      contentStart = cx.nextLineStart
     }
 
     let foundEnd = false
@@ -452,7 +450,7 @@ export const MultiLineBlockQuote: BlockParser = {
     }
 
     // Find the closing <<<
-    const contentStart = start + line.text.length + 1 // After opening line + newline
+    const contentStart = cx.nextLineStart // Start of the line after the opening <<<
     let contentEnd = contentStart
     let closingMarkStart = -1
     let closingEnd = -1
@@ -467,7 +465,7 @@ export const MultiLineBlockQuote: BlockParser = {
       if (lineTextAfterIndent.startsWith("<<<") && !lineTextAfterIndent.startsWith("<<<<")) {
         closingMarkStart = cx.lineStart + cx.line.skipPos
         closingEnd = cx.lineStart + cx.line.text.length
-        contentEnd = cx.lineStart - 1 // Before closing line (exclude newline)
+        contentEnd = cx.prevLineEnd() // Before closing line (exclude \n or \r\n)
         closingLineText = lineTextAfterIndent
         citation = lineTextAfterIndent.slice(3).trim()
         break
@@ -838,7 +836,9 @@ export const MacroCallBlock: BlockParser = {
       // Multi-line macro: accumulate lines until we find >>
       while (cx.nextLine()) {
         const currentLine = cx.line.text
-        allContent += "\n" + currentLine
+        // Read from the document so real line terminators (\n or \r\n) are
+        // preserved; joining with a single '\n' would drift offsets on CRLF docs
+        allContent = cx.input.read(start, cx.lineStart + currentLine.length)
 
         // Check for >> anywhere in this line (skip braced blocks)
         const closeMatch = findCloseAngleAngle(currentLine, 0)
@@ -1533,7 +1533,9 @@ export const HTMLBlock: BlockParser = {
       const savedPos = cx.savePosition()
       while (!tagEndResult) {
         if (!cx.nextLine()) break
-        accumulatedAttrs += '\n' + cx.line.text
+        // Read from the document so real line terminators (\n or \r\n) are
+        // preserved; joining with a single '\n' would drift offsets on CRLF docs
+        accumulatedAttrs = cx.input.read(attrsStart, cx.lineStart + cx.line.text.length)
         tagEndLine = cx.lineStart + cx.line.text.length
         tagEndResult = findTagEndInText(accumulatedAttrs)
       }
@@ -1872,7 +1874,9 @@ export const HTMLBlock: BlockParser = {
     const savedPos = cx.savePosition()
     while (!tagEndResult) {
       if (!cx.nextLine()) break
-      accumulatedText += '\n' + cx.line.text
+      // Read from the document so real line terminators (\n or \r\n) are
+      // preserved; joining with a single '\n' would drift offsets on CRLF docs
+      accumulatedText = cx.input.read(attrsStart, cx.lineStart + cx.line.text.length)
       tagEndResult = findOpeningTagEnd(accumulatedText)
     }
 
@@ -2552,10 +2556,9 @@ export const StyledBlock: BlockParser = {
       }
     }
 
-    const openingLineEnd = start + line.text.length
-
     // Find closing @@ on its own line
-    let closingLine = cx.lineStart + line.text.length + 1
+    const contentStart = cx.nextLineStart // Start of the line after the opening @@
+    let closingLine = contentStart
     let contentEnd = closingLine
     let foundClose = false
 
@@ -2573,8 +2576,8 @@ export const StyledBlock: BlockParser = {
         contentEnd = closingLine
 
         // Parse content between opening and closing
-        if (contentEnd > openingLineEnd + 1) {
-          const contentElements = cx.parseContentRange(openingLineEnd + 1, contentEnd)
+        if (contentEnd > contentStart) {
+          const contentElements = cx.parseContentRange(contentStart, contentEnd)
           children.push(...contentElements)
         }
 
@@ -2633,8 +2636,6 @@ export const ConditionalBlock: BlockParser = {
     const closeMarkPos = start + line.text.indexOf('%>')
     children.push(elt(Type.ConditionalMark, closeMarkPos, closeMarkPos + 2))  // %>
 
-    const openingLineEnd = start + line.text.length
-
     // Track branches and find <%endif%>
     // Content can start right after %> on the same line
     let branchStart = closeMarkPos + 2
@@ -2673,7 +2674,7 @@ export const ConditionalBlock: BlockParser = {
     }
 
     // Move to next line for scanning
-    currentPos = openingLineEnd + 1
+    currentPos = cx.nextLineStart
 
     while (currentPos < cx.input.length && depth > 0) {
       // Read until end of line

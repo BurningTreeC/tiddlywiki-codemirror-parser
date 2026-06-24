@@ -158,7 +158,23 @@ export class BlockContext implements PartialParse {
     if (this.atEnd && this.lineStart === this.to) {
       return this.lineStart
     }
-    return this.lineStart - 1
+    // Step back over the line terminator. lineStart-1 is the \n; if preceded by
+    // a \r (CRLF), step back once more so the \r is excluded from line content.
+    let end = this.lineStart - 1
+    if (end > 0 && this.input.read(end - 1, end).charCodeAt(0) === Ch.CarriageReturn) {
+      end--
+    }
+    return end
+  }
+
+  /**
+   * Position where the next line begins, i.e. the end of the current line
+   * including its terminator. Terminator-aware (correct for both LF and CRLF),
+   * so prefer this over `lineStart + line.text.length + 1` when computing the
+   * start of multi-line block content.
+   */
+  get nextLineStart(): number {
+    return this.lineEnd
   }
 
   /**
@@ -599,6 +615,9 @@ export class BlockContext implements PartialParse {
   private parseParagraph() {
     const start = this.lineStart
     const content: string[] = [this._line.text]
+    // Document end position of each accumulated line (excludes the trailing
+    // newline) so we can read the exact source range below
+    const lineEnds: number[] = [this.lineStart + this._line.text.length]
 
     // Track blank lines - block elements only start new blocks after blank lines
     let hadBlankLine = false
@@ -610,6 +629,7 @@ export class BlockContext implements PartialParse {
       // Track blank lines - they create a potential block boundary
       if (text.trim() === "") {
         content.push(text)
+        lineEnds.push(this.lineStart + text.length)
         hadBlankLine = true
         continue
       }
@@ -626,6 +646,7 @@ export class BlockContext implements PartialParse {
           // since they separate this paragraph from the next block
           while (content.length > 0 && content[content.length - 1].trim() === "") {
             content.pop()
+            lineEnds.pop()
           }
           break
         }
@@ -633,15 +654,18 @@ export class BlockContext implements PartialParse {
 
       // Not a block starter (or no blank line before) - add to paragraph
       content.push(text)
+      lineEnds.push(this.lineStart + text.length)
       hadBlankLine = false
     }
 
-    // Parse inline content
-    const fullContent = content.join("\n")
+    // Read the source directly so real line terminators (\n or \r\n) are
+    // preserved; content.join("\n") would drift inline offsets on CRLF docs
+    const paragraphEnd = lineEnds[lineEnds.length - 1]
+    const fullContent = this.input.read(start, paragraphEnd)
     const inlineElements = this.parser.parseInline(fullContent, start)
 
     // Create paragraph element
-    const paragraphElt = this.elt(Type.Paragraph, start, start + fullContent.length, inlineElements as Element[])
+    const paragraphElt = this.elt(Type.Paragraph, start, paragraphEnd, inlineElements as Element[])
     this.addElement(paragraphElt)
   }
 

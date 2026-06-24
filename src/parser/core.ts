@@ -317,6 +317,7 @@ export declare class BlockContext {
   elt(type: number, from: number, to: number, children?: readonly Element[]): Element
   readonly line: Line
   prevLineEnd(): number
+  get nextLineStart(): number
   nextLine(): boolean
   peekLine(): string | null
 }
