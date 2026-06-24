@@ -14,7 +14,7 @@
 
 import { Type } from "./types"
 import { Element, elt, Line, PragmaParser, Ch, space } from "./core"
-import { createFilterTextRef, createFilterVariable, createFilterMultiVariable, parseMacroParams, skipBracedBlock } from "./utils"
+import { createFilterTextRef, createFilterVariable, createFilterMultiVariable, parseMacroParams, parseFilterRunPrefix, skipBracedBlock } from "./utils"
 import type { BlockContext } from "./block-context"
 
 /**
@@ -310,10 +310,10 @@ function parseFilterBody(filterContent: string, offset: number): Element[] {
           // Comma separates multiple operands for functions: [func[a],<b>]
           // Just skip the comma and continue parsing next operand
           pos++
-        } else if (/[^\s\[\]<>{},]/.test(operandCh)) {
+        } else if (/[^\s\[\]<>{}(),]/.test(operandCh)) {
           // Filter operator/function name - TiddlyWiki allows any char except brackets, whitespace, and comma
           const opStart = pos
-          while (pos < len && /[^\s\[\]<>{},]/.test(filterContent[pos])) pos++
+          while (pos < len && /[^\s\[\]<>{}(),]/.test(filterContent[pos])) pos++
           const opName = filterContent.slice(opStart, pos)
           // Track the operator name (strip ! prefix and : suffix for matching)
           currentOperatorName = opName.replace(/^!/, '').replace(/:.*$/, '')
@@ -327,15 +327,11 @@ function parseFilterBody(filterContent: string, offset: number): Element[] {
       if (pos < len && filterContent[pos] === ']') pos++
 
       elements.push(elt(Type.FilterOperator, offset + stepStart, offset + pos, stepChildren))
-    } else if (ch === '+' || ch === '-' || ch === '~' || ch === '=') {
-      // Run prefix: + - ~ = =>
-      pos++
-      // => shortcut for :let
-      if (ch === '=' && pos < len && filterContent[pos] === '>') pos++
-    } else if (ch === ':') {
-      // Named run prefix
-      pos++
-      while (pos < len && /[a-zA-Z0-9\-_]/.test(filterContent[pos])) pos++
+    } else if (ch === '+' || ch === '-' || ch === '~' || ch === '=' || ch === ':') {
+      // Run prefix: + - ~ = => :name (and the =>varname / :let assignment shortcut)
+      const prefix = parseFilterRunPrefix(filterContent, pos, offset)
+      elements.push(...prefix.elements)
+      pos = prefix.pos
     } else {
       pos++
     }

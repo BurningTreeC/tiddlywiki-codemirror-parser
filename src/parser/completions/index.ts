@@ -39,6 +39,7 @@ export {
 export {
   commonMacros,
   macroCompletion,
+  mvvCompletion,
   macroParamCompletion,
   macroParamValueCompletion,
   substitutedParamCompletion,

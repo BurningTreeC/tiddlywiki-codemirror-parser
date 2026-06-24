@@ -971,6 +971,30 @@ function parsePlaceholdersInString(content: string, offset: number): Element[] {
 }
 
 /**
+ * Insert a standalone Mark node for the `=` sign of each name=value attribute.
+ *
+ * Without this, the `=` (and any surrounding whitespace) falls under the
+ * `Attribute` container node only, inheriting its `attributeName` styling. The
+ * `=` is a separator, not part of the name, so it should be highlighted as a
+ * mark (cm-tw-mark) like other punctuation marks. Applies to every attribute
+ * type since it runs over the finished element list.
+ */
+function addAttributeEqualsMarks(elements: Element[], attrString: string, offset: number): Element[] {
+  for (let i = 0; i < elements.length; i++) {
+    const el = elements[i]
+    if (el.type !== Type.Attribute || el.children.length < 1) continue
+    const name = el.children[0]
+    // Only whitespace can sit between the name and the `=`, so the first `=`
+    // after the name is the attribute separator (never one inside the value).
+    const eqIdx = attrString.indexOf("=", name.to - offset)
+    if (eqIdx === -1 || offset + eqIdx >= el.to) continue
+    const eqMark = elt(Type.Mark, offset + eqIdx, offset + eqIdx + 1)
+    elements[i] = elt(el.type, el.from, el.to, [name, eqMark, ...el.children.slice(1)])
+  }
+  return elements
+}
+
+/**
  * Parse widget/HTML tag attributes
  * Supports:
  * - name="value" or name='value' (quoted string)
@@ -1264,6 +1288,13 @@ function parseAttributes(
       } else {
         valueChildren.push(elt(Type.MacroName, offset + macroContentStart, offset + macroNameEnd))
       }
+      // Parse macro parameters (positional and named, including dynamic
+      // ={{transclusion}} / ={{{filter}}} values). parseMacroParams skips
+      // leading whitespace, so the raw slice + raw offset stays aligned.
+      const macroParamsRaw = attrString.slice(macroNameEnd, closeMarkStart)
+      if (macroParamsRaw.trim()) {
+        valueChildren.push(...parseMacroParams(macroParamsRaw, offset + macroNameEnd))
+      }
       valueChildren.push(elt(Type.MacroCallMark, offset + closeMarkStart, offset + valueEnd))
       const attrChildren: Element[] = [
         createAttributeNameElement(attrString.slice(nameStart, nameEnd), offset + nameStart, offset + nameEnd),
@@ -1435,7 +1466,7 @@ function parseAttributes(
     elements.push(elt(Type.Attribute, offset + nameStart, offset + valueEnd, attrChildren))
   }
 
-  return elements
+  return addAttributeEqualsMarks(elements, attrString, offset)
 }
 
 // Opening tag start: <tagname or <$widget or <$ns.widget (may not have closing >)

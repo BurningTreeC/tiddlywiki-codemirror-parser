@@ -192,6 +192,8 @@ const defaultStyleTags = styleTags({
   FilterMultiVariable: t.variableName,
   FilterTextRef: t.special(t.string),
   FilterRegexp: t.regexp,
+  FilterRunPrefixMark: t.processingInstruction,  // + - ~ = => : (cm-tw-mark)
+  FilterRunPrefixName: t.operatorKeyword,        // map/filter/let/... same as operator names
   IncompleteFilterRun: t.content,  // Container for incomplete filter in plain text
 
   // Multi-valued variable display

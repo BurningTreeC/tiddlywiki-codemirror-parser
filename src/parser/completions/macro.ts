@@ -731,6 +731,69 @@ export function macroCompletion(
 }
 
 /**
+ * Multi-valued variable display completion source.
+ *
+ * Handles ((varname)) wherever it is valid - in plain text and as an (unquoted)
+ * widget/HTML attribute value (e.g. <$x val=((myvar))>). Offers variable names
+ * (callback + locally-defined variables/procedures + built-ins) and inserts the
+ * closing )) when not already present.
+ */
+export function mvvCompletion(
+  getVariableNames?: () => string[]
+) {
+  return (context: CompletionContext): CompletionResult | null => {
+    const { state, pos } = context
+    const textBefore = state.sliceDoc(Math.max(0, pos - 50), pos)
+
+    // Match (( optionally followed by a partial variable name (no spaces/parens).
+    // The character before (( must not be another ( so we don't fire inside (((.
+    const m = /\(\(([\w\-\.]*)$/.exec(textBefore)
+    if (!m) return null
+    if (m.index > 0 && textBefore[m.index - 1] === "(") return null
+
+    const partial = m[1]
+
+    const variableNames = new Set<string>()
+    if (getVariableNames) {
+      for (const name of getVariableNames()) variableNames.add(name)
+    }
+    for (const name of builtInVariables) variableNames.add(name)
+    const localDefs = extractLocalDefinitions(state.doc.toString())
+    for (const name of localDefs.variables) variableNames.add(name)
+    for (const name of localDefs.procedures) variableNames.add(name)
+
+    const lowerPartial = partial.toLowerCase()
+    const allVars = [...variableNames].filter(v =>
+      partial.length === 0 || v.toLowerCase().startsWith(lowerPartial)
+    )
+    if (allVars.length === 0) return null
+
+    // Don't add )) if it's already there (e.g. closeBrackets inserted it)
+    const textAfter = state.sliceDoc(pos, Math.min(state.doc.length, pos + 2))
+    const hasClose = textAfter === "))"
+
+    return {
+      from: pos - partial.length,
+      to: pos,
+      options: allVars.map(name => ({
+        label: name,
+        type: "variable",
+        detail: "multi-valued variable",
+        apply: (view: any, _completion: any, from: any, to: any) => {
+          const insert = name + (hasClose ? "" : "))")
+          view.dispatch({
+            changes: { from, to, insert },
+            // Land the cursor after the closing ))
+            selection: { anchor: from + name.length + 2 }
+          })
+        }
+      })),
+      validFor: /^[\w\-\.]*$/
+    };
+  };
+}
+
+/**
  * Macro parameter completion source
  */
 export function macroParamCompletion(getMacroParams?: (name: string) => string[] | null) {

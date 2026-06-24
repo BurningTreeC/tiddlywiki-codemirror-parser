@@ -403,6 +403,71 @@ export function parseFilterOperandPlaceholders(content: string, offset: number):
  *
  * This is the detailed version used by both inline and block parsers.
  */
+/**
+ * Parse a filter run prefix at `pos` into tagged nodes.
+ *
+ * Handles the symbol prefixes (`+ - ~ =` and the `=>` :let shortcut) and named
+ * prefixes (`:map`, `:filter`, `:reduce:flat`, ...). Each prefix punctuation
+ * char becomes a FilterRunPrefixMark; named-prefix names/suffixes become
+ * FilterRunPrefixName. For the `=>varname` assignment shortcut the inline
+ * bare/quoted operand is tagged as the assigned VariableName (bracketed/sub-run
+ * forms are left to the normal parser since their name is dynamic).
+ *
+ * Returns the produced elements and the new position.
+ */
+export function parseFilterRunPrefix(content: string, pos: number, offset: number): { elements: Element[], pos: number } {
+  const elements: Element[] = []
+  const len = content.length
+  const ch = content[pos]
+
+  if (ch === ':') {
+    // Named run prefix: :name optionally followed by :suffix(es)
+    elements.push(elt(Type.FilterRunPrefixMark, offset + pos, offset + pos + 1))  // :
+    pos++
+    const nameStart = pos
+    while (pos < len && /[a-zA-Z0-9\-_]/.test(content[pos])) pos++
+    if (pos > nameStart) elements.push(elt(Type.FilterRunPrefixName, offset + nameStart, offset + pos))
+    // Suffixes: :suffix:suffix2 ...
+    while (pos < len && content[pos] === ':') {
+      elements.push(elt(Type.FilterRunPrefixMark, offset + pos, offset + pos + 1))  // :
+      pos++
+      const sufStart = pos
+      while (pos < len && /[\w\-_, ]/.test(content[pos])) pos++
+      if (pos > sufStart) elements.push(elt(Type.FilterRunPrefixName, offset + sufStart, offset + pos))
+    }
+    return { elements, pos }
+  }
+
+  // Symbol prefix: + - ~ = =>
+  let markEnd = pos + 1
+  const isLet = ch === '=' && markEnd < len && content[markEnd] === '>'
+  if (isLet) markEnd++  // include >
+  elements.push(elt(Type.FilterRunPrefixMark, offset + pos, offset + markEnd))
+  pos = markEnd
+
+  if (isLet) {
+    // =>varname assignment shortcut: the operand directly names the variable.
+    // Handle the inline bare/quoted forms; leave [..]/{..}/<..> runs to the parser.
+    const q = content[pos]
+    if (q === '"' || q === "'") {
+      const nameStart = pos + 1
+      let p = nameStart
+      while (p < len && content[p] !== q) p++
+      elements.push(elt(Type.Mark, offset + pos, offset + nameStart))  // opening quote
+      if (p > nameStart) elements.push(elt(Type.VariableName, offset + nameStart, offset + p))
+      if (p < len) { elements.push(elt(Type.Mark, offset + p, offset + p + 1)); p++ }  // closing quote
+      pos = p
+    } else if (q !== undefined && /[^\s\[\]{}<>("']/.test(q)) {
+      // bare variable name: stop at whitespace, brackets, or the next run
+      const nameStart = pos
+      while (pos < len && /[^\s\[\]{}<>("']/.test(content[pos])) pos++
+      elements.push(elt(Type.VariableName, offset + nameStart, offset + pos))
+    }
+  }
+
+  return { elements, pos }
+}
+
 export function parseFilterExpressionDetailed(filterContent: string, offset: number): Element[] {
   const elements: Element[] = []
   let pos = 0
@@ -592,10 +657,10 @@ export function parseFilterExpressionDetailed(filterContent: string, offset: num
           // Comma separates multiple operands for functions: [func[a],[b]] or [func<v1>,<v2>]
           // Just skip the comma and continue parsing next operand
           pos++
-        } else if (/[^\s\[\]<>{},]/.test(operandCh)) {
+        } else if (/[^\s\[\]<>{}(),]/.test(operandCh)) {
           // Filter operator/function name - TiddlyWiki allows any char except brackets, whitespace, and comma
           const opStart = pos
-          while (pos < len && /[^\s\[\]<>{},]/.test(filterContent[pos])) pos++
+          while (pos < len && /[^\s\[\]<>{}(),]/.test(filterContent[pos])) pos++
           const opName = filterContent.slice(opStart, pos)
           // Track the operator name (strip ! prefix and : suffix for matching)
           currentOperatorName = opName.replace(/^!/, '').replace(/:.*$/, '')
@@ -622,12 +687,11 @@ export function parseFilterExpressionDetailed(filterContent: string, offset: num
       continue
     }
 
-    // Run prefix: + - ~ = => :name
+    // Run prefix: + - ~ = => :name (and the =>varname / :let assignment shortcut)
     if (ch === '+' || ch === '-' || ch === '~' || ch === '=' || ch === ':') {
-      pos++
-      // => shortcut for :let
-      if (ch === '=' && pos < len && filterContent[pos] === '>') pos++
-      while (pos < len && /[a-zA-Z]/.test(filterContent[pos])) pos++
+      const prefix = parseFilterRunPrefix(filterContent, pos, offset)
+      elements.push(...prefix.elements)
+      pos = prefix.pos
       continue
     }
 
@@ -1389,6 +1453,30 @@ function parseMacroParamValuePlaceholders(content: string, offset: number): Elem
  *
  * Returns MacroParam elements wrapping MacroParamName (optional) and MacroParamValue
  */
+/**
+ * Insert a standalone Mark node for the `:`/`=` separator of each named macro
+ * parameter (`name:value`, `name="..."`).
+ *
+ * Without this, the separator falls under the `MacroParam` container node only,
+ * inheriting its `attributeValue` styling. The separator is punctuation, not part
+ * of the value, so it should be highlighted as a mark (cm-tw-mark) — mirroring how
+ * the `=` of a widget/HTML attribute is handled.
+ */
+function addMacroParamSeparatorMarks(elements: Element[], paramsStr: string, offset: number): Element[] {
+  for (let i = 0; i < elements.length; i++) {
+    const el = elements[i]
+    if (el.type !== Type.MacroParam || el.children.length < 2) continue
+    const name = el.children[0]
+    // Only named params have a name child first; positional params start with the value.
+    if (name.type !== Type.MacroParamName && name.type !== Type.Placeholder) continue
+    const sepCh = paramsStr[name.to - offset]
+    if (sepCh !== ":" && sepCh !== "=") continue
+    const sepMark = elt(Type.Mark, name.to, name.to + 1)
+    elements[i] = elt(el.type, el.from, el.to, [name, sepMark, ...el.children.slice(1)])
+  }
+  return elements
+}
+
 export function parseMacroParams(paramsStr: string, offset: number): Element[] {
   const elements: Element[] = []
   let pos = 0
@@ -1409,10 +1497,14 @@ export function parseMacroParams(paramsStr: string, offset: number): Element[] {
     while (nameEnd < len && /[a-zA-Z0-9\-_$]/.test(paramsStr[nameEnd])) nameEnd++
 
     const separatorChar = nameEnd > pos ? paramsStr[nameEnd] : ''
-    const isNamedParam = separatorChar === ':' || (separatorChar === '=' && (paramsStr.slice(nameEnd + 1, nameEnd + 4) === '{{{' || paramsStr.slice(nameEnd + 1, nameEnd + 3) === '{{'))
+    // A name followed by `:` or `=` is a named parameter. `:` is TiddlyWiki's
+    // native macro-call separator; `=` is supported here too so name="value",
+    // name=value, name={{ref}} and name={{{filter}}} all read as named params
+    // (mirroring widget/HTML attribute syntax).
+    const isNamedParam = separatorChar === ':' || separatorChar === '='
 
     if (isNamedParam) {
-      // Named parameter (name:value or name={{...}} or name={{{...}}})
+      // Named parameter (name:value, name=value, name="value", name={{...}}, name={{{...}}})
       const nameStart = pos
       pos = nameEnd + 1 // skip the : or =
 
@@ -1586,5 +1678,5 @@ export function parseMacroParams(paramsStr: string, offset: number): Element[] {
     }
   }
 
-  return elements
+  return addMacroParamSeparatorMarks(elements, paramsStr, offset)
 }

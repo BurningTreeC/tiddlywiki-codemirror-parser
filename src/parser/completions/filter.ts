@@ -860,6 +860,10 @@ export function filterOperandValueCompletion(
     const firstOperandMatch = /[\[\]}>)](!?)([\w.]+)((?::[\w]+)*)([\[{<(])([^\]}>)]*)$/.exec(textBefore)
     // Match subsequent operand after comma: ],[content or ],{content or ],<content or ],(content (and same for } > ))
     const commaOperandMatch = /[\]}>)],([\[{<(])([^\]}>)]*)$/.exec(textBefore)
+    // Match a standalone variable/MVV operand at the start of a filter step:
+    // [<var or [(mvv  (no preceding operator). These are valid title selectors
+    // (e.g. [<currentTiddler>], [(mvv)]) so they need variable completion too.
+    const standaloneVarMatch = /\[(!?)([<(])([^\]}>)]*)$/.exec(textBefore)
 
     let operator: string | null = null
     let operandContent: string
@@ -869,6 +873,10 @@ export function filterOperandValueCompletion(
       operator = firstOperandMatch[2]
       operandType = firstOperandMatch[4]
       operandContent = firstOperandMatch[5]
+    } else if (standaloneVarMatch) {
+      operator = null
+      operandType = standaloneVarMatch[2]
+      operandContent = standaloneVarMatch[3]
     } else if (commaOperandMatch) {
       // For comma-separated operands, we need to find the operator by looking further back
       operandType = commaOperandMatch[1]

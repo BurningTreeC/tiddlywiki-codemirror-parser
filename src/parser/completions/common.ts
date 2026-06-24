@@ -492,6 +492,16 @@ export function extractLocalDefinitions(text: string): {
     }
   }
 
+  // =>varname filter assignment shortcut (:let): bare, quoted or [[bracketed]] name
+  const filterLetRegex = /=>(?:"([^"]+)"|'([^']+)'|\[\[([^\]]+)\]\]|([\w$.\-]+))/g
+  while ((match = filterLetRegex.exec(text)) !== null) {
+    const varName = match[1] || match[2] || match[3] || match[4]
+    if (varName && !seen[varName]) {
+      seen[varName] = true
+      widgetVars.push(varName)
+    }
+  }
+
   const variables = [
     ...builtInVariables,
     ...functions,

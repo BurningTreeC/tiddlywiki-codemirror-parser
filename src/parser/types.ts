@@ -219,6 +219,8 @@ export enum Type {
   FilterMultiVariable,  // (varname) multi-valued variable in filters
   FilterTextRef,        // {textref} in filters
   FilterRegexp,         // /regexp/ in filters
+  FilterRunPrefixMark,  // run-prefix punctuation: + - ~ = => and the : of :name
+  FilterRunPrefixName,  // the name (and suffixes) of a named run prefix, e.g. map in :map
   IncompleteFilterRun,  // [operator... - incomplete filter run in plain text
 
   // Multi-valued variable display

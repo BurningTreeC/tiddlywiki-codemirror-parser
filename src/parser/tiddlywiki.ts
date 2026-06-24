@@ -33,6 +33,7 @@ import {
   attributeValueCompletion,
   wikitextAttributeCompletion,
   macroCompletion,
+  mvvCompletion,
   macroParamCompletion,
   macroParamValueCompletion,
   substitutedParamCompletion,
@@ -808,6 +809,10 @@ export function tiddlywiki(config: TiddlyWikiLanguageConfig = {}): LanguageSuppo
     }))
     support.push(lang.data.of({
       autocomplete: macroCompletion(getMacroNames, getFunctionNames, getVariableNames)
+    }))
+    // Multi-valued variable display ((varname)) - in text and unquoted attribute values
+    support.push(lang.data.of({
+      autocomplete: mvvCompletion(getVariableNames)
     }))
     if (getMacroParams) {
       support.push(lang.data.of({
