@@ -166,6 +166,7 @@ const defaultStyleTags = styleTags({
   PragmaParams: t.definition(t.variableName),
   PragmaBody: t.content,
   PragmaEnd: t.keyword,
+  PragmaValue: t.atom,
 
   // Special
   Escape: t.escape,
@@ -243,6 +244,12 @@ function createNodeSet(): NodeSet {
     nodeTypes[id] = NodeType.define({
       id,
       name,
+      // Mark Document as the grammar's top node. This is required for
+      // language-scoped HighlightStyles to work: @lezer/highlight only
+      // re-filters highlighters by language at `isTop` nodes, so without this
+      // the wikitext highlight style would also style nested code blocks
+      // (e.g. a LaTeX \end{document} would render like a wikitext \end pragma).
+      top: name === "Document",
       props: [],
     })
   }

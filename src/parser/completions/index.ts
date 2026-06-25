@@ -110,4 +110,5 @@ export {
 export {
   styledSpanClassCompletion,
   styledSpanPropertyCompletion,
+  blockQuoteClassCompletion,
 } from "./styled-span"

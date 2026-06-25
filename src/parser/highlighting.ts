@@ -9,9 +9,11 @@ import { tags as t } from "@lezer/highlight"
 import { twTags } from "./parser"
 
 /**
- * TiddlyWiki-specific highlight style mapping semantic tags to CSS classes
+ * TiddlyWiki-specific tag→class mappings.
+ * Exported so a language-scoped HighlightStyle can be built (see tiddlywiki.ts),
+ * which prevents these wikitext classes from bleeding onto nested code blocks.
  */
-export const tiddlywikiHighlightStyle = HighlightStyle.define([
+export const tiddlywikiHighlightSpec = [
   // Headings
   { tag: t.heading1, class: "cm-tw-heading1" },
   { tag: t.heading2, class: "cm-tw-heading2" },
@@ -70,6 +72,9 @@ export const tiddlywikiHighlightStyle = HighlightStyle.define([
   // Attributes
   { tag: t.attributeValue, class: "cm-tw-attribute-value" },
   { tag: t.attributeName, class: "cm-tw-attribute" },
+
+  // CSS class names (block quote classes <<<.class, styled block classes @@.class)
+  { tag: t.className, class: "cm-tw-class" },
   { tag: t.special(t.variableName), class: "cm-tw-param-ref" },
 
   // Property names (field/index references in transclusions)
@@ -87,4 +92,9 @@ export const tiddlywikiHighlightStyle = HighlightStyle.define([
 
   // Invalid/error syntax
   { tag: t.invalid, class: "cm-tw-invalid" },
-])
+]
+
+/**
+ * TiddlyWiki-specific highlight style mapping semantic tags to CSS classes
+ */
+export const tiddlywikiHighlightStyle = HighlightStyle.define(tiddlywikiHighlightSpec)

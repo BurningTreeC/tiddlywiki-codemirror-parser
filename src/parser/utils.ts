@@ -660,7 +660,15 @@ export function parseFilterExpressionDetailed(filterContent: string, offset: num
         } else if (/[^\s\[\]<>{}(),]/.test(operandCh)) {
           // Filter operator/function name - TiddlyWiki allows any char except brackets, whitespace, and comma
           const opStart = pos
-          while (pos < len && /[^\s\[\]<>{}(),]/.test(filterContent[pos])) pos++
+          while (pos < len) {
+            const c = filterContent[pos]
+            if (/[^\s\[\]<>{}(),]/.test(c)) { pos++; continue }
+            // A comma is part of the operator's comma-separated suffix list
+            // (e.g. search:title,caption) once a ':' suffix has begun. Before
+            // any ':' a comma separates operands, so stop there.
+            if (c === ',' && filterContent.slice(opStart, pos).indexOf(':') !== -1) { pos++; continue }
+            break
+          }
           const opName = filterContent.slice(opStart, pos)
           // Track the operator name (strip ! prefix and : suffix for matching)
           currentOperatorName = opName.replace(/^!/, '').replace(/:.*$/, '')

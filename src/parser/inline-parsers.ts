@@ -28,65 +28,25 @@ import {
 // ============================================================================
 // Escape Parser (~WikiWord prevents linking)
 // ============================================================================
-
-// Characters that can be escaped with backslash in TiddlyWiki wikitext
-// These are wiki syntax characters that might need escaping
-const escapableChars = new Set([
-  // Formatting characters
-  "'".charCodeAt(0),  // Bold
-  "/".charCodeAt(0),  // Italic
-  "_".charCodeAt(0),  // Underscore
-  "^".charCodeAt(0),  // Superscript
-  ",".charCodeAt(0),  // Subscript
-  "~".charCodeAt(0),  // Strikethrough / CamelCase suppression
-  "`".charCodeAt(0),  // Code
-  // Brackets and delimiters
-  "[".charCodeAt(0),
-  "]".charCodeAt(0),
-  "{".charCodeAt(0),
-  "}".charCodeAt(0),
-  "<".charCodeAt(0),
-  ">".charCodeAt(0),
-  "(".charCodeAt(0),
-  ")".charCodeAt(0),
-  // List and block markers
-  "*".charCodeAt(0),
-  "#".charCodeAt(0),
-  ";".charCodeAt(0),
-  ":".charCodeAt(0),
-  "!".charCodeAt(0),
-  "|".charCodeAt(0),
-  // Special characters
-  "\\".charCodeAt(0),
-  "@".charCodeAt(0),
-  "$".charCodeAt(0),
-  "%".charCodeAt(0),
-  "&".charCodeAt(0),
-  "-".charCodeAt(0),
-  "=".charCodeAt(0),
-  "+".charCodeAt(0),
-])
+//
+// Note: TiddlyWiki has NO backslash-escape mechanism in wikitext. A backslash
+// is a literal character — e.g. `\''` renders as `\` followed by bold, and
+// `` \` `` renders as `\` followed by inline code. The only "escape"-like rule
+// is `~` before a CamelCase word, which suppresses automatic wiki linking
+// (see TiddlyWiki's wikilinkprefix.js rule).
 
 export const Escape: InlineParser = {
   name: "Escape",
   parse(cx: InlineContext, next: number, pos: number): number {
-    if (next !== Ch.Tilde && next !== Ch.Backslash) return -1
+    if (next !== Ch.Tilde) return -1
 
     const after = cx.char(pos + 1)
     if (after < 0) return -1
 
     // ~ before CamelCase word prevents linking
-    if (next === Ch.Tilde) {
-      // Check if followed by uppercase letter
-      if (after >= 65 && after <= 90) {  // A-Z
-        return cx.addElement(cx.elt(Type.Escape, pos, pos + 1))
-      }
-      return -1
-    }
-
-    // Backslash escape - only for special wiki syntax characters
-    if (escapableChars.has(after)) {
-      return cx.addElement(cx.elt(Type.Escape, pos, pos + 2))
+    // Check if followed by uppercase letter
+    if (after >= 65 && after <= 90) {  // A-Z
+      return cx.addElement(cx.elt(Type.Escape, pos, pos + 1))
     }
 
     return -1

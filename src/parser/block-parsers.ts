@@ -74,7 +74,12 @@ export const HorizontalRule: BlockParser = {
 // Fenced Code Block (```)
 // ============================================================================
 
-const codeStartRe = /^```(\S*)/
+// A fenced code block opens only when the ``` (plus optional language) is the
+// entire line — TiddlyWiki's codeblock rule requires a newline right after
+// (/```([\w-]*)\r?\n/). If anything else follows on the same line (e.g.
+// ```code with ` backtick inside```), it is NOT a code block; it falls through
+// to inline code parsing (where ``...`` is double-backtick inline code).
+const codeStartRe = /^```([\w-]*)$/
 const codeEndRe = /^```\s*$/
 
 export const FencedCode: BlockParser = {

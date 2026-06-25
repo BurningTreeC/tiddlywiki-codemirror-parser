@@ -232,6 +232,60 @@ export function styledSpanClassCompletion(getPageClasses?: () => string[]) {
 }
 
 /**
+ * Create a completion source for CSS classes after a block quote opener (<<<.class)
+ *
+ * TiddlyWiki block quotes accept one or more dot-separated classes immediately
+ * after the opening `<<<` markers, e.g. `<<<.tc-tiddler-frame.myclass`.
+ * (See TiddlyWiki's quoteblock.js / parseClasses.)
+ *
+ * Detects patterns at the start of a line like:
+ * - <<<.tc-           (first class)
+ * - <<<.foo.tc-       (additional class)
+ *
+ * @param getPageClasses Function that returns available CSS class names
+ */
+export function blockQuoteClassCompletion(getPageClasses?: () => string[]) {
+  return function(context: CompletionContext): CompletionResult | null {
+    if (!getPageClasses) return null
+
+    const line = context.state.doc.lineAt(context.pos)
+    const textBefore = context.state.doc.sliceString(line.from, context.pos)
+
+    // Must start with the block quote opener, followed only by dot-separated
+    // classes (no whitespace yet — whitespace would begin the optional cite),
+    // ending in a partial class after a dot.
+    const match = /^<<<+(?:\.[^\s.]+)*\.([^\s.]*)$/.exec(textBefore)
+    if (!match) return null
+
+    const partial = match[1] || ""
+    const from = context.pos - partial.length
+
+    const pageClasses = getPageClasses()
+    if (!pageClasses || pageClasses.length === 0) return null
+
+    const lowerPartial = partial.toLowerCase()
+    const matchingClasses = pageClasses.filter(cls =>
+      cls.toLowerCase().startsWith(lowerPartial)
+    )
+
+    if (matchingClasses.length === 0) return null
+
+    const options: Completion[] = matchingClasses.map(cls => ({
+      label: cls,
+      type: "class",
+      detail: "CSS class"
+    }))
+
+    return {
+      from,
+      to: context.pos,
+      options,
+      validFor: /^[^\s.]*$/
+    };
+  };
+}
+
+/**
  * Create a completion source for CSS properties in styled spans and style attributes
  *
  * Detects patterns like:

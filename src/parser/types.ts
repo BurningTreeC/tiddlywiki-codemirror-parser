@@ -17,6 +17,7 @@ export enum Type {
   PragmaParams,         // Parameter list
   PragmaBody,           // Body content
   PragmaEnd,            // \end marker
+  PragmaValue,          // Keyword value (e.g. block/inline, trim/notrim, only/except)
 
   MacroDefinition,
   ProcedureDefinition,
@@ -26,6 +27,7 @@ export enum Type {
   ImportPragma,
   ParametersPragma,
   WhitespacePragma,
+  ParsermodePragma,
 
   // === BLOCK ELEMENTS ===
   Paragraph,
@@ -264,6 +266,7 @@ export const BlockTypes = new Set([
   Type.ImportPragma,
   Type.ParametersPragma,
   Type.WhitespacePragma,
+  Type.ParsermodePragma,
   Type.Paragraph,
   Type.Heading1, Type.Heading2, Type.Heading3, Type.Heading4, Type.Heading5, Type.Heading6,
   Type.BulletList,

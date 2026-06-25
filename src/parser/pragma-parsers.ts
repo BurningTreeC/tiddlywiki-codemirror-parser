@@ -60,6 +60,12 @@ const parametersRe = /^\s*\\parameters\s*\(\s*([^)]*)\s*\)$/
 const whitespaceRe = /^\s*\\whitespace\s+(trim|notrim)$/
 
 /**
+ * Match pattern for \parsermode pragma
+ * Pragmas can be indented with leading whitespace
+ */
+const parsermodeRe = /^\s*\\parsermode\s+(block|inline)$/
+
+/**
  * Find the \end marker for a multi-line pragma, properly handling nested definitions.
  *
  * TiddlyWiki rules:
@@ -313,7 +319,14 @@ function parseFilterBody(filterContent: string, offset: number): Element[] {
         } else if (/[^\s\[\]<>{}(),]/.test(operandCh)) {
           // Filter operator/function name - TiddlyWiki allows any char except brackets, whitespace, and comma
           const opStart = pos
-          while (pos < len && /[^\s\[\]<>{}(),]/.test(filterContent[pos])) pos++
+          while (pos < len) {
+            const c = filterContent[pos]
+            if (/[^\s\[\]<>{}(),]/.test(c)) { pos++; continue }
+            // A comma is part of the operator's comma-separated suffix list
+            // (e.g. search:title,caption) once a ':' suffix has begun.
+            if (c === ',' && filterContent.slice(opStart, pos).indexOf(':') !== -1) { pos++; continue }
+            break
+          }
           const opName = filterContent.slice(opStart, pos)
           // Track the operator name (strip ! prefix and : suffix for matching)
           currentOperatorName = opName.replace(/^!/, '').replace(/:.*$/, '')
@@ -729,8 +742,42 @@ export const WhitespacePragma: PragmaParser = {
       elt(Type.PragmaKeyword, pragmaStart + backslashOffset + 1, pragmaStart + backslashOffset + 11), // "whitespace"
     ]
 
+    // Value (trim/notrim)
+    const value = match[1]
+    const valueStart = pragmaStart + line.text.indexOf(value, backslashOffset + 11)
+    children.push(elt(Type.PragmaValue, valueStart, valueStart + value.length))
+
     cx.nextLine()
     return [elt(Type.WhitespacePragma, pragmaStart, cx.prevLineEnd(), children)]
+  }
+}
+
+/**
+ * \parsermode pragma
+ */
+export const ParsermodePragma: PragmaParser = {
+  name: "parsermode",
+
+  parse(cx: BlockContext, line: Line): Element[] | null {
+    const match = parsermodeRe.exec(line.text)
+    if (!match) return null
+
+    const pragmaStart = cx.lineStart
+    // Find the actual backslash position (accounting for leading whitespace)
+    const backslashOffset = line.text.indexOf("\\")
+
+    const children: Element[] = [
+      elt(Type.PragmaMark, pragmaStart + backslashOffset, pragmaStart + backslashOffset + 1),
+      elt(Type.PragmaKeyword, pragmaStart + backslashOffset + 1, pragmaStart + backslashOffset + 11), // "parsermode"
+    ]
+
+    // Value (block/inline)
+    const value = match[1]
+    const valueStart = pragmaStart + line.text.indexOf(value, backslashOffset + 11)
+    children.push(elt(Type.PragmaValue, valueStart, valueStart + value.length))
+
+    cx.nextLine()
+    return [elt(Type.ParsermodePragma, pragmaStart, cx.prevLineEnd(), children)]
   }
 }
 
@@ -767,6 +814,10 @@ const parametersKeywordPartialRe = /^\s*\\(pa|par|para|param|parame|paramet|para
 // Partial \whitespace - just the keyword (including partial keyword)
 const whitespacePartialRe = /^\s*\\whitespace(?:\s+(.*))?$/
 const whitespaceKeywordPartialRe = /^\s*\\(wh|whi|whit|white|whites|whitesp|whitespa|whitespac)\s*$/
+
+// Partial \parsermode - just the keyword (including partial keyword)
+const parsermodePartialRe = /^\s*\\parsermode(?:\s+(.*))?$/
+const parsermodeKeywordPartialRe = /^\s*\\(pars|parse|parser|parserm|parsermo|parsermod)\s*$/
 
 // Partial \end
 const endKeywordPartialRe = /^\s*\\(e|en|end)(?:\s+.*)?\s*$/
@@ -905,6 +956,25 @@ export const PartialPragma: PragmaParser = {
 
       cx.nextLine()
       return [elt(Type.WhitespacePragma, pragmaStart, cx.prevLineEnd(), children)]
+    }
+
+    // Try partial \parsermode
+    match = parsermodePartialRe.exec(text)
+    if (match) {
+      const children: Element[] = [
+        elt(Type.PragmaMark, pragmaStart + backslashOffset, pragmaStart + backslashOffset + 1),
+        elt(Type.PragmaKeyword, pragmaStart + backslashOffset + 1, pragmaStart + backslashOffset + 11), // "parsermode"
+      ]
+
+      const value = match[1]
+      if (value && value.trim()) {
+        const trimmed = value.trim()
+        const valueStart = pragmaStart + text.indexOf(trimmed, backslashOffset + 11)
+        children.push(elt(Type.PragmaValue, valueStart, valueStart + trimmed.length))
+      }
+
+      cx.nextLine()
+      return [elt(Type.ParsermodePragma, pragmaStart, cx.prevLineEnd(), children)]
     }
 
     // Try partial keywords (typing in progress)
@@ -1052,6 +1122,18 @@ export const PartialPragma: PragmaParser = {
       return [elt(Type.WhitespacePragma, pragmaStart, cx.prevLineEnd(), children)]
     }
 
+    // \pars, \parse, \parser, etc. -> partial parsermode
+    match = parsermodeKeywordPartialRe.exec(text)
+    if (match) {
+      const keyword = match[1]
+      const children: Element[] = [
+        elt(Type.PragmaMark, pragmaStart + backslashOffset, pragmaStart + backslashOffset + 1),
+        elt(Type.PragmaKeyword, pragmaStart + backslashOffset + 1, pragmaStart + backslashOffset + 1 + keyword.length),
+      ]
+      cx.nextLine()
+      return [elt(Type.ParsermodePragma, pragmaStart, cx.prevLineEnd(), children)]
+    }
+
     // \e, \en, \end -> partial end marker
     match = endKeywordPartialRe.exec(text)
     if (match) {
@@ -1078,5 +1160,6 @@ export const DefaultPragmaParsers: PragmaParser[] = [
   ImportPragma,
   ParametersPragma,
   WhitespacePragma,
+  ParsermodePragma,
   PartialPragma,  // Must be last - catches incomplete pragmas
 ]

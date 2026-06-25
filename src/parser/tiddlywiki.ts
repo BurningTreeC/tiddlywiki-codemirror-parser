@@ -7,7 +7,8 @@
 
 import { Prec } from "@codemirror/state"
 import { keymap, EditorView } from "@codemirror/view"
-import { Language, LanguageSupport, LanguageDescription, syntaxHighlighting, indentOnInput, syntaxTree } from "@codemirror/language"
+import { Language, LanguageSupport, LanguageDescription, syntaxHighlighting, indentOnInput, syntaxTree, HighlightStyle } from "@codemirror/language"
+import { classHighlighter } from "@lezer/highlight"
 import { autocompletion, completionKeymap, completionStatus, startCompletion } from "@codemirror/autocomplete"
 import { html, htmlCompletionSource } from "@codemirror/lang-html"
 import type { CompletionContext } from "@codemirror/autocomplete"
@@ -21,7 +22,7 @@ import { KaTeXBlock } from "./block-parsers"
 import { InlineKaTeX } from "./inline-parsers"
 
 import { TiddlyWikiLanguageConfig } from "./config"
-import { tiddlywikiHighlightStyle } from "./highlighting"
+import { tiddlywikiHighlightSpec } from "./highlighting"
 import { createTiddlywikiKeymap } from "./keymap"
 import { createMixedLanguageWrapper } from "./mixed-language"
 import {
@@ -58,6 +59,7 @@ import {
   typedBlockCompletion,
   styledSpanClassCompletion,
   styledSpanPropertyCompletion,
+  blockQuoteClassCompletion,
   closingTagCompletion,
 } from "./completions"
 
@@ -257,6 +259,7 @@ export function tiddlywiki(config: TiddlyWikiLanguageConfig = {}): LanguageSuppo
   // Create styled span completion sources (called directly, not via languageDataAt)
   const styledSpanClassSource = styledSpanClassCompletion(getPageClasses)
   const styledSpanPropertySource = styledSpanPropertyCompletion(getCSSProperties, getWidgetAttributes)
+  const blockQuoteClassSource = blockQuoteClassCompletion(getPageClasses)
 
   // Create completion override that handles:
   // 1. Fenced code block language completion (```lang) - checked first
@@ -286,6 +289,10 @@ export function tiddlywiki(config: TiddlyWikiLanguageConfig = {}): LanguageSuppo
     const styledPropResult = styledSpanPropertySource(context)
     if (hasOptions(styledPropResult)) return styledPropResult
 
+    // Check block quote class completion (<<<.class)
+    const blockQuoteClassResult = blockQuoteClassSource(context)
+    if (hasOptions(blockQuoteClassResult)) return blockQuoteClassResult
+
     // Try nested language completion if configured
     if (nestedLanguageCompletionOverride) {
       const nestedResult = nestedLanguageCompletionOverride(context)
@@ -312,7 +319,8 @@ export function tiddlywiki(config: TiddlyWikiLanguageConfig = {}): LanguageSuppo
     inlineConditionalFold,
     // Enable re-indentation when typing (pattern provided via language data below)
     indentOnInput(),
-    syntaxHighlighting(tiddlywikiHighlightStyle),
+    // NOTE: syntax highlighting is added after the language is created (below) so
+    // it can be scoped to the TiddlyWiki language. See the scoped-highlighting block.
     // Enable autocompletion with activate on typing
     // Use override to handle fenced code/typed block completion, nested languages, and TiddlyWiki completions
     autocompletion({
@@ -371,6 +379,23 @@ export function tiddlywiki(config: TiddlyWikiLanguageConfig = {}): LanguageSuppo
 
   // Create the language
   const lang = mkLang(configuredParser)
+
+  // Syntax highlighting, scoped so the wikitext palette does NOT bleed onto
+  // nested code blocks. The TiddlyWiki style applies only within TiddlyWiki
+  // regions (top-level and nested wikitext typed blocks); nested code blocks
+  // (```latex, ```python, ...) are highlighted by the standard classHighlighter
+  // (tok-* classes, styled by the themes). Without this, generic tags shared by
+  // both — e.g. a keyword — would make a LaTeX \end{document} look like a
+  // wikitext \end pragma. Document being a top node (see parser.ts) is what
+  // lets @lezer/highlight apply these scopes.
+  const scopedTiddlywikiStyle = HighlightStyle.define(tiddlywikiHighlightSpec, { scope: lang })
+  const isTiddlywikiRegion = (scopedTiddlywikiStyle as any).scope as (type: any) => boolean
+  const nestedCodeHighlighter = {
+    style: classHighlighter.style,
+    scope: (type: any) => !isTiddlywikiRegion(type),
+  }
+  support.push(syntaxHighlighting(scopedTiddlywikiStyle))
+  support.push(syntaxHighlighting(nestedCodeHighlighter))
 
   // Add indentOnInput pattern for auto-outdenting when typing closing patterns
   support.push(lang.data.of({
