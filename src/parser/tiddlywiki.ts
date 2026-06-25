@@ -60,6 +60,7 @@ import {
   styledSpanClassCompletion,
   styledSpanPropertyCompletion,
   blockQuoteClassCompletion,
+  markerClassCompletion,
   closingTagCompletion,
 } from "./completions"
 
@@ -260,6 +261,7 @@ export function tiddlywiki(config: TiddlyWikiLanguageConfig = {}): LanguageSuppo
   const styledSpanClassSource = styledSpanClassCompletion(getPageClasses)
   const styledSpanPropertySource = styledSpanPropertyCompletion(getCSSProperties, getWidgetAttributes)
   const blockQuoteClassSource = blockQuoteClassCompletion(getPageClasses)
+  const markerClassSource = markerClassCompletion(getPageClasses)
 
   // Create completion override that handles:
   // 1. Fenced code block language completion (```lang) - checked first
@@ -292,6 +294,10 @@ export function tiddlywiki(config: TiddlyWikiLanguageConfig = {}): LanguageSuppo
     // Check block quote class completion (<<<.class)
     const blockQuoteClassResult = blockQuoteClassSource(context)
     if (hasOptions(blockQuoteClassResult)) return blockQuoteClassResult
+
+    // Check heading/list marker class completion (!.class, *.class)
+    const markerClassResult = markerClassSource(context)
+    if (hasOptions(markerClassResult)) return markerClassResult
 
     // Try nested language completion if configured
     if (nestedLanguageCompletionOverride) {

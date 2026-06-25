@@ -44,6 +44,7 @@ export enum Type {
   DefinitionTerm,       // ; item
   DefinitionDescription, // : item
   ListMark,             // The * # ; : > characters
+  ItemClass,            // .class after a heading/list marker (!.class, *.class)
 
   // Block quote (multi-line with <<<)
   BlockQuote,

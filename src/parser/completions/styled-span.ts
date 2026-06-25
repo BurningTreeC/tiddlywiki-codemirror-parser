@@ -286,6 +286,61 @@ export function blockQuoteClassCompletion(getPageClasses?: () => string[]) {
 }
 
 /**
+ * Create a completion source for CSS classes after a heading or list marker.
+ *
+ * TiddlyWiki accepts dot-separated classes immediately after the marker, before
+ * the content (see TiddlyWiki's heading.js / list.js parseClasses), e.g.
+ * `!.myClass Heading`, `!!.a.b Heading`, `*.active item`, `#.foo item`,
+ * `;.term`, `>.quote`.
+ *
+ * Detects patterns at the start of a line (after optional indentation) like:
+ * - !.tc-           (first class on a heading)
+ * - *.foo.tc-       (additional class on a list item)
+ *
+ * @param getPageClasses Function that returns available CSS class names
+ */
+export function markerClassCompletion(getPageClasses?: () => string[]) {
+  return function(context: CompletionContext): CompletionResult | null {
+    if (!getPageClasses) return null
+
+    const line = context.state.doc.lineAt(context.pos)
+    const textBefore = context.state.doc.sliceString(line.from, context.pos)
+
+    // A heading (!..) or list (*,#,;,:,>) marker, then dot-separated classes,
+    // ending in a partial class after a dot. No whitespace yet (whitespace
+    // would begin the content).
+    const match = /^\s*(?:!{1,6}|[*#;:>]+)(?:\.[^\s.]+)*\.([^\s.]*)$/.exec(textBefore)
+    if (!match) return null
+
+    const partial = match[1] || ""
+    const from = context.pos - partial.length
+
+    const pageClasses = getPageClasses()
+    if (!pageClasses || pageClasses.length === 0) return null
+
+    const lowerPartial = partial.toLowerCase()
+    const matchingClasses = pageClasses.filter(cls =>
+      cls.toLowerCase().startsWith(lowerPartial)
+    )
+
+    if (matchingClasses.length === 0) return null
+
+    const options: Completion[] = matchingClasses.map(cls => ({
+      label: cls,
+      type: "class",
+      detail: "CSS class"
+    }))
+
+    return {
+      from,
+      to: context.pos,
+      options,
+      validFor: /^[^\s.]*$/
+    };
+  };
+}
+
+/**
  * Create a completion source for CSS properties in styled spans and style attributes
  *
  * Detects patterns like:

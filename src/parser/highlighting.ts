@@ -87,6 +87,9 @@ export const tiddlywikiHighlightSpec = [
   { tag: twTags.twSuperscript, class: "cm-tw-superscript" },
   { tag: twTags.twSubscript, class: "cm-tw-subscript" },
 
+  // Hard line break block markers (""" ... """)
+  { tag: twTags.twHardLineBreak, class: "cm-tw-linebreak" },
+
   // Highlight
   { tag: t.special(t.content), class: "cm-tw-highlight" },
 

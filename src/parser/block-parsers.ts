@@ -13,6 +13,11 @@ import { parseTransclusionTarget, parseMacroParams, createFilterTextRef, createF
 // Heading Parser (! to !!!!!!)
 // ============================================================================
 
+// Matches a run of dot-prefixed CSS classes after a block marker, mirroring
+// TiddlyWiki's parseClasses() (`/\.([^\s\.]+)/`). E.g. `.foo.bar` in
+// `!.foo.bar Heading` or `*.active item`. Stops at whitespace or content.
+const classPrefixRe = /^(?:\.[^\s.]+)+/
+
 function isHeading(line: Line): number {
   // Use skipNext to allow leading whitespace
   if (line.skipNext !== Ch.Exclamation) return -1
@@ -34,19 +39,28 @@ export const Heading: BlockParser = {
     const start = cx.lineStart
     const markStart = start + line.skipPos  // Account for leading whitespace
     const markEnd = markStart + level
-    const textStart = markEnd
 
-    // Parse inline content after the !
-    const contentText = line.text.slice(line.skipPos + level)
+    const children: Element[] = [
+      elt(Type.HeadingMark, markStart, markEnd)
+    ]
+
+    // Parse any CSS classes after the ! markers (TiddlyWiki's parseClasses):
+    // `!.myClass.another Heading` — dot-prefixed names, no spaces, before content.
+    const afterMark = line.text.slice(line.skipPos + level)
+    const classMatch = classPrefixRe.exec(afterMark)
+    const classLen = classMatch ? classMatch[0].length : 0
+    if (classLen > 0) {
+      children.push(elt(Type.ItemClass, markEnd, markEnd + classLen))
+    }
+
+    // Parse inline content after the ! markers (and optional classes)
+    const textStart = markEnd + classLen
+    const contentText = afterMark.slice(classLen)
     const inlineElements = cx.parser.parseInline(contentText, textStart)
+    children.push(...(inlineElements as Element[]))
 
     // Determine heading type based on level
     const headingType = [Type.Heading1, Type.Heading2, Type.Heading3, Type.Heading4, Type.Heading5, Type.Heading6][level - 1]
-
-    const children: Element[] = [
-      elt(Type.HeadingMark, markStart, markEnd),
-      ...(inlineElements as Element[])
-    ]
 
     cx.addElement(elt(headingType, start, start + line.text.length, children))
     return true
@@ -386,14 +400,23 @@ export const List: BlockParser = {
       const markerStart = itemStart + cx.line.skipPos  // Account for leading whitespace
       const markerEnd = markerStart + itemMarkers.length
 
-      // Parse inline content
-      const contentText = cx.line.text.slice(cx.line.skipPos + itemMarkers.length)
-      const inlineElements = cx.parser.parseInline(contentText, markerEnd)
-
       const itemChildren: Element[] = [
-        elt(Type.ListMark, markerStart, markerEnd),
-        ...(inlineElements as Element[])
+        elt(Type.ListMark, markerStart, markerEnd)
       ]
+
+      // Parse any CSS classes after the marker (TiddlyWiki's parseClasses):
+      // `*.active item` — dot-prefixed names, no spaces, before content.
+      const afterMarker = cx.line.text.slice(cx.line.skipPos + itemMarkers.length)
+      const classMatch = classPrefixRe.exec(afterMarker)
+      const classLen = classMatch ? classMatch[0].length : 0
+      if (classLen > 0) {
+        itemChildren.push(elt(Type.ItemClass, markerEnd, markerEnd + classLen))
+      }
+
+      // Parse inline content (after marker and optional classes)
+      const contentText = afterMarker.slice(classLen)
+      const inlineElements = cx.parser.parseInline(contentText, markerEnd + classLen)
+      itemChildren.push(...(inlineElements as Element[]))
 
       const itemType = listTypeMap[itemMarkers[itemMarkers.length - 1]]?.item || Type.ListItem
       items.push(elt(itemType, itemStart, itemStart + cx.line.text.length, itemChildren))

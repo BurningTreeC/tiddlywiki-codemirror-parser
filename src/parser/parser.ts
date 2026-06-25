@@ -32,6 +32,7 @@ export const twTags = {
   twVariable: Tag.define(),
   twSuperscript: Tag.define(),
   twSubscript: Tag.define(),
+  twHardLineBreak: Tag.define(),
 }
 
 /**
@@ -134,13 +135,21 @@ const defaultStyleTags = styleTags({
   SelfClosingMarker: t.processingInstruction,
 
   // Lists
-  "BulletList OrderedList DefinitionList": t.list,
-  "ListItem DefinitionTerm DefinitionDescription": t.list,
-  ListMark: t.processingInstruction,
+  // Containers/items are intentionally NOT tagged, so list *body text* keeps
+  // the default editor color (it used to inherit t.list and render muted grey,
+  // which made list content look washed out). Only the markers get a colour.
+  "BulletList/ListItem/ListMark OrderedList/ListItem/ListMark": t.list,
+  "DefinitionTerm/...": t.strong,          // definition term text is emphasised
+  "DefinitionTerm/ListMark DefinitionDescription/ListMark": t.list,
+  ListMark: t.processingInstruction,       // fallback for any stray ListMark
+  ItemClass: t.className,                   // .class after !/*/# markers
 
-  // Block quotes
-  BlockQuote: t.quote,
-  QuoteMark: t.processingInstruction,
+  // Block quotes - markers and quoted text rendered as a muted/italic quote.
+  // Nested constructs (links, widgets, macros, …) keep their own styling
+  // because their explicit tags take precedence over this ancestor wildcard.
+  "BlockQuote/...": t.quote,
+  "BlockQuote/BlockQuoteClass": t.className,
+  QuoteMark: t.quote,
   BlockQuoteClass: t.className,
 
   // Tables
@@ -154,7 +163,7 @@ const defaultStyleTags = styleTags({
 
   // Hard line breaks (""" ... """)
   HardLineBreaks: t.content,
-  HardLineBreaksMark: t.processingInstruction,
+  HardLineBreaksMark: twTags.twHardLineBreak,
 
   // Comments
   "CommentBlock CommentMarker": t.comment,

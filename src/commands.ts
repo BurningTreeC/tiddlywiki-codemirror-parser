@@ -97,26 +97,28 @@ function getContext(node: SyntaxNode, doc: Text): Context[] {
         context.push(new Context(node, 0, match[0].length, match[1], match[3], "<<<", null))
       }
     } else if (node.name == "ListItem" && (node.parent?.name == "OrderedList" || node.parent?.name == "BulletList")) {
-      // Match from line start to capture leading whitespace (TiddlyWiki allows indented lists)
-      match = /^(\s*)([*#]+)(\s+)/.exec(line.text)
+      // Match from line start to capture leading whitespace (TiddlyWiki allows indented lists).
+      // Tolerate an optional `.class` run after the marker (e.g. `*.active item`)
+      // so continuation still triggers; the class itself is not repeated.
+      match = /^(\s*)([*#]+)(?:\.[^\s.]+)*(\s+)/.exec(line.text)
       if (match) {
         context.push(new Context(node.parent!, 0, match[0].length, match[1], match[3], match[2], node))
       }
     } else if (node.name == "ListItem" && node.parent?.name == "BlockQuote") {
       // Single-line > quote style - can also be mixed with * or #
-      match = /^(\s*)([>*#]+)(\s*)/.exec(line.text)
+      match = /^(\s*)([>*#]+)(?:\.[^\s.]+)*(\s*)/.exec(line.text)
       if (match) {
         context.push(new Context(node.parent!, 0, match[0].length, match[1], match[3], match[2], node))
       }
     } else if (node.name == "DefinitionTerm") {
       // Definition terms can be mixed with other markers
-      match = /^(\s*)([;:*#]+)(\s*)/.exec(line.text)
+      match = /^(\s*)([;:*#]+)(?:\.[^\s.]+)*(\s*)/.exec(line.text)
       if (match) {
         context.push(new Context(node.parent!, 0, match[0].length, match[1], match[3], match[2], node))
       }
     } else if (node.name == "DefinitionDescription") {
       // Definition descriptions can be mixed with other markers
-      match = /^(\s*)([;:*#]+)(\s*)/.exec(line.text)
+      match = /^(\s*)([;:*#]+)(?:\.[^\s.]+)*(\s*)/.exec(line.text)
       if (match) {
         context.push(new Context(node.parent!, 0, match[0].length, match[1], match[3], match[2], node))
       }

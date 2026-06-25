@@ -111,4 +111,5 @@ export {
   styledSpanClassCompletion,
   styledSpanPropertyCompletion,
   blockQuoteClassCompletion,
+  markerClassCompletion,
 } from "./styled-span"
