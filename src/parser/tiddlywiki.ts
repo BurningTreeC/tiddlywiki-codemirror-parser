@@ -327,10 +327,15 @@ export function tiddlywiki(config: TiddlyWikiLanguageConfig = {}): LanguageSuppo
     indentOnInput(),
     // NOTE: syntax highlighting is added after the language is created (below) so
     // it can be scoped to the TiddlyWiki language. See the scoped-highlighting block.
-    // Enable autocompletion with activate on typing
-    // Use override to handle fenced code/typed block completion, nested languages, and TiddlyWiki completions
+    // Enable autocompletion.
+    // Use override to handle fenced code/typed block completion, nested languages, and TiddlyWiki completions.
+    // NOTE: do NOT set `activateOnTyping` here. The hosting engine (main editor or
+    // SimpleEngine) owns that field, and the SimpleEngine sets it to `false` for
+    // inputs with a focusPopup. Because both this extension and the engine feed the
+    // completionConfig facet, pinning a value here would clash with the engine's value
+    // ("Config merge conflict for field activateOnTyping"). Omitting it lets the engine's
+    // value win (CM's default is `true`, so behavior is unchanged when the engine is silent).
     autocompletion({
-      activateOnTyping: true,
       override: [completionOverride],
     }),
     keymap.of(completionKeymap),
